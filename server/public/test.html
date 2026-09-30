@@ -3,9 +3,36 @@
 <body>
   <h1>หน้าทดสอบ server</h1>
   <script src="/socket.io/socket.io.js"></script>
+    <p id="time"></p>
   <script>
     const socket = io();
-    socket.on("room_update", (state) => console.log("room_update", state));
+    let lastOptions = [];
+
+    socket.onAny((event, data) => {
+      if (event === "timer") {
+        document.getElementById("time").textContent = "เหลือ " + data.timeLeft + " วิ";
+        return;
+      }
+      console.log("📩", event, data);
+    });
+    socket.on("choose_word", (d) => (lastOptions = d.options));
+
+    function create(name) {
+      socket.emit("create_room", { name, avatar: 0 }, (r) => {
+        console.log("↩️", r);
+        if (r.ok) document.title = name + " " + r.code;
+      });
+    }
+    function join(code, name) {
+      socket.emit("join_room", { code: String(code), name, avatar: 0 }, (r) => {
+        console.log("↩️", r);
+        if (r.ok) document.title = name;
+      });
+    }
+    function settings(rounds, drawTime) { socket.emit("update_settings", { rounds, drawTime }); }
+    function start() { socket.emit("start_game"); }
+    function pick(i) { socket.emit("word_chosen", { word: lastOptions[i] }); }
+    function say(text) { socket.emit("guess", { text }); }
   </script>
 </body>
 </html>
