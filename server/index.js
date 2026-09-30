@@ -1,5 +1,6 @@
 const express = require("express");
 const http = require("http");
+const fs = require("fs");
 const { Server } = require("socket.io");
 
 const app = express();
@@ -41,11 +42,67 @@ function roomState(room) {
   };
 }
 
-// ---------- คลังคำชั่วคราว (รอของจริงจากเพื่อน) ----------
-const WORDS = ["แมว", "หมา", "บ้าน", "รถไฟ", "ร่ม", "ดอกไม้", "ปลา", "ต้นไม้", "จักรยาน", "ไอศกรีม"];
+// ---------- คลังคำ ----------
+// อ่านจาก server/data/words.json ตอนสตาร์ท แยกเป็น 3 ระดับ
+// ถ้าไฟล์หายหรือ JSON เสีย ให้ใช้คำสำรอง 10 คำเดิม — server ต้องเปิดได้เสมอ ห้ามล่ม
+const WORDS_FILE = __dirname + "/data/words.json";
+const LEVELS = ["easy", "medium", "hard"];
+const MAX_WORD_LENGTH = 12; // ยาวเกินนี้จะเตือนใน log แต่ยังใช้คำนั้นตามปกติ ไม่ตัดทิ้ง
+const FALLBACK_WORDS = ["แมว", "หมา", "บ้าน", "รถไฟ", "ร่ม", "ดอกไม้", "ปลา", "ต้นไม้", "จักรยาน", "ไอศกรีม"];
 
+// แยกเก็บตามระดับ พร้อมหมวดหมู่ เผื่อไว้ให้ข้อ 7 (Solo) ไล่ความยากทีละขั้น
+const WORD_BANK = { easy: [], medium: [], hard: [] };
+// ชื่อคำล้วนๆ ทุกระดับรวมกัน โหมดปกติสุ่มจากก้อนนี้
+let ALL_WORDS = [];
+
+function loadWords() {
+  let data = null;
+  try {
+    data = JSON.parse(fs.readFileSync(WORDS_FILE, "utf8"));
+  } catch (err) {
+    console.warn(`อ่าน words.json ไม่ได้ (${err.message}) — จะใช้คำสำรองแทน`);
+  }
+
+  // เก็บเฉพาะรายการที่หน้าตาถูก และตัดคำซ้ำทิ้ง กันไฟล์มีปัญหาทำให้เกมเพี้ยน
+  const seen = new Set();
+  for (const level of LEVELS) {
+    const list = Array.isArray(data?.[level]) ? data[level] : [];
+    for (const item of list) {
+      const word = typeof item?.word === "string" ? item.word.trim() : "";
+      if (!word || seen.has(word)) continue;
+      seen.add(word);
+      WORD_BANK[level].push({ word, category: typeof item?.category === "string" ? item.category : "" });
+    }
+  }
+
+  ALL_WORDS = LEVELS.flatMap((level) => WORD_BANK[level].map((item) => item.word));
+
+  if (ALL_WORDS.length === 0) {
+    WORD_BANK.easy = FALLBACK_WORDS.map((word) => ({ word, category: "สำรอง" }));
+    ALL_WORDS = [...FALLBACK_WORDS];
+    console.log(`คลังคำ: ใช้คำสำรอง ${ALL_WORDS.length} คำ (อ่าน words.json ไม่ได้)`);
+    return;
+  }
+
+  // นับเป็น "จำนวนอักขระ" ซึ่งมากกว่าจำนวนตัวที่ตาเห็น เพราะสระบนล่างและวรรณยุกต์
+  // เป็นอักขระแยกต่างหาก เช่น "ต้นไม้" นับได้ 6 ทั้งที่ตาเห็น 4
+  // (ข้อความไทย [...word].length กับ word.length ให้ค่าเท่ากัน ใช้ [...word] ไว้เผื่อ
+  //  อนาคตมีอักขระนอกระนาบหลักอย่างอีโมจิ ซึ่ง word.length จะนับเป็น 2)
+  const tooLong = ALL_WORDS.filter((word) => [...word].length > MAX_WORD_LENGTH);
+  if (tooLong.length > 0) {
+    console.warn(`⚠️  คำยาวเกิน ${MAX_WORD_LENGTH} ตัวอักษร ${tooLong.length} คำ: ${tooLong.join(", ")}`);
+  }
+
+  console.log(
+    `คลังคำ: ${LEVELS.map((l) => `${l} ${WORD_BANK[l].length}`).join(" / ")} (รวม ${ALL_WORDS.length} คำ) จาก words.json`
+  );
+}
+
+loadWords();
+
+// โหมดปกติ: ทุกระดับปนกัน (ข้อ 7 ค่อยสุ่มจาก WORD_BANK ตามระดับเอง)
 function pickWords(n) {
-  return [...WORDS].sort(() => Math.random() - 0.5).slice(0, n);
+  return [...ALL_WORDS].sort(() => Math.random() - 0.5).slice(0, n);
 }
 
 

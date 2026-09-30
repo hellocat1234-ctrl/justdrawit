@@ -9,6 +9,7 @@
  * เลือกคำ · คำใบ้ · จับเวลา · แชทกันโกง · ทายถูก-ผิด · คิดคะแนน · จบตา · จบเกม
  */
 const path = require("path");
+const fs = require("fs");
 const { spawn } = require("child_process");
 
 const SERVER_DIR = path.join(__dirname, "..");
@@ -121,6 +122,14 @@ function expectedHint(word) {
   return slots;
 }
 
+// อ่านคลังคำจากไฟล์จริง มาเทียบกับที่ server รายงาน
+function readWordFile() {
+  return JSON.parse(fs.readFileSync(path.join(SERVER_DIR, "data", "words.json"), "utf8"));
+}
+
+// 10 คำสำรองที่ฝังใน server/index.js — ใช้เช็คว่าโหมดปกติไม่ได้ใช้ตัวสำรอง
+const FALLBACK_WORDS = ["แมว", "หมา", "บ้าน", "รถไฟ", "ร่ม", "ดอกไม้", "ปลา", "ต้นไม้", "จักรยาน", "ไอศกรีม"];
+
 // ---------- สตาร์ท/ปิด server ----------
 async function serverIsUp() {
   try {
@@ -172,6 +181,34 @@ function stopServer() {
 // ================= เทส =================
 async function main() {
   await startServer();
+
+  // คำทุกคำที่ server สุ่มมาให้คนวาดเลือก สะสมไว้ใช้เช็คตอนท้าย (ข้อ 8)
+  const drawnOptions = [];
+
+  await runPart("0. คลังคำ — โหลดจาก words.json", async () => {
+    const bank = readWordFile();
+    const counts = ["easy", "medium", "hard"].map((lv) => (bank[lv] ?? []).length);
+    const total = counts.reduce((a, b) => a + b, 0);
+
+    // server พิมพ์บรรทัดสรุปตอนสตาร์ท อ่านจาก log ตรงๆ ว่ารับไฟล์ไปใช้จริงไหม
+    const line = serverLog.join("\n").split("\n").find((l) => l.includes("คลังคำ:"));
+    checkOk("server บอกว่าอ่านคลังคำจาก words.json (ไม่ใช่คำสำรอง)",
+      !!line && line.includes("จาก words.json"));
+
+    // เทียบตัวเลขที่ server รายงาน กับจำนวนที่มีจริงในไฟล์
+    const m = /easy (\d+) \/ medium (\d+) \/ hard (\d+) \(รวม (\d+) คำ\)/.exec(line ?? "");
+    check("จำนวนคำแต่ละระดับตรงกับในไฟล์", m ? [+m[1], +m[2], +m[3]] : null, counts);
+    check("รวมทุกระดับตรงกับในไฟล์", m ? +m[4] : null, total);
+
+    // คำยาวเกิน 12 ตัว: server ต้องเตือนใน log พอดีกับที่มีในไฟล์
+    // (เตือนอย่างเดียว ไม่ตัดคำทิ้ง · นับเป็น "จำนวนอักขระ" ซึ่งมากกว่าตัวที่ตาเห็น
+    //  เพราะสระบนล่างและวรรณยุกต์เป็นอักขระแยก เช่น "ต้นไม้" = 6)
+    const longWords = ["easy", "medium", "hard"]
+      .flatMap((lv) => (bank[lv] ?? []).map((it) => it.word))
+      .filter((w) => [...w].length > 12);
+    check(`เตือนคำยาวเกิน 12 ตัว ตรงกับในไฟล์ (ในไฟล์มี ${longWords.length} คำ)`,
+      serverLog.join("\n").includes("ยาวเกิน"), longWords.length > 0);
+  });
 
   const A = track(await connect()); // หัวห้อง
   const B = track(await connect());
@@ -285,6 +322,7 @@ async function main() {
     const cw = await A.wait("choose_word", null, 5000);
     check("คนวาดได้ตัวเลือก 3 คำ", cw.options.length, 3);
     checkOk("ตัวเลือกไม่ซ้ำกัน", new Set(cw.options).size === 3);
+    drawnOptions.push(...cw.options);
     check("ให้เวลาเลือก 10 วินาที", cw.time, 10);
 
     // เลือกตัวสุดท้าย เพื่อพิสูจน์ว่า server ใช้คำที่เลือกจริง (ไม่ใช่ตัวแรกซึ่งเป็นค่าที่ server สุ่มให้เองตอนหมดเวลา)
@@ -356,6 +394,7 @@ async function main() {
       clearAll(A, B, C);
       const cw = await t.drawer.wait("choose_word", null, 7000);
       check(`${label}: คนวาดได้ตัวเลือก 3 คำ`, cw.options.length, 3);
+      drawnOptions.push(...cw.options);
 
       const w = cw.options[2];
       t.drawer.socket.emit("word_chosen", { word: w });
@@ -386,6 +425,24 @@ async function main() {
     check("จบเกมแล้วกดเริ่มใหม่ได้", (await B.wait("game_started", null, 3000)).totalRounds, 1);
     const again = await A.wait("room_update", (r) => r.players.length > 0, 3000);
     checkOk("เริ่มรอบใหม่แล้วคะแนนทุกคนกลับเป็น 0", again.players.every((p) => p.score === 0));
+  });
+
+  await runPart("8. คำที่ออกมาจริง มาจากไฟล์ ไม่ใช่คำสำรอง", async () => {
+    const bank = readWordFile();
+    const inFile = new Set(
+      ["easy", "medium", "hard"].flatMap((lv) => (bank[lv] ?? []).map((it) => it.word))
+    );
+
+    // 3 ตา ตาละ 3 ตัวเลือก
+    checkOk(`เก็บคำที่ server สุ่มมาได้ ${drawnOptions.length} คำ`, drawnOptions.length >= 9);
+    checkOk("ทุกคำที่ออกมา อยู่ใน words.json", drawnOptions.every((w) => inFile.has(w)));
+
+    // ชุดสำรอง 10 คำ ทับกับในไฟล์ 9 คำ เหลือ "รถไฟ" คำเดียวที่ไม่มีในไฟล์
+    // ถ้า server เผลอใช้คำสำรอง ตัวเลือกทั้ง 9 จะมาจาก 10 คำนั้นเท่านั้น
+    // การมีคำนอกชุดสำรองโผล่มา จึงพิสูจน์ว่าใช้คลังจริง (โอกาสพลาดน้อยมากจนไม่ต้องกังวล
+    // ส่วนข้อ 0 ที่เช็คจาก log เป็นตัวยืนยันแบบแน่นอน 100% อยู่แล้ว)
+    const outside = drawnOptions.filter((w) => !FALLBACK_WORDS.includes(w));
+    checkOk(`มีคำที่ไม่อยู่ในชุดสำรอง 10 คำ (ได้ ${outside.length} คำ)`, outside.length > 0);
   });
 
   // ปิดทุก socket เพื่อให้โปรเซสจบได้
