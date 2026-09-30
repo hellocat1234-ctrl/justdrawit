@@ -25,6 +25,12 @@ function cleanName(name) {
   return String(name ?? "").trim().slice(0, 20);
 }
 
+// เลขอวตารต้องเป็นจำนวนเต็ม 0-5 ตาม events.md ค่าอื่นที่ไม่ถูกต้องใช้ 0 แทน (ไม่ต้องแจ้ง error)
+function cleanAvatar(value) {
+  const n = Number(value);
+  return Number.isInteger(n) && n >= 0 && n <= 5 ? n : 0;
+}
+
 function roomState(room) {
   return {
     code: room.code,
@@ -208,7 +214,7 @@ io.on("connection", (socket) => {
       code,
       hostId: socket.id,
       status: "lobby",
-      players: [{ id: socket.id, name, avatar: data.avatar ?? 0, score: 0, isHost: true, team: null }],
+      players: [{ id: socket.id, name, avatar: cleanAvatar(data.avatar), score: 0, isHost: true, team: null }],
       settings: { mode: "classic", rounds: 3, drawTime: 60 },
     };
     rooms.set(code, room);
@@ -233,7 +239,7 @@ io.on("connection", (socket) => {
 
     leaveRoom(socket);
 
-    room.players.push({ id: socket.id, name, avatar: data.avatar ?? 0, score: 0, isHost: false, team: null });
+    room.players.push({ id: socket.id, name, avatar: cleanAvatar(data.avatar), score: 0, isHost: false, team: null });
     socket.join(code);
     socket.data.roomCode = code;
 
