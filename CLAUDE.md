@@ -110,8 +110,15 @@ justdrawit/
 - เข้าห้องกลางเกมได้ รับมือคนหลุดกลางเกม
 - ใน `startDrawing` มี `console.log("คำตานี้:", word)` สำหรับเทส **ลบก่อนส่งงาน**
 
+### เสร็จแล้ว (client ข้อ 1)
+- โครง React + Vite (`client/`) proxy `/socket.io` และ `/api` ไปพอร์ต 3000 แล้ว (รวม websocket)
+- `src/styles/theme.css` ธีมพิกเซลตาม DESIGN.md, `src/socket.js` socket ตัวเดียวใช้ทั้งแอป
+- หน้า Lobby (แท็บสร้าง/เข้าห้อง อวตาร 6 แบบ ชื่อ รหัสห้อง กล่องวิธีเล่น) ใช้ `create_room` `join_room`
+- หน้าห้องรอ ใช้ `room_update` แสดงผู้เล่น หัวห้องแก้ `update_settings` และกด `start_game` ได้
+- แปล error เป็นข้อความไทยตามตารางใน DESIGN.md, `game_error` โชว์เป็น Toast
+- หน้าเกมตอนนี้เป็นที่ว่างเขียนว่า "หน้าเกม (ข้อ 2)" รอทำข้อ 2
+
 ### ยังไม่ได้ทำ (ตามลำดับใน PROMPTS.md)
-- [ ] client โครงหลัก ธีม Lobby ห้องรอ
 - [ ] หน้าเกม (แถบบน คำใบ้ เวลา คะแนน แชท หน้าต่างเลือกคำ สรุปตา จบเกม)
 - [ ] Canvas วาด สี ขนาด ยางลบ ถังสี ล้างจอ
 - [ ] ส่งภาพ real-time + `canvas_history`

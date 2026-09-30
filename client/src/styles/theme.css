@@ -1,0 +1,483 @@
+/* ==========================================================================
+   Just Drawit — ธีมกลางตาม DESIGN.md
+   "เกมพิกเซลสดใส" พื้นเหลืองแสงพุ่ง แผงสีครีม ขอบดำหนา เงาแข็ง ไม่มีมุมโค้ง
+   กติกา: ห้ามใส่รหัสสีตรงๆ ในคอมโพเนนต์ ให้ใช้ตัวแปรในไฟล์นี้เท่านั้น
+   ========================================================================== */
+
+:root {
+  /* ---- สี ---- */
+  --yellow: #ffc81e; /* พื้นหลังหลัก */
+  --blue: #1e6fe8; /* พื้นหลังรอง หัวข้อ ลิงก์ */
+  --cream: #fbf6e6; /* แผง การ์ด หน้าต่าง */
+  --white: #ffffff; /* กระดานวาด ช่องกรอก */
+  --ink: #2b2b2b; /* ขอบ ตัวหนังสือ เงา */
+  --muted: #5e5a52; /* ตัวหนังสือรอง */
+  --green: #22a559; /* ปุ่มหลัก ทายถูก */
+  --red: #e8553f; /* ตัวจับเวลา ปุ่มอันตราย error */
+  --purple: #7b5ce0; /* Mini Challenge */
+  --pink: #e85c9e; /* ตกแต่ง */
+  --teal: #13a3a0; /* ตกแต่ง */
+
+  /* สีเทาอ่อนสำหรับแท็บที่ยังไม่ถูกเลือก (DESIGN.md ไม่ได้ระบุชื่อไว้) */
+  --tab-idle: #ece5d3;
+
+  /* ---- ฟอนต์ ----
+     Silkscreen ไม่มีภาษาไทย ใช้ได้เฉพาะข้อความอังกฤษและตัวเลข */
+  --font-pixel: "Silkscreen", "Courier New", monospace;
+  --font-head: "Mitr", "Sarabun", sans-serif;
+  --font-body: "Sarabun", "Thonburi", "Tahoma", sans-serif;
+
+  /* ---- ขอบและเงาแบบพิกเซล ---- */
+  --border: 3px solid var(--ink);
+  --border-thick: 4px solid var(--ink);
+  --shadow: 6px 6px 0 var(--ink); /* แผงใหญ่ */
+  --shadow-sm: 4px 4px 0 var(--ink); /* ของเล็ก ปุ่ม */
+}
+
+/* ============================ พื้นฐาน ============================ */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 16px;
+  color: var(--ink);
+  /* พื้นเหลืองมีลายจุดจางๆ ตาม DESIGN.md */
+  background: var(--yellow);
+  background-image: radial-gradient(rgba(43, 43, 43, 0.12) 1px, transparent 1px);
+  background-size: 14px 14px;
+}
+
+/* ปุ่ม/ช่องกรอกของเบราว์เซอร์ไม่ต้องมีมุมโค้ง */
+button,
+input {
+  border-radius: 0;
+  font-family: inherit;
+}
+
+/* ============================ โครงจอ ============================ */
+
+.screen {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  padding: 28px 16px;
+}
+
+/* หน้าเกมใช้พื้นฟ้าลายจุด บอกความรู้สึกว่า "กำลังเล่นอยู่" */
+.screen--game {
+  background: var(--blue);
+  background-image: radial-gradient(rgba(255, 255, 255, 0.16) 1px, transparent 1px);
+  background-size: 14px 14px;
+  color: var(--white);
+}
+
+/* ============================ โลโก้ ============================ */
+
+.logo {
+  margin: 0;
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  font-family: var(--font-pixel);
+  font-size: clamp(30px, 7vw, 54px);
+  line-height: 1;
+  letter-spacing: 2px;
+}
+
+.logo span {
+  /* ขอบตัวอักษรดำ ทำด้วยเงา 8 ทิศ (ชัวร์กว่า text-stroke ทุกเบราว์เซอร์) */
+  text-shadow:
+    3px 3px 0 var(--ink),
+    -3px 3px 0 var(--ink),
+    3px -3px 0 var(--ink),
+    -3px -3px 0 var(--ink),
+    0 3px 0 var(--ink),
+    0 -3px 0 var(--ink),
+    3px 0 0 var(--ink),
+    -3px 0 0 var(--ink);
+}
+
+.logo__just {
+  color: var(--blue);
+}
+
+.logo__drawit {
+  color: var(--yellow);
+}
+
+/* ============================ แผง ============================ */
+
+.panel {
+  background: var(--cream);
+  border: var(--border-thick);
+  box-shadow: var(--shadow);
+  padding: 22px;
+}
+
+.panel__title {
+  margin: 0 0 14px;
+  font-family: var(--font-head);
+  font-weight: 600;
+  font-size: 21px;
+}
+
+/* ============================ ปุ่ม ============================ */
+
+.btn {
+  min-height: 44px; /* กดง่ายบนมือถือ ตาม DESIGN.md */
+  padding: 10px 20px;
+  border: var(--border);
+  background: var(--cream);
+  color: var(--ink);
+  box-shadow: var(--shadow-sm);
+  font-family: var(--font-head);
+  font-weight: 600;
+  font-size: 17px;
+  cursor: pointer;
+}
+
+/* กดแล้วยุบลงไป 4px เงาหายไป — หัวใจของความรู้สึกแบบปุ่มตู้เกม */
+.btn:active:not(:disabled) {
+  transform: translate(4px, 4px);
+  box-shadow: 0 0 0 var(--ink);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn--primary {
+  background: var(--green);
+  color: var(--white);
+}
+
+.btn--danger {
+  background: var(--red);
+  color: var(--white);
+}
+
+.btn--wide {
+  width: 100%;
+}
+
+/* ============================ แท็บ ============================ */
+
+.tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 20px;
+}
+
+.tab {
+  flex: 1;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: var(--border);
+  background: var(--tab-idle);
+  color: var(--ink);
+  font-family: var(--font-pixel);
+  font-size: 12px;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+}
+
+/* แท็บที่เลือก พื้นเดียวกับแผงและขอบล่างหายไป เพื่อให้ดูต่อเป็นแผงเดียวกัน
+   (DESIGN.md เขียนว่าพื้นขาว แต่แผงเป็นครีม ถ้าใช้ขาวจะดูเหมือนแปะทับ ไม่ต่อกัน) */
+.tab--active {
+  background: var(--cream);
+  border-bottom-color: transparent;
+}
+
+/* ============================ ช่องกรอก ============================ */
+
+.field__label {
+  display: block;
+  margin: 0 0 6px;
+  font-family: var(--font-pixel);
+  font-size: 11px;
+  letter-spacing: 0.5px;
+}
+
+.input {
+  width: 100%;
+  margin-bottom: 18px;
+  padding: 11px 13px;
+  border: var(--border);
+  background: var(--white);
+  color: var(--ink);
+  font-size: 17px;
+}
+
+.input:focus-visible {
+  outline: 3px solid var(--blue);
+  outline-offset: 2px;
+}
+
+/* ช่องรหัสห้องใช้ฟอนต์พิกเซล เว้นระยะห่างตัวเลขให้อ่านง่าย */
+.input--code {
+  font-family: var(--font-pixel);
+  font-size: 20px;
+  letter-spacing: 6px;
+}
+
+/* ============================ อวตาร ============================ */
+
+.avatars {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+/* ปุ่มเลือกอวตาร (มีแต่ในหน้า Lobby) */
+.avatar {
+  width: 54px;
+  height: 54px;
+  border: var(--border);
+  border-radius: 50%; /* อวตารเป็นข้อยกเว้นเดียวที่ DESIGN.md ให้โค้งได้ */
+  background: var(--white);
+  font-size: 27px;
+  line-height: 1;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+/* ตัวที่เลือกมีวงแหวนสีฟ้าหนา */
+.avatar--selected {
+  outline: 4px solid var(--blue);
+  outline-offset: 2px;
+}
+
+/* อวตารแบบแสดงเฉยๆ ใช้ในห้องรอและแถบคะแนน */
+.avatar-chip {
+  flex: none;
+  width: 42px;
+  height: 42px;
+  border: var(--border);
+  border-radius: 50%;
+  background: var(--cream);
+  font-size: 22px;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+}
+
+/* ============================ Toast ============================ */
+
+@keyframes toast-in {
+  from {
+    transform: translate(-50%, -14px);
+    opacity: 0;
+  }
+  to {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
+}
+
+.toast {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  animation: toast-in 0.18s ease-out;
+  z-index: 50;
+  max-width: calc(100% - 32px);
+  padding: 12px 20px;
+  border: var(--border);
+  box-shadow: var(--shadow-sm);
+  background: var(--red);
+  color: var(--white);
+  font-family: var(--font-head);
+  font-weight: 500;
+  font-size: 16px;
+}
+
+/* ============================ หน้า Lobby ============================ */
+
+.lobby {
+  width: 100%;
+  max-width: 880px;
+  display: grid;
+  grid-template-columns: 1.05fr 0.95fr;
+  gap: 24px;
+  align-items: start;
+}
+
+/* จอเล็กให้เรียงบนล่าง */
+@media (max-width: 760px) {
+  .lobby {
+    grid-template-columns: 1fr;
+  }
+}
+
+.rules {
+  margin: 0;
+  padding-left: 22px;
+  display: grid;
+  gap: 10px;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.rules-tip {
+  margin-top: 16px;
+  padding: 12px;
+  border: var(--border);
+  background: var(--purple);
+  color: var(--white);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.hint-text {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+/* ข้อความอธิบายใต้ปุ่ม เช่น "ต้องมีผู้เล่นอย่างน้อย 2 คน" */
+.form-note {
+  margin: 14px 0 0;
+  font-size: 15px;
+  color: var(--muted);
+}
+
+.small {
+  font-size: 15px;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+/* ============================ หน้าห้องรอ ============================ */
+
+.room {
+  width: 100%;
+  max-width: 560px;
+  display: grid;
+  gap: 20px;
+}
+
+.code-badge {
+  width: 100%;
+  padding: 16px 0;
+  border: var(--border-thick);
+  box-shadow: var(--shadow);
+  background: var(--white);
+  color: var(--ink);
+  font-family: var(--font-pixel);
+  font-size: clamp(28px, 8vw, 42px);
+  letter-spacing: 10px;
+  text-indent: 10px; /* หักระยะที่เกินมาจาก letter-spacing ตัวสุดท้าย */
+  cursor: pointer;
+}
+
+.code-hint {
+  margin: 8px 0 0;
+  text-align: center;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.player-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.player-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border: var(--border);
+  background: var(--white);
+}
+
+/* แถวของตัวเอง ให้พื้นต่างเล็กน้อยจะได้หาเจอง่าย */
+.player-card--me {
+  background: #eaf7ef;
+}
+
+.player-card__name {
+  font-family: var(--font-head);
+  font-weight: 500;
+  font-size: 17px;
+}
+
+.player-card__badges {
+  margin-left: auto;
+  font-size: 18px;
+  letter-spacing: 3px;
+}
+
+.settings {
+  display: grid;
+  gap: 16px;
+}
+
+.settings__row {
+  display: grid;
+  gap: 8px;
+}
+
+.segmented {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.seg {
+  min-width: 52px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: var(--border);
+  background: var(--white);
+  color: var(--ink);
+  font-family: var(--font-pixel);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.seg--active {
+  background: var(--blue);
+  color: var(--white);
+}
+
+.actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+}
+
+.actions .btn {
+  flex: 1;
+}
+
+/* ============================ หน้าจอชั่วคราวของข้อ 2 ============================ */
+
+.placeholder {
+  margin: 0;
+  font-family: var(--font-head);
+  font-weight: 600;
+  font-size: 26px;
+}

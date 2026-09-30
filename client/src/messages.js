@@ -1,0 +1,20 @@
+// แปลรหัส error จาก server เป็นข้อความไทย ตามตารางใน DESIGN.md
+// ใช้ทั้งกับ error จาก callback (create_room, join_room) และ event game_error
+const ERROR_MESSAGES = {
+  ROOM_NOT_FOUND: "ไม่พบห้องนี้ ลองเช็ครหัสอีกที",
+  ROOM_FULL: "ห้องเต็มแล้ว (สูงสุด 8 คน)",
+  NAME_TAKEN: "มีคนใช้ชื่อนี้ในห้องแล้ว",
+  INVALID_NAME: "กรุณาใส่ชื่อ",
+  NOT_HOST: "เฉพาะหัวห้องเท่านั้น",
+  NOT_ENOUGH_PLAYERS: "ต้องมีผู้เล่นอย่างน้อย 2 คน",
+  NOT_YOUR_TURN: "ยังไม่ถึงตาคุณวาด", // รหัสนี้อยู่ใน events.md (DESIGN.md ไม่ได้เขียนไว้) จะได้ใช้ตอนข้อ 4
+  AI_UNAVAILABLE: "AI ไม่ว่าง ลองใหม่อีกครั้ง",
+
+  // รหัสนี้ฝั่ง client ใช้เอง ไม่ได้มาจาก server (server ไม่เคยส่งรหัสนี้)
+  // ใช้ตอนยิงคำขอแล้ว server ไม่ตอบ เช่น ลืมเปิด server
+  CONNECT_FAILED: "ต่อ server ไม่ได้ ลองใหม่อีกครั้ง",
+};
+
+export function errorText(code) {
+  return ERROR_MESSAGES[code] ?? "เกิดข้อผิดพลาด ลองใหม่อีกครั้ง";
+}
