@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { socket } from "./socket";
 import { errorText } from "./messages";
+import { useGame } from "./hooks/useGame";
 import Lobby from "./screens/Lobby";
 import WaitingRoom from "./screens/WaitingRoom";
 import Game from "./screens/Game";
@@ -15,6 +16,10 @@ export default function App() {
   const [me, setMe] = useState(null); // { playerId, name, avatar } ของเครื่องนี้
   const [toast, setToast] = useState(null);
   const toastTimer = useRef(null);
+
+  // สถานะของเกมที่กำลังเล่น ผูก socket ไว้ที่นี่ (ไม่ใช่ในหน้า Game) เพื่อไม่ให้ event หลุด
+  // ดูเหตุผลเต็มๆ ในคอมเมนต์ของ useGame
+  const { game, chooseLeft, chooseWord, sendGuess, startGame, resetGame } = useGame();
 
   function showToast(text) {
     setToast({ text, id: Date.now() });
@@ -60,6 +65,7 @@ export default function App() {
 
   function handleLeave() {
     socket.emit("leave_room");
+    resetGame();
     setRoom(null);
     setMe(null);
     setScreen("lobby");
@@ -86,7 +92,23 @@ export default function App() {
           </div>
         ))}
 
-      {screen === "game" && <Game />}
+      {screen === "game" &&
+        (room ? (
+          <Game
+            room={room}
+            meId={me?.playerId}
+            game={game}
+            chooseLeft={chooseLeft}
+            chooseWord={chooseWord}
+            sendGuess={sendGuess}
+            startGame={startGame}
+            onLeave={handleLeave}
+          />
+        ) : (
+          <div className="screen">
+            <div className="panel">กำลังเข้าห้อง...</div>
+          </div>
+        ))}
 
       {/* key ผูกกับ id ของ toast เพื่อให้แสดงข้อความซ้ำแล้วเล่นอนิเมชันใหม่ */}
       <Toast key={toast?.id ?? "none"} toast={toast} />
