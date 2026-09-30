@@ -34,6 +34,7 @@
   --border-thick: 4px solid var(--ink);
   --shadow: 6px 6px 0 var(--ink); /* แผงใหญ่ */
   --shadow-sm: 4px 4px 0 var(--ink); /* ของเล็ก ปุ่ม */
+  --shadow-xs: 2px 2px 0 var(--ink); /* ของจิ๋ว เช่น จุดเลือกสี */
 }
 
 /* ============================ พื้นฐาน ============================ */
@@ -600,22 +601,26 @@ input {
   color: var(--ink);
 }
 
-/* ---- โครงสามคอลัมน์: คะแนน · กระดาน · แชท ---- */
+/* ---- โครงสามคอลัมน์: รายชื่อ · กระดาน · เครื่องมือวาด ---- */
 
+/* ทำไมเครื่องมืออยู่ขวา: คนส่วนใหญ่ถนัดขวา จึงควรเป็นฝั่งที่มือเอื้อมถึงง่ายที่สุด
+   และการย้ายเครื่องมือออกจากใต้กระดานทำให้กระดานสูงขึ้นได้อีก (โจทย์ข้อ 2 ของรอบนี้) */
 .game {
   flex: 1;
   width: 100%;
-  max-width: 1400px;
+  max-width: 1500px;
   margin: 0 auto;
   display: grid;
-  grid-template-columns: 250px minmax(0, 1fr) 300px;
-  gap: 14px;
+  /* 240px ไม่ใช่ 200px เพราะจุดสีต้องกว้าง 44px ตามกฎปุ่มของ DESIGN.md
+     4 จุด × 44 + ช่องไฟ 3 × 10 = 206 บวก padding อีก 20 จึงต้องมีอย่างน้อย 226 */
+  grid-template-columns: 230px minmax(0, 1fr) 240px;
+  gap: 12px;
   align-items: start;
 }
 
-/* ---- แถบคะแนน ---- */
+/* ---- แถบรายชื่อผู้เล่น (ซ้าย) ---- */
 
-.game__scores {
+.game__players {
   padding: 10px;
   border: var(--border-thick);
   box-shadow: var(--shadow-sm);
@@ -628,6 +633,13 @@ input {
   margin: 0;
   padding: 0;
   display: grid;
+  /* ต้องเขียน minmax(0, 1fr) ไม่ปล่อยเป็น auto
+     คอลัมน์แบบ auto มีขนาดต่ำสุด = min-content ของแถว ซึ่งรวมความกว้างเต็มของชื่อที่ไม่ตัดบรรทัด
+     วัดจริงที่คอลัมน์กว้าง 148px: คอลัมน์ auto ขยายเป็น 216px แล้วล้นออกนอกกรอบ
+     (ชื่อมี min-width: 0 + ellipsis แล้วก็ไม่ช่วย เพราะนั่นคุมการหด "ใน" แถว ไม่ได้คุมขนาดคอลัมน์)
+     minmax(0, 1fr) บังคับให้คอลัมน์หดตามกรอบได้ แล้วชื่อจะถูกตัดด้วย ellipsis แทน
+     บทเรียนเดียวกับตอนที่ flex item มี min-width: auto แล้วล้นออกนอกกรอบ */
+  grid-template-columns: minmax(0, 1fr);
   gap: 6px;
 }
 
@@ -689,12 +701,53 @@ input {
   font-size: 14px;
 }
 
-/* ---- กลางจอ: ป้าย Mini Challenge + กระดาน ---- */
+/* ---- กลางจอ: ป้าย Mini Challenge + กระดาน + สองกล่องใต้กระดาน ---- */
 
 .game__stage {
   display: grid;
   gap: 12px;
   align-content: start;
+  min-width: 0; /* กันคอลัมน์กลางดันล้นออกนอกจอ (ค่าเริ่มต้นของ grid item หดต่ำกว่าเนื้อหาไม่ได้) */
+}
+
+/* สองกล่องใต้กระดาน: คำตอบ (ซ้าย) กับ ในห้อง (ขวา) */
+.game__answers {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+/* ---- กล่องย่อยใต้กระดาน (คำตอบ · ในห้อง) ----
+   เขียนเป็น ".game__answers .panel" ไม่ใช่ ".panel" เฉย ๆ เพราะ .panel มีอยู่แล้วด้านบน
+   (ใช้ใน Lobby กับห้องรอ ขอบหนา padding 22) ถ้าเขียนทับตรง ๆ ด้วย selector ระดับเดียวกัน
+   ตัวที่อยู่หลังกว่าในไฟล์จะชนะทั้งหมด = กล่องของ Lobby จะเตี้ยเหลือ 176px ไปด้วย
+   เติม ".game__answers" ข้างหน้าเพื่อให้ชนะเฉพาะกล่องใต้กระดานของหน้าเกม */
+
+.game__answers .panel {
+  display: flex;
+  flex-direction: column;
+  height: 176px; /* ความสูงคงที่ ไม่งั้นพอข้อความเยอะกระดานจะถูกดันขึ้นแล้วภาพกระโดด */
+  padding: 8px 10px 10px;
+  border: var(--border);
+  box-shadow: var(--shadow-sm);
+  color: var(--ink);
+  overflow: hidden;
+}
+
+.game__answers .panel__title {
+  margin: 0 0 6px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+/* ---- คอลัมน์เครื่องมือวาด (ขวา) ---- */
+
+.game__tools {
+  padding: 10px;
+  border: var(--border-thick);
+  box-shadow: var(--shadow-sm);
+  background: var(--cream);
+  color: var(--ink);
 }
 
 .challenge {
@@ -708,42 +761,286 @@ input {
   text-align: center;
 }
 
-/* กระดานวาด — ข้อ 2 ยังเป็นกล่องขาว 4:3 เปล่าๆ ตัววาดจริงเป็นงานข้อ 3 */
+/* ---- กระดานวาด ---- */
+
+/* พื้นขาว ขอบดำ 4px อัตราส่วน 4:3 (DESIGN.md) */
 .board {
   width: 100%;
   aspect-ratio: 4 / 3;
   border: var(--border-thick);
   box-shadow: var(--shadow);
   background: var(--white);
+  /* จำกัดความสูงโดยคิดจากความกว้าง (ไม่ใช้ max-height เพราะจะไปทับอัตราส่วน 4:3)
+     กันไม่ให้กระดานสูงจนดันกล่องใต้กระดานตกจอ ต้องเลื่อนลงไปดูทุกที
+     360px คือที่กันไว้ให้: แถบบน 66 + ป้าย Mini Challenge 44 + กล่องใต้กระดาน 176
+     + ช่องว่าง 24 + ขอบจอ 28 + เผื่ออีก 22 — คำนวณจากของจริงแล้ววัดซ้ำในเบราว์เซอร์
+     ตั้งใจให้กระดานกินที่ที่เหลือทั้งหมด เพราะเป็นสิ่งที่ผู้เล่นจ้องตลอดเวลา */
+  max-width: calc((100dvh - 360px) * 4 / 3);
+  margin: 0 auto;
+}
+
+/* คนที่ไม่ใช่คนวาดไม่ควรเห็นเคอร์เซอร์กากบาทชวนให้วาด */
+.board--draw {
   cursor: crosshair;
 }
 
-/* ---- แชท ---- */
-
-/* กรอบนอกของแชท — ตัวที่จัดเรียงข้างในคือ .chat อีกชั้น (อย่าใส่ flex ที่นี่
-   ไม่งั้น flex ของ .chat__list จะไม่มีผล เพราะคนละชั้นกัน) */
-.game__chat {
-  height: min(72vh, 620px);
-  border: var(--border-thick);
-  box-shadow: var(--shadow-sm);
-  background: var(--cream);
-  color: var(--ink);
+.board__canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* ห้ามเบราว์เซอร์เอานิ้วไปเลื่อนจอ ไม่งั้นวาดด้วยนิ้วไม่ติด (DESIGN.md สั่งให้วาดด้วยนิ้วได้) */
+  touch-action: none;
 }
 
-/* ชั้นใน ทำให้กล่องข้อความกินที่ว่าง ส่วนช่องพิมพ์เกาะล่าง */
-.chat {
+/* ── กล่องโหมดดีบักชั่วคราว (?debug=1) — ลบได้ทั้งบล็อกนี้ ──
+   เกาะมุมซ้ายบนของกระดานทับบนภาพวาด ต้อง pointer-events: none เสมอ
+   ไม่งั้นกล่องจะดักนิ้ว/เมาส์ไปกิน ทำให้วาดตรงมุมนั้นไม่ได้ */
+.board {
+  position: relative;
+}
+.board__debug {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 5;
+  margin: 0;
+  padding: 6px 8px;
+  background: rgba(43, 43, 43, 0.88);
+  color: #7cff9b;
+  font: 11px/1.45 "Courier New", monospace;
+  white-space: pre;
+  pointer-events: none;
+}
+
+/* ---- แถบเครื่องมือวาด (เห็นเฉพาะคนวาด) ---- */
+
+/* แถบเครื่องมือ — แนวตั้งอยู่ในคอลัมน์ขวาของหน้าเกม (DESIGN.md)
+   ไม่มีกรอบของตัวเองเพราะกรอบอยู่ที่ .game__tools แล้ว ซ้อนสองชั้นจะดูหนาเกินไป */
+.toolbar {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  gap: 12px;
 }
+
+.toolbar__group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ปุ่มเครื่องมือ 4 ปุ่ม เรียง 2 คอลัมน์ */
+.toolbar__group--tools {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+/* จุดสี 8 สี เรียง 4 คอลัมน์ */
+.toolbar__group--colors {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  /* ช่องไฟ 10px ไม่ใช่ 8px เพราะจุดที่เลือกอยู่โตขึ้นและมีวงแหวนล้อมอีกชั้น
+     วัดแล้ววงแหวนยื่นออกจากขอบวงกลมข้างละ ~8px จึงต้องเหลือที่พอ ไม่งั้นวงแหวนจะไปทับจุดข้างๆ */
+  gap: 10px;
+  justify-items: center;
+}
+
+/* คนที่ไม่ใช่คนวาด: แถบทั้งแถบจางและกดไม่ได้
+   ยังแสดงอยู่ไม่ซ่อน เพราะถ้าซ่อน กระดานจะกว้างขึ้นแล้วหดกลับทุกครั้งที่สลับคนวาด
+   ภาพที่วาดค้างไว้จะกระโดดเปลี่ยนตำแหน่งต่อหน้าต่อตา
+   pointer-events: none ที่ตัวแม่ กันการกดได้ทั้งแถบในบรรทัดเดียว (ลูกๆ ไม่ต้องปิดทีละปุ่ม) */
+.toolbar--locked {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+/* กลุ่มสไลเดอร์ (สีเอง · ขนาดแปรง) — ป้ายอยู่บรรทัดบน สไลเดอร์อยู่บรรทัดล่าง
+   เพราะคอลัมน์ขวาแคบ วางเรียงแนวนอนแล้วสไลเดอร์จะสั้นจนลากไม่ถนัด
+   บทเรียนจากรอบก่อน: กลุ่มพวกนี้เคยดันล้นออกนอกกรอบเพราะ flex item หดต่ำกว่าเนื้อหาไม่ได้
+   (min-width: auto) — ตอนนี้เปลี่ยนเป็น grid ที่กำหนดคอลัมน์ชัดเจน จึงไม่มีทางล้นอีก */
+.toolbar__group--hue,
+.toolbar__group--size {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 8px;
+}
+
+.toolbar__group--hue .toolbar__label,
+.toolbar__group--size .toolbar__label {
+  grid-column: 1 / -1; /* ป้ายกินเต็มความกว้าง = ดันสไลเดอร์ลงบรรทัดถัดไปเอง */
+}
+
+.toolbar__label {
+  font-family: var(--font-head);
+  font-weight: 500;
+  font-size: 14px;
+  white-space: nowrap; /* ป้ายสั้นๆ อยู่บรรทัดเดียวเสมอ อย่าให้ "สีเอง" ตกไปคนละบรรทัด */
+}
+
+.toolbar__range {
+  min-width: 0; /* ให้หดได้ตามคอลัมน์ อย่าดันล้นกรอบ (ดูหมายเหตุที่ .toolbar__group--hue) */
+  height: 30px;
+  accent-color: var(--ink);
+  cursor: pointer;
+}
+
+/* ตัวเลขขนาดแปรง ใช้ Silkscreen ได้เพราะเป็นเลขล้วน */
+.toolbar__size-value {
+  min-width: 2ch;
+  font-family: var(--font-pixel);
+  font-size: 14px;
+  text-align: right;
+}
+
+/* จุดเลือกสี — วงกลม (ข้อยกเว้นของกฎมุมไม่โค้ง ดูหัวข้อสไตล์พิกเซล)
+   สีที่ไม่ได้เลือกทำให้จางลง เพื่อให้ตัวที่เลือกอยู่เด่นออกมา (โจทย์ข้อ 2)
+   ผลพลอยได้คือเห็นทั้งแถบในทีเดียวว่ามีสีอะไรให้เลือกบ้าง โดยสายตาไม่ไปเกาะสีที่เลือก */
+.swatch {
+  /* 44px ตามกฎ "ปุ่มกดง่ายอย่างน้อย 44px" ของ DESIGN.md ใช้ทั้งจอใหญ่และมือถือ
+     (เดิม 30px ซึ่งเล็กกว่ากฎ และกดพลาดง่ายเวลารีบวาด) */
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: var(--border);
+  border-radius: 999px;
+  box-shadow: var(--shadow-xs);
+  cursor: pointer;
+  opacity: 0.45;
+  transition: opacity 0.12s, transform 0.12s;
+}
+
+.swatch:hover {
+  opacity: 0.75;
+}
+
+/* สีที่เลือกอยู่ ใช้สามอย่างพร้อมกันเพื่อให้เห็นชัดทั้งสีอ่อนและสีเข้ม
+   (ถ้าดูแค่สี จุดสีขาวกับจุดสีดำจะแยกไม่ออกว่าอันไหนเลือกอยู่)
+   ทึบเต็ม + โตขึ้น + ดันวงแหวนดำไว้อีกชั้น */
+.swatch--on,
+.swatch--on:hover {
+  opacity: 1;
+  transform: scale(1.15);
+  outline: 3px solid var(--ink);
+  outline-offset: 2px;
+}
+
+/* ── แถบสีรุ้งสำหรับเลือกสีเอง ──
+   เดิมเป็นวงล้อสีของเบราว์เซอร์ (input[type=color]) ซึ่งต้องกดแล้วเปิดหน้าต่างใหญ่
+   แถบนี้กดตรงไหนก็ได้สีตรงนั้น ยิ่งกว้างยิ่งเลือกง่าย จึงยืดหยุ่นตามที่ว่าง (โจทย์ข้อ 4)
+   ตัวไล่สีตั้งจาก JS (RAINBOW_GRADIENT ใน palette.js) เพื่อไม่ให้มีรหัสสีในไฟล์นี้ */
+/* แถบสีรุ้ง — ยิ่งกว้างยิ่งเล็งสีได้แม่น จึงกินที่ที่เหลือทั้งหมดในกลุ่ม */
+.rainbow {
+  min-width: 0;
+  height: 30px;
+  padding: 0;
+  border: var(--border);
+  box-shadow: var(--shadow-xs);
+  /* ปิดหน้าตาเดิมของเบราว์เซอร์ก่อน ไม่งั้นมันจะวาดรางของมันเองทับสีที่เราตั้งไว้ */
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+}
+
+/* หัวเลื่อน — แท่งขอบดำ สีขาว เพื่อให้เห็นชัดบนทุกสีของแถบ
+   ต้องประกาศแยกสำหรับ Chrome (-webkit-) กับ Firefox (-moz-) เพราะคนละชื่อ */
+.rainbow::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 14px;
+  height: 24px;
+  border: 3px solid var(--ink);
+  border-radius: 0;
+  background: var(--white);
+  cursor: pointer;
+}
+
+.rainbow::-moz-range-thumb {
+  width: 14px;
+  height: 24px;
+  border: 3px solid var(--ink);
+  border-radius: 0;
+  background: var(--white);
+  cursor: pointer;
+}
+
+/* ปุ่มเครื่องมือ ✏️ 🧽 🪣 🗑️
+   ตัวที่ไม่ถูกเลือกจางลง เพื่อให้เห็นชัดว่าตอนนี้ใช้เครื่องมืออะไรอยู่ (โจทย์ข้อ 2) */
+/* ปุ่มเครื่องมือ — เต็มความกว้างคอลัมน์ สูง 48px
+   48 มากกว่า 44 ตามที่โจทย์กำหนดเรื่องขนาดปุ่มที่กดง่าย */
+.tool {
+  width: 100%;
+  height: 48px;
+  padding: 0;
+  border: var(--border);
+  background: var(--tab-idle);
+  box-shadow: var(--shadow-sm);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.45;
+  transition: opacity 0.12s;
+}
+
+.tool:hover {
+  opacity: 0.75;
+}
+
+/* เครื่องมือที่เลือกอยู่ "กดยุบค้างไว้" ตาม DESIGN.md — ยุบลง 4px เหมือนตอนกดปุ่มจริง
+   ต่างจากปุ่มอื่นตรงที่มันไม่ดีดกลับ
+   รวมกับความจางของตัวที่ไม่เลือก และพื้นเหลือง → ไม่มีทางสับสนว่าใช้อันไหนอยู่ */
+.tool--on,
+.tool--on:hover {
+  opacity: 1;
+  transform: translate(4px, 4px);
+  box-shadow: 0 0 0 var(--ink);
+  background: var(--yellow);
+}
+
+/* ปุ่มล้างจอเป็นการกระทำ ไม่ใช่โหมด จึงไม่ต้องเข้าชุดจาง/ทึบกับสามปุ่มบน
+   คงความทึบไว้ให้กดง่าย และแยกออกด้วยสีแดง (ไม่ใช่เหลืองแบบตัวที่เลือกอยู่) */
+.tool--danger,
+.tool--danger:hover {
+  opacity: 1;
+  background: var(--red);
+}
+
+/* ที่จองไว้ให้ปุ่มย้อนกลับ/ทำซ้ำ (ข้อ 4)
+   จองที่ตั้งแต่ตอนนี้เพื่อให้ความสูงคอลัมน์นิ่ง พอใส่ปุ่มจริงกระดานจะได้ไม่เปลี่ยนขนาด
+   ทำเป็นกรอบเส้นประจางๆ ให้เห็นว่าเป็นที่ว่างที่ตั้งใจ ไม่ใช่ของที่ลืมใส่ */
+.toolbar__slot {
+  display: grid;
+  place-items: center;
+  gap: 2px;
+  min-height: 56px;
+  padding: 6px;
+  border: 2px dashed var(--muted);
+  color: var(--muted);
+  font-size: 11px;
+  text-align: center;
+}
+
+.toolbar__slot-text {
+  font-family: var(--font-head);
+}
+
+.toolbar__slot-note {
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  letter-spacing: 1px;
+}
+
+/* ---- กล่องคำตอบ / ในห้อง ----
+   กรอบและความสูงมาจาก .panel (อยู่หัวข้อ "กล่องย่อยใต้กระดาน") เหลือแต่ของข้างใน */
 
 .chat__list {
   flex: 1;
+  min-height: 0; /* จำเป็นสำหรับ flex: ถ้าไม่ใส่ ลูกจะดันแม่ให้สูงขึ้นแทนที่จะเลื่อนในกรอบ */
   overflow-y: auto;
   display: grid;
   align-content: start;
   gap: 6px;
-  padding: 10px;
+  /* ไม่มี padding ของตัวเอง — รอบนอกมาจาก .panel แล้ว */
 }
 
 .chat__empty {
@@ -784,7 +1081,8 @@ input {
 .chat__form {
   display: flex;
   gap: 8px;
-  padding: 10px;
+  margin-top: 8px;
+  padding-top: 8px;
   border-top: var(--border);
 }
 
@@ -946,27 +1244,108 @@ input {
   font-size: 16px;
 }
 
-/* ---- จอเล็ก: กระดานขึ้นบนสุด แล้วตามด้วยแชท คะแนนย่อเป็นแถวนอน ---- */
+/* ---- จอแท็บเล็ตแนวนอน (ไอแพด 1024–1366): ย่อคอลัมน์ข้างทั้งสอง เพื่อคืนที่ให้กระดาน ----
+   วัดจริงที่ 1024×768: กระดานได้แค่ 502×377 และเหลือที่ว่างล่างจอ 99px
+   ตัวบีบคือ "ความกว้างคอลัมน์กลาง" (502px) ไม่ใช่ความสูงจอ (เพดาน 544px ยังไม่ถึง)
+   ที่ 1080×810 ก็เหมือนกัน (ได้ 558 จากเพดาน 600) จึงคืนที่จากคอลัมน์ข้างแทน
+   ส่วน 1180 ขึ้นไปติดเพดานความสูงอยู่แล้ว หน้าตาจึงไม่เปลี่ยน (แต่ก็ไม่เสียหาย)
+
+   232px คือ "พื้น" ของคอลัมน์เครื่องมือ: จุดสี 4 จุด × 44px + ช่องไฟ 3 × 10 = 206
+   บวก padding 20 และขอบ 6 รวมเป็น 232 — ห้ามต่ำกว่านี้ ไม่งั้นจุดสีจะล้นออกนอกกรอบ
+   (บทเรียนจากรอบก่อน: flex/grid item หดต่ำกว่าความกว้างของเนื้อหาไม่ได้ มันจะล้นแทน) */
+@media (min-width: 1001px) and (max-width: 1400px) {
+  .screen--game {
+    padding: 10px;
+  }
+
+  .game {
+    grid-template-columns: 176px minmax(0, 1fr) 232px;
+    gap: 8px;
+  }
+}
+
+/* ---- จอเล็ก: กระดานบนสุด → เครื่องมือเป็นแถบนอน → กล่องคำตอบ → รายชื่อ (DESIGN.md) ---- */
 
 @media (max-width: 1000px) {
   .game {
     grid-template-columns: 1fr;
   }
 
-  /* ลำดับตาม DESIGN.md: กระดานบนสุด → แชท → แถบคะแนน (เรียงตาม DOM มันเป็นคะแนน-กระดาน-แชท
-     จึงต้องสั่ง order เอง) */
+  /* ให้ลูกของ .game__stage (ป้าย+กระดาน+กล่องคำตอบ) ไปเป็นชิ้นเดียวกับ .game__players และ .game__tools
+     แล้วเรียงลำดับเองได้ — ไม่มี display: contents ก็สลับให้เครื่องมือไปคั่นกลางกระดานกับกล่องคำตอบไม่ได้
+     เพราะมันอยู่กันคนละชั้น (เครื่องมือเป็นพี่น้องกับ stage ไม่ใช่ลูก) */
   .game__stage {
-    order: -1;
+    display: contents;
   }
 
-  .game__scores {
+  /* ลำดับตาม DESIGN.md: กระดาน → เครื่องมือ → กล่องคำตอบ → รายชื่อผู้เล่น */
+  .challenge {
+    order: 0;
+  }
+
+  .board {
     order: 1;
+  }
+
+  .game__tools {
+    order: 2;
+  }
+
+  .game__answers {
+    order: 3;
+  }
+
+  .game__players {
+    order: 4;
     overflow-x: auto;
   }
 
-  /* ต้องกำหนดความสูงจริง ไม่ใช่ auto ไม่งั้นกล่องข้อความยุบจนอ่านแชทไม่ได้ */
-  .game__chat {
-    height: 320px;
+  /* กลับเป็นแถบนอนใต้กระดาน */
+  .toolbar {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 14px;
+  }
+
+  /* เครื่องมือ 4 ปุ่มเรียงเป็นแถวเดียว และจุดสี 4 สีต่อแถว — นิ้วกดถนัดกว่า */
+  .toolbar__group--tools {
+    grid-template-columns: repeat(4, 1fr);
+    flex: 1;
+    min-width: 220px;
+  }
+
+  .toolbar__group--colors {
+    grid-template-columns: repeat(4, 1fr);
+    /* จุดสีเป็น 44px ตรึงไว้ สี่จุดบวกช่องไฟ 3 × 10 จึงกว้าง 206px
+       ต้องกันไม่ให้ flex หดมันลงต่ำกว่านั้น ไม่งั้นจุดสีจะล้นออกนอกกรอบ */
+    min-width: 206px;
+  }
+
+  /* บนมือถือมีที่กว้าง กลับไปวางป้ายกับสไลเดอร์บรรทัดเดียวกันได้ */
+  .toolbar__group--hue,
+  .toolbar__group--size {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    flex: 1;
+    min-width: 220px;
+  }
+
+  .toolbar__group--hue .toolbar__label,
+  .toolbar__group--size .toolbar__label {
+    grid-column: auto;
+  }
+
+  /* ที่จองไว้ให้ปุ่มย้อนกลับ/ทำซ้ำ ไม่จำเป็นบนมือถือ (ที่จำกัด) */
+  .toolbar__slot {
+    display: none;
+  }
+
+  /* ปุ่มและจุดสีต้องกดง่ายด้วยนิ้ว อย่างน้อย 44px (DESIGN.md หัวข้อจอเล็ก)
+     จุดสีกับปุ่มเครื่องมือได้ 44px มาตั้งแต่จอใหญ่แล้ว เหลือแต่สไลเดอร์ที่ยังเตี้ยอยู่
+     จึงยืดรางสไลเดอร์ขึ้นให้เลื่อนด้วยนิ้วได้ถนัด */
+  .rainbow,
+  .toolbar__range {
+    height: 44px;
   }
 
   .score-list {
@@ -983,5 +1362,28 @@ input {
   .topbar__word {
     order: 3;
     flex-basis: 100%;
+  }
+
+  /* หน้ามือถือยาวและเลื่อนได้อยู่แล้ว จึงไม่ต้องจำกัดความสูงกระดานตามจอแบบจอใหญ่ */
+  .board {
+    max-width: 100%;
+  }
+
+  /* กล่องใต้กระดานสูงขึ้นหน่อยให้อ่านสบายบนมือถือ แต่ยังล็อกความสูงไว้ให้เลื่อนในกรอบ
+     (ต้องเขียนเต็มแบบนี้ ไม่ใช่ .panel เฉย ๆ ดูเหตุผลที่บล็อก .game__answers .panel ด้านบน) */
+  .game__answers .panel {
+    height: 200px;
+  }
+}
+
+/* จอมือถือแคบมาก — สองกล่องใต้กระดานเรียงลงมาแทนที่จะบีบข้างกันจนอ่านไม่ออก */
+@media (max-width: 620px) {
+  .game__answers {
+    grid-template-columns: 1fr;
+  }
+
+  .toolbar__group--hue,
+  .toolbar__group--size {
+    min-width: 100%;
   }
 }

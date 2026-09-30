@@ -1,11 +1,22 @@
 import { useEffect, useRef, useState } from "react";
 
-// แชท + ช่องทายคำ
-// ข้อความ 3 แบบ: ทายผิด (ดำปกติ) · ทายถูก (พื้นเขียวอ่อน) · ข้อความระบบ (เทาเอียง)
-// คนวาดพิมพ์ไม่ได้ระหว่างวาด server ตัดทิ้งอยู่แล้ว แต่ฝั่งเราปิดช่องไปเลยจะได้เข้าใจง่าย
-export default function Chat({ messages = [], meId, disabled = false, onSend }) {
+/**
+ * กล่อง "คำตอบ" — ใต้กระดาน ฝั่งซ้าย (DESIGN.md หัวข้อหน้าเกม)
+ *
+ * เก็บเฉพาะ "คำที่ผู้เล่นพิมพ์ทาย" ส่วนเรื่องในห้อง (ใครเข้าออก ใครทายถูก) อยู่กล่องขวา (RoomLog)
+ * แยกกันเพราะคนละประโยชน์: กล่องนี้คือที่ที่เราต้องจ้องเพื่อทาย ส่วนกล่องขวาไว้อ่านบรรยากาศห้อง
+ *
+ * ข้อความ 3 แบบ
+ *   ทายผิด  ดำปกติ
+ *   ทายถูก  พื้นเขียวอ่อนตัวเขียว (คำของตัวเองเห็นคำจริง คนอื่นเห็น ****** — server ตัดสิน)
+ *   ของตัวเอง ขอบซ้ายสีฟ้า
+ *
+ * คนวาดพิมพ์ไม่ได้ระหว่างวาด server ตัดทิ้งอยู่แล้ว แต่ฝั่งเราปิดช่องไปเลยจะได้เข้าใจง่าย
+ */
+export default function Chat({ messages = [], meId, disabled = false, onSend, focusKey = 0 }) {
   const [text, setText] = useState("");
   const listRef = useRef(null);
+  const inputRef = useRef(null);
 
   // ข้อความใหม่มา ให้เลื่อนลงล่างสุดเสมอ
   useEffect(() => {
@@ -13,26 +24,30 @@ export default function Chat({ messages = [], meId, disabled = false, onSend }) 
     if (list) list.scrollTop = list.scrollHeight;
   }, [messages]);
 
+  // ขึ้นตาใหม่ = เริ่มทายใหม่ ให้เคอร์เซอร์อยู่ที่ช่องพิมพ์เลย จะได้พิมพ์ได้ทันทีไม่ต้องกดก่อน
+  // ข้ามตอนที่พิมพ์ไม่ได้ (เราเป็นคนวาด) ไม่งั้นจะไปแย่งโฟกัสทั้งที่พิมพ์ไม่ได้
+  useEffect(() => {
+    if (!disabled) inputRef.current?.focus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusKey]);
+
   function handleSubmit(e) {
-    e.preventDefault();
+    e.preventDefault(); // กด Enter ในช่องนี้ = ส่ง (ฟอร์มจัดการให้เอง ไม่ต้องดักคีย์เอง)
     const value = text.trim();
     if (!value || disabled) return;
     onSend(value);
     setText("");
   }
 
+  const guesses = messages.filter((m) => !m.system);
+
   return (
-    <section className="chat" aria-label="แชท">
+    <section className="panel panel--answers" aria-label="คำตอบ">
+      <h2 className="panel__title">คำตอบ</h2>
+
       <div className="chat__list" ref={listRef}>
-        {messages.length === 0 && <p className="chat__empty">พิมพ์ทายคำที่นี่</p>}
-        {messages.map((m, i) => {
-          if (m.system) {
-            return (
-              <p className="chat__row chat__row--system" key={i}>
-                {m.text}
-              </p>
-            );
-          }
+        {guesses.length === 0 && <p className="chat__empty">พิมพ์ทายคำที่นี่</p>}
+        {guesses.map((m, i) => {
           const classes = ["chat__row"];
           if (m.correct) classes.push("chat__row--correct");
           if (m.playerId === meId) classes.push("chat__row--mine");
@@ -46,6 +61,7 @@ export default function Chat({ messages = [], meId, disabled = false, onSend }) 
 
       <form className="chat__form" onSubmit={handleSubmit}>
         <input
+          ref={inputRef}
           className="input chat__input"
           type="text"
           value={text}

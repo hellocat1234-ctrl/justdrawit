@@ -17,6 +17,7 @@ function emptyGame() {
     ranking: null, // จาก game_end
     guessed: [], // playerId ที่ทายถูกในตานี้ ไว้ขึ้น ✅
     messages: [], // แชท
+    roundKey: 0, // นับขึ้นทุกครั้งที่ขึ้นตาใหม่ — กระดานใช้ค่านี้รู้ว่าต้องล้างจอ (ข้อ 3)
   };
 }
 
@@ -48,8 +49,11 @@ export function useGame() {
       patch({ options: data.options, chooseTime: data.time, summary: null });
 
     // ตาใหม่มาแล้ว ล้างของตาที่แล้วทั้งหมด (ตัวเลือกคำ สรุปตา คำจริง คนที่ทายถูก)
+    // roundKey ต้องบวกจากค่าเดิม (ไม่ใช้ค่าคงที่) เพราะกระดานเทียบค่านี้เพื่อล้างจอ
+    // ถ้าใช้ค่าคงที่ กระดานจะไม่รู้ว่าขึ้นตาใหม่
     const onRoundStart = (data) =>
-      patch({
+      setGame((g) => ({
+        ...g,
         round: data,
         roundNo: data.round,
         totalRounds: data.totalRounds,
@@ -59,7 +63,8 @@ export function useGame() {
         summary: null,
         word: null,
         guessed: [],
-      });
+        roundKey: g.roundKey + 1,
+      }));
 
     const onYourWord = (data) => patch({ word: data.word });
     const onTimer = (data) => patch({ timeLeft: data.timeLeft });
@@ -77,8 +82,15 @@ export function useGame() {
       }));
 
     const onChat = (msg) => setGame((g) => ({ ...g, messages: [...g.messages, msg] }));
+
+    // ทายถูก: เก็บ id ไว้ขึ้น ✅ ที่แถบรายชื่อ และเพิ่มข้อความระบบไว้กล่อง "ในห้อง"
+    // server ไม่ได้ส่งข้อความระบบนี้มา (ส่งมาแค่ id กับชื่อ) จึงประกอบเองฝั่งนี้
     const onCorrectGuess = (data) =>
-      setGame((g) => ({ ...g, guessed: [...g.guessed, data.playerId] }));
+      setGame((g) => ({
+        ...g,
+        guessed: [...g.guessed, data.playerId],
+        messages: [...g.messages, { system: true, text: `${data.name} ทายถูก` }],
+      }));
 
     // ข้อความระบบ "ใครเข้าออก" — server ไม่ได้ส่ง event นี้มา ต้องเทียบรายชื่อเอาเอง
     const onRoomUpdate = (next) => {
