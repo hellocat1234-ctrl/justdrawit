@@ -4,11 +4,21 @@ import { useEffect, useRef } from "react";
  * กล่อง "ในห้อง" — ใต้กระดาน ฝั่งขวา (DESIGN.md หัวข้อหน้าเกม)
  *
  * เก็บเฉพาะ "เรื่องที่เกิดขึ้นในห้อง" ไม่ใช่คำที่คนพิมพ์ทาย (นั่นอยู่กล่องซ้าย)
- *   ใครเข้าห้อง ใครออกจากห้อง   — useGame เทียบรายชื่อผู้เล่นเองแล้วส่งมาเป็น system
- *   ใครทายถูก                   — useGame รับ correct_guess แล้วส่งมาเป็น system
+ * แต่ละข้อความมีชนิด (kind) ที่ useGame ใส่มา → ได้ไอคอนและสีประจำชนิด
+ * ชนิดที่รู้จัก: join · leave · correct · timeout · hint · pen  (ชนิดอื่น/ไม่มี = info)
  *
  * ข้อความระบบล้วน ๆ จึงไม่มีช่องพิมพ์ และอ่านย้อนหลังได้อย่างเดียว
  */
+const KINDS = {
+  join: "🚪",
+  leave: "👋",
+  correct: "✅",
+  timeout: "⏰",
+  hint: "💡",
+  pen: "🖊️",
+  info: "ℹ️",
+};
+
 export default function RoomLog({ messages = [] }) {
   const listRef = useRef(null);
 
@@ -25,11 +35,17 @@ export default function RoomLog({ messages = [] }) {
       <h2 className="panel__title">ในห้อง</h2>
       <div className="chat__list" ref={listRef}>
         {notes.length === 0 && <p className="chat__empty">ยังไม่มีอะไรเกิดขึ้น</p>}
-        {notes.map((m, i) => (
-          <p className="chat__row chat__row--system" key={i}>
-            {m.text}
-          </p>
-        ))}
+        {notes.map((m, i) => {
+          const kind = KINDS[m.kind] ? m.kind : "info";
+          return (
+            <p className={`chat__row chat__row--system note note--${kind}`} key={i}>
+              <span className="note__icon" aria-hidden="true">
+                {KINDS[kind]}
+              </span>
+              <span className="note__text">{m.text}</span>
+            </p>
+          );
+        })}
       </div>
     </section>
   );

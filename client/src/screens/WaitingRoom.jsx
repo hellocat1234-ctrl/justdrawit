@@ -4,6 +4,8 @@ import Avatar from "../components/Avatar";
 import Logo from "../components/Logo";
 import Ribbon from "../components/Ribbon";
 import { MascotNote } from "../components/Mascot";
+import { InfoModal } from "../components/TopIcons";
+import { markRulesSeen, rulesSeen } from "../prefs";
 
 // ค่าที่ server ยอมรับ ตาม events.md (ค่าอื่น server จะเมิน)
 const ROUND_CHOICES = [1, 2, 3, 4, 5];
@@ -12,6 +14,8 @@ const MAX_PLAYERS = 8;
 
 export default function WaitingRoom({ room, me, onLeave }) {
   const [copied, setCopied] = useState(false);
+  // กล่องกติกาโชว์เองครั้งแรกที่เข้าห้อง (จำไว้ในเบราว์เซอร์) ครั้งต่อไปกดดูเองได้จากปุ่ม ℹ️ ในหน้าเกม
+  const [showRules, setShowRules] = useState(() => !rulesSeen());
   const isHost = room.hostId === me?.playerId;
   const canStart = room.players.length >= 2;
 
@@ -143,6 +147,15 @@ export default function WaitingRoom({ room, me, onLeave }) {
           )}
         </div>
       </div>
+
+      {showRules && (
+        <InfoModal
+          onClose={() => {
+            markRulesSeen();
+            setShowRules(false);
+          }}
+        />
+      )}
     </div>
   );
 }

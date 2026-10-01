@@ -2,6 +2,7 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "re
 import { createPainter } from "../canvas/painter";
 import { beginStroke, extendStroke, endStroke, applyFill, clearBoard } from "../canvas/actions";
 import { TOOLS } from "../canvas/palette";
+import { reduceMotion } from "../prefs";
 
 // ─────────────────────────────────────────────────────────────────────────
 // โหมดดีบักชั่วคราว — เปิดด้วย ?debug=1 ต่อท้ายที่อยู่เว็บ
@@ -80,7 +81,7 @@ const Canvas = forwardRef(function Canvas({ canDraw, tool, color, size, onAction
   useEffect(() => {
     const wasOn = wasOnRef.current;
     wasOnRef.current = mascotOn;
-    if (wasOn && !mascotOn && !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+    if (wasOn && !mascotOn && !reduceMotion()) {
       setFading(true);
       const t = setTimeout(() => setFading(false), 500);
       return () => clearTimeout(t);

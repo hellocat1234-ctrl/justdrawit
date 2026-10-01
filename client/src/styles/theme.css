@@ -2112,12 +2112,307 @@ select[class] {
   }
 }
 
-/* ---- ตัวเลือกลดภาพเคลื่อนไหว: ผู้ใช้ตั้งไว้ที่ระบบ (prefers-reduced-motion) ---- */
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation: none !important;
-    transition: none !important;
+/* ============================ รอบตกแต่งที่ 2: เสียงและความรู้สึก ============================ */
+
+/* ---- ไอคอนบนแถบบน: 🔊 ℹ️ ออก (สูง 44px ให้นิ้วแตะบนไอแพดได้ · ไม่ทำให้แถบบนสูงขึ้น เพราะ min-height ของคำใบ้คือ 46px) ---- */
+.top-icons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 8px;
+  border: var(--border);
+  box-shadow: var(--shadow-xs);
+  background: var(--white);
+  color: var(--ink);
+  font-family: var(--font-head);
+  font-weight: 500;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.icon-btn:active {
+  transform: translate(2px, 2px);
+  box-shadow: 0 0 0 var(--ink);
+}
+
+.icon-btn--exit {
+  padding: 0 12px;
+}
+
+.door {
+  display: block;
+  image-rendering: pixelated;
+}
+
+.door--icon {
+  width: 17px;
+  height: 20px;
+}
+
+.door--modal {
+  width: 84px;
+  height: 98px;
+  margin: 0 auto 12px;
+}
+
+/* ---- กล่องกติกา / ยืนยันออก ---- */
+.rules-list {
+  margin: 0 0 14px;
+  padding-left: 22px;
+  text-align: left;
+  font-size: 17px;
+  line-height: 1.5;
+}
+
+.rules-list li + li {
+  margin-top: 6px;
+}
+
+.info-settings {
+  display: grid;
+  gap: 4px;
+  padding-top: 10px;
+  border-top: var(--border);
+  text-align: left;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.check input {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  accent-color: var(--green);
+}
+
+.modal__actions--row {
+  flex-direction: row;
+}
+
+.modal__actions--row .btn {
+  flex: 1;
+}
+
+/* ---- แถบคะแนน: ป้ายสถานะใต้ชื่อ ---- */
+.score-row__main {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.score-row__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+.tag {
+  padding: 0 5px;
+  border: 2px solid var(--ink);
+  font-family: var(--font-head);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: nowrap;
+  color: var(--ink);
+}
+
+.tag--host {
+  background: var(--yellow);
+}
+
+.tag--drawing {
+  background: var(--blue);
+  color: var(--white);
+}
+
+.tag--next {
+  background: var(--tab-idle);
+}
+
+/* ทายถูก: แถวกระพริบเขียวสามครั้ง แล้วนิ่งที่เขียวอ่อนตามเดิม (class นี้ติดตอนทายถูกพอดี จึงเล่นตอนนั้น) */
+.score-row--guessed {
+  animation: row-flash 0.5s ease-in-out 3;
+}
+
+@keyframes row-flash {
+  0%,
+  100% {
+    background: var(--green-soft);
   }
+  50% {
+    background: #5fd68a;
+  }
+}
+
+/* ข้อความใหม่เด้งเข้ามา (ทายถูกเด้งแรงกว่าและนานกว่า) */
+.chat__row {
+  animation: row-pop 0.22s ease-out;
+}
+
+.chat__row--correct {
+  animation-duration: 0.5s;
+  animation-name: row-pop-big;
+}
+
+@keyframes row-pop {
+  0% {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes row-pop-big {
+  0% {
+    transform: scale(0.7);
+    opacity: 0;
+  }
+  55% {
+    transform: scale(1.1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* ---- กล่อง "ในห้อง": ไอคอน + สีตามชนิดข้อความ ---- */
+.note {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0 0 4px;
+  padding: 4px 8px;
+  border-width: 0 0 0 4px;
+  border-style: solid;
+  border-color: var(--blue);
+  background: var(--white);
+  font-size: 14px;
+  font-style: normal;
+  text-align: left;
+  color: var(--ink);
+}
+
+.note__icon {
+  flex: none;
+}
+
+.note__text {
+  min-width: 0;
+}
+
+/* พื้นอ่อนใช้ color-mix (เบราว์เซอร์เก่าที่ไม่รองรับก็ยังได้พื้นขาวกับแถบสีข้างซ้าย อ่านออกครบ) */
+.note--join {
+  border-color: var(--teal);
+  background: color-mix(in srgb, var(--teal) 14%, white);
+}
+
+.note--leave {
+  border-color: var(--muted);
+  background: color-mix(in srgb, var(--muted) 12%, white);
+}
+
+.note--correct {
+  border-color: var(--green);
+  background: var(--green-soft);
+  font-weight: 600;
+}
+
+.note--timeout {
+  border-color: var(--red);
+  background: color-mix(in srgb, var(--red) 14%, white);
+  font-weight: 600;
+}
+
+.note--hint {
+  border-color: var(--yellow);
+  background: color-mix(in srgb, var(--yellow) 25%, white);
+}
+
+.note--pen {
+  border-color: var(--purple);
+  background: color-mix(in srgb, var(--purple) 12%, white);
+}
+
+/* ---- พลุกระดาษ ---- */
+.podium-stage {
+  position: relative;
+}
+
+.confetti-anchor {
+  position: absolute;
+  left: 50%;
+  top: 35%;
+  width: 0;
+  height: 0;
+}
+
+.confetti {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.confetti__piece {
+  position: absolute;
+  opacity: 0;
+  animation-name: confetti-burst;
+  animation-timing-function: cubic-bezier(0.25, 0.7, 0.45, 1);
+  animation-fill-mode: both;
+}
+
+@keyframes confetti-burst {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) rotate(0);
+  }
+  5% {
+    opacity: 1;
+  }
+  35% {
+    opacity: 1;
+    transform: translate(calc(var(--dx) * 0.7), var(--up)) rotate(calc(var(--spin) * 0.4));
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--dx), var(--fall)) rotate(var(--spin));
+  }
+}
+
+/* ---- ตัวเลือกลดภาพเคลื่อนไหว ----
+   ค่าเริ่มต้นตามระบบ (prefers-reduced-motion) แต่ผู้ใช้สลับเองได้ในกล่อง ℹ️
+   JS (prefs.js) ตั้ง <html data-motion="reduce|full"> ให้ ไม่ใช้ @media ตรงๆ
+   เพราะถ้าใช้ จะเปิดภาพเคลื่อนไหวคืนเองไม่ได้ ทั้งที่ผู้ใช้สั่งไว้ */
+:root[data-motion="reduce"] *,
+:root[data-motion="reduce"] *::before,
+:root[data-motion="reduce"] *::after {
+  animation: none !important;
+  transition: none !important;
+}
+
+:root[data-motion="reduce"] .confetti {
+  display: none;
 }

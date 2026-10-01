@@ -1,5 +1,6 @@
 import Modal from "./Modal";
 import Mascot from "./Mascot";
+import Confetti from "./Confetti";
 
 const MEDALS = ["🥇", "🥈", "🥉"];
 
@@ -18,18 +19,22 @@ export default function GameOverModal({ ranking, isHost, onPlayAgain, onLeave })
         จบเกมแล้ว
       </h2>
 
-      <ol className="podium">
-        {podiumOrder.map((p) => {
-          const place = top3.indexOf(p);
-          return (
-            <li className={`podium__item podium__item--${place + 1}`} key={p.playerId}>
-              <span className="podium__medal">{MEDALS[place]}</span>
-              <span className="podium__name">{p.name}</span>
-              <span className="podium__score">{p.score}</span>
-            </li>
-          );
-        })}
-      </ol>
+      {/* พลุพุ่งจากแท่นรางวัล: กล่อง relative ครอบเฉพาะแท่น ให้พลุเริ่มที่แท่นไม่ใช่ที่มุมหน้าต่าง */}
+      <div className="podium-stage">
+        <Confetti />
+        <ol className="podium">
+          {podiumOrder.map((p) => {
+            const place = top3.indexOf(p);
+            return (
+              <li className={`podium__item podium__item--${place + 1}`} key={p.playerId}>
+                <span className="podium__medal">{MEDALS[place]}</span>
+                <span className="podium__name">{p.name}</span>
+                <span className="podium__score">{p.score}</span>
+              </li>
+            );
+          })}
+        </ol>
+      </div>
 
       {rest.length > 0 && (
         <ul className="gains">

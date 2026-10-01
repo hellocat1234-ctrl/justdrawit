@@ -8,6 +8,9 @@ import Modal from "../components/Modal";
 import TimeBar from "../components/TimeBar";
 import Ribbon from "../components/Ribbon";
 import Mascot, { MascotNote } from "../components/Mascot";
+import AnimatedNumber from "../components/AnimatedNumber";
+import { TopIcons, InfoModal, ExitModal } from "../components/TopIcons";
+import { play } from "../sound/sfx";
 import { clearBoard } from "../canvas/actions";
 import { PAINT_COLORS, SIZE_DEFAULT, TOOLS } from "../canvas/palette";
 
@@ -58,6 +61,8 @@ export default function SoloAI({ initialName = "", onBack }) {
   const [restLeft, setRestLeft] = useState(NEXT_DELAY_S);
   const [final, setFinal] = useState(null); // { totalScore, levelReached, rank }
   const [hist, setHist] = useState({ undo: false, redo: false });
+  const [showInfo, setShowInfo] = useState(false);
+  const [showExit, setShowExit] = useState(false);
 
   const [toolChoice, setToolChoice] = useState(TOOLS.PEN);
   const [color, setColor] = useState(PAINT_COLORS[0].hex);
@@ -90,10 +95,12 @@ export default function SoloAI({ initialName = "", onBack }) {
       setThink(false);
       setRoundId((n) => n + 1);
       setPhase("playing");
+      play("roundStart");
     };
     const onGuess = (d) => {
       setThink(false);
       setGuesses((g) => [...g, { text: String(d.guess ?? ""), correct: Boolean(d.correct) }]);
+      if (d.correct) play("aiCorrect"); // AI ทายถูก (ดีใจ เพราะเราวาดรู้เรื่อง)
     };
     const onRoundEnd = (d) => {
       setThink(false);
@@ -108,6 +115,7 @@ export default function SoloAI({ initialName = "", onBack }) {
       setScore(d.totalScore);
       setFinal(d);
       setPhase("over");
+      play("gameOver");
     };
     const onError = (err) => {
       // AI ไม่ว่าง: ด่านเดินต่อ ไม่เสียชีวิต ส่งภาพใหม่ได้ (App โชว์ Toast ให้แล้ว)
@@ -151,6 +159,11 @@ export default function SoloAI({ initialName = "", onBack }) {
     }, 250);
     return () => clearInterval(id);
   }, [phase, round]);
+
+  // 10 วิสุดท้าย ติ๊กทุกวินาที (เปลี่ยนค่า timeLeft ทีละวินาทีอยู่แล้ว ไม่ซ้ำ)
+  useEffect(() => {
+    if (phase === "playing" && timeLeft > 0 && timeLeft <= 10) play("tick", timeLeft <= 3);
+  }, [phase, timeLeft]);
 
   // นับถอยหลังช่วงพัก
   useEffect(() => {
@@ -290,7 +303,9 @@ export default function SoloAI({ initialName = "", onBack }) {
         </div>
         <div className="topbar__who">
           <span className="topbar__label">คะแนน</span>
-          <span className="topbar__name">{score}</span>
+          <span className="topbar__name">
+            <AnimatedNumber value={score} />
+          </span>
         </div>
 
         <div className="topbar__word">
@@ -306,6 +321,8 @@ export default function SoloAI({ initialName = "", onBack }) {
         <div className="topbar__meta">
           <Timer timeLeft={phase === "playing" ? timeLeft : null} />
         </div>
+
+        <TopIcons onInfo={() => setShowInfo(true)} onExit={() => setShowExit(true)} />
       </header>
 
       <main className="game game--solo">
@@ -349,7 +366,7 @@ export default function SoloAI({ initialName = "", onBack }) {
                   {MODE_TEXT[round.aiMode]}
                 </p>
               )}
-              <button type="button" className="link-btn ai-box__leave" onClick={handleLeave}>
+              <button type="button" className="link-btn ai-box__leave" onClick={() => setShowExit(true)}>
                 ออกจากเกม (ไม่บันทึกคะแนน)
               </button>
             </section>
@@ -420,6 +437,15 @@ export default function SoloAI({ initialName = "", onBack }) {
             </button>
           </div>
         </Modal>
+      )}
+
+      {showInfo && <InfoModal onClose={() => setShowInfo(false)} />}
+      {showExit && (
+        <ExitModal
+          note="ออกกลางเกมจะไม่บันทึกคะแนน"
+          onNo={() => setShowExit(false)}
+          onYes={handleLeave}
+        />
       )}
     </div>
   );

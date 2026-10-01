@@ -495,11 +495,23 @@ function startDrawing(room, word) {
   startTimer(room, room.settings.drawTime, () => endRound(room));
 }
 
+// คนที่จะวาดต่อจากตานี้ — ให้ client โชว์ป้าย "วาดคนถัดไป" (client เดาเองไม่ได้ เพราะ turnOrder อยู่ที่ server)
+// หาคนถัดไปในรอบนี้ที่ยังอยู่ในห้อง ถ้าหมดแล้วและยังมีรอบต่อไป = คนแรกของรอบหน้า ไม่มีแล้ว = null (ตานี้คือตาสุดท้าย)
+// เป็นค่า "คาดการณ์" ณ ต้นตา: ถ้ามีคนเข้า/ออกระหว่างตา ตัวจริงอาจเปลี่ยน client จึงเช็คว่ายังอยู่ในห้องก่อนโชว์
+function nextDrawerId(room) {
+  const alive = new Set(room.players.map((p) => p.id));
+  const inRound = room.turnOrder.slice(room.turnIndex).find((id) => alive.has(id));
+  if (inRound) return inRound;
+  if (room.round + 1 > room.settings.rounds) return null;
+  return room.players[0]?.id ?? null;
+}
+
 function roundInfo(room) {
   return {
     round: room.round,
     totalRounds: room.settings.rounds,
     drawerId: room.drawerId,
+    nextDrawerId: nextDrawerId(room),
     // คำใบ้เป็น null จนกว่าจะเปิด (คนวาดกดขอ หรือเวลาเหลือหนึ่งในสาม)
     // คนที่เข้าห้องกลางตาหลังเปิดแล้วจะได้ชุดช่องจริงไปเลย ไม่ใช่ null
     hint: room.hintOpen && room.word ? makeHint(room.word) : null,

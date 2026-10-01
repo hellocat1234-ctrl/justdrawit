@@ -735,6 +735,9 @@ async function main() {
     checkOk("guessedIds ส่งแค่ id ไม่มีคำตอบปนมา",
       rs.guessedIds.every((v) => typeof v === "string"));
     check("ไม่มีคำจริงหลุดมาใน round_start ของคนเข้าทีหลัง", "word" in rs, false);
+    checkOk("nextDrawerId เป็น id ของผู้เล่นในห้อง และไม่ใช่คนวาดตานี้",
+      typeof rs.nextDrawerId === "string" && rs.nextDrawerId !== rs.drawerId &&
+      [E, F, Late].some((x) => x.socket.id === rs.nextDrawerId));
 
     const hist = await Late.wait("canvas_history", null, 3000);
     check("ประวัติที่ได้ เรียงตามลำดับที่วาดจริง",
@@ -860,6 +863,8 @@ async function main() {
     check("คนทายไม่เห็นคำใบ้ตอนเริ่มตา (hint = null)", ars.hint, null);
     check("hintAt = หนึ่งในสามของเวลาเต็ม ปัดลง (30 วิ → 10)", ars.hintAt, 10);
     check("ยังไม่มีคำจริงหลุดมาใน round_start", "word" in ars, false);
+    // nextDrawerId = คนถัดไปในลำดับวาด (ห้อง A: G วาด → ถัดไปคือ H) · เป็นแค่ id ไม่มีคำตอบ
+    check("round_start บอกคนวาดคนถัดไป (nextDrawerId)", ars.nextDrawerId, H.socket.id);
 
     // นับ hint_reveal ของห้อง A ไว้ใช้ตอนท้าย — ต้องได้ครั้งเดียวตลอดตา
     // (คนวาดกดขอไปแล้ว ต่อให้เวลาหมดถึงกำหนด server ก็ต้องไม่เปิดซ้ำ)
@@ -882,6 +887,7 @@ async function main() {
     const brs = await Q.wait("round_start", null, 3000);
     check("ห้องเปิดเอง: ตอนเริ่มตายังไม่มีคำใบ้", brs.hint, null);
     check("ห้องเปิดเอง: hintAt = 10", brs.hintAt, 10);
+    check("ห้องเปิดเอง: nextDrawerId = คนถัดไปจากคนวาด (P วาด → Q)", brs.nextDrawerId, Q.socket.id);
 
     // จำเวลาล่าสุดที่ server ส่งมา ใช้ยืนยันว่าเปิดตอนเหลือ 10 วิจริง ไม่ใช่เปิดมั่ว
     let lastTick = null;

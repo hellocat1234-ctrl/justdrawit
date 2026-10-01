@@ -12,6 +12,8 @@ import Toolbar from "../components/Toolbar";
 import WordChoiceModal from "../components/WordChoiceModal";
 import RoundSummaryModal from "../components/RoundSummaryModal";
 import GameOverModal from "../components/GameOverModal";
+import { TopIcons, InfoModal, ExitModal } from "../components/TopIcons";
+import { play } from "../sound/sfx";
 import { clearBoard } from "../canvas/actions";
 import { PAINT_COLORS, SIZE_DEFAULT, TOOLS } from "../canvas/palette";
 
@@ -75,6 +77,8 @@ export default function Game({
   const [toolChoice, setToolChoice] = useState(TOOLS.PEN);
   const [color, setColor] = useState(PAINT_COLORS[0].hex); // เริ่มที่สีดำ (ตัวแรกในพาเลต)
   const [size, setSize] = useState(SIZE_DEFAULT);
+  const [showInfo, setShowInfo] = useState(false); // กล่องกติกา ℹ️
+  const [showExit, setShowExit] = useState(false); // กล่องยืนยันออก
   const canvasRef = useRef(null); // ใช้เรียกคำสั่งบนกระดาน (รับ action ของคนอื่น · สั่งล้างจอ)
 
   // ค่าที่ "มีผลจริง" ของตานี้ — คิดออกมาจากที่เดียว ไม่ต้องมี effect คอยแก้ state
@@ -83,6 +87,36 @@ export default function Game({
   //   dont_lift_pen → ถังสีหายไป ถ้าเลือกถังสีค้างไว้ก็ถอยไปใช้ปากกา
   const drawColor = colourFix ?? color;
   const tool = noLift && toolChoice === TOOLS.BUCKET ? TOOLS.PEN : toolChoice;
+
+  // ── เสียงเอฟเฟกต์ (ข้อ 1 ของรอบตกแต่งที่ 2) ──
+  // ทุกเสียงขับจากสถานะที่ server ส่งมา ไม่ได้ผูกกับ event ตรงๆ (หน้านี้ไม่ได้ผูก socket เอง)
+  // เริ่มตา: roundKey เพิ่มทุกครั้งที่ได้ round_start
+  useEffect(() => {
+    if (game.round) play("roundStart");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [game.roundKey]);
+
+  // ทายถูก: ดูว่ารายชื่อคนทายถูก "เพิ่ม" ใครบ้าง — ถ้ามีเราอยู่ในนั้นเป็นเสียงของเรา ไม่งั้นเสียงเบาของคนอื่น
+  // เทียบกับรอบเดียวกันเท่านั้น (ตาใหม่/เข้าห้องกลางตา guessed ถูกตั้งใหม่ทั้งชุด ไม่ใช่ "มีคนทายถูกเพิ่ม")
+  const guessSeen = useRef({ key: game.roundKey, n: game.guessed.length });
+  useEffect(() => {
+    const prev = guessSeen.current;
+    if (prev.key === game.roundKey && game.guessed.length > prev.n) {
+      play(game.guessed.slice(prev.n).includes(meId) ? "selfCorrect" : "otherCorrect");
+    }
+    guessSeen.current = { key: game.roundKey, n: game.guessed.length };
+  }, [game.guessed, game.roundKey, meId]);
+
+  // 10 วิสุดท้าย: ติ๊กทุกวินาที (เหลือ ≤3 วิเสียงสูงขึ้น)
+  useEffect(() => {
+    const t = game.timeLeft;
+    if (drawing && t > 0 && t <= 10) play("tick", t <= 3);
+  }, [game.timeLeft, drawing]);
+
+  // จบเกม
+  useEffect(() => {
+    if (game.ranking) play("gameOver");
+  }, [game.ranking]);
 
   // ── ผูกกระดานเข้ากับ useGame ──
   // useGame เป็นคนรับ event การวาดจาก socket แต่มันไม่ถือ ref ของกระดาน (กระดานอยู่ลึกกว่านี้)
@@ -196,13 +230,22 @@ export default function Game({
           </span>
           <Timer timeLeft={drawing ? game.timeLeft : null} />
         </div>
+
+        <TopIcons onInfo={() => setShowInfo(true)} onExit={() => setShowExit(true)} />
       </header>
 
       {/* เรียงตาม DESIGN.md: รายชื่อซ้าย · กระดานกลาง · เครื่องมือขวา
           มือขวาเอื้อมถึงเครื่องมือได้ถนัด (คนส่วนใหญ่ถนัดขวา) และกระดานได้ที่กว้างที่สุด */}
       <main className="game">
         <aside className="game__players">
-          <Scoreboard players={players} drawerId={game.drawerId} guessed={game.guessed} meId={meId} />
+          <Scoreboard
+            players={players}
+            drawerId={game.drawerId}
+            nextDrawerId={game.round?.nextDrawerId ?? null}
+            drawing={drawing}
+            guessed={game.guessed}
+            meId={meId}
+          />
         </aside>
 
         <section className="game__stage">
@@ -275,6 +318,10 @@ export default function Game({
           onLeave={onLeave}
         />
       )}
+
+      {/* กล่องจากแถบบน อยู่ท้ายสุดเพื่อให้ซ้อนทับ Modal อื่นได้ถ้าเปิดซ้อนกัน */}
+      {showInfo && <InfoModal onClose={() => setShowInfo(false)} />}
+      {showExit && <ExitModal onNo={() => setShowExit(false)} onYes={onLeave} />}
     </div>
   );
 }

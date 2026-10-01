@@ -125,7 +125,7 @@ export function useGame() {
       setGame((g) => ({
         ...g,
         penLocked: true,
-        messages: [...g.messages, { system: true, text: "คนวาดยกปากกาแล้ว วาดต่อไม่ได้อีก" }],
+        messages: [...g.messages, { system: true, kind: "pen", text: "คนวาดยกปากกาแล้ว วาดต่อไม่ได้อีก" }],
       }));
 
     // คำใบ้เปิดแล้ว — server ส่งครั้งเดียวต่อตา ไม่ว่าใครเปิด (คนวาดกดขอ หรือเวลาเหลือหนึ่งในสาม)
@@ -136,7 +136,7 @@ export function useGame() {
         hint: data?.hint ?? null,
         messages: [
           ...g.messages,
-          { system: true, text: data?.by === "drawer" ? "คนวาดเปิดคำใบ้แล้ว" : "คำใบ้เปิดแล้ว" },
+          { system: true, kind: "hint", text: data?.by === "drawer" ? "คนวาดเปิดคำใบ้แล้ว" : "คำใบ้เปิดแล้ว" },
         ],
       }));
 
@@ -144,7 +144,18 @@ export function useGame() {
     const onTimer = (data) => patch({ timeLeft: data.timeLeft });
 
     // จบตา: ซ่อนคำใบ้ ทิ้งตัวเลือก เก็บสรุปไว้โชว์เป็น modal
-    const onRoundEnd = (data) => patch({ summary: data, round: null, word: null, options: null, hint: null });
+    // เวลาหมดจริง = เลขนาฬิกาตัวสุดท้ายที่ server ส่งมาเป็น 0 (จบเพราะทุกคนทายถูกจะยังเหลือเวลา)
+    // server ส่ง timer 0 ก่อน round_end เสมอ จึงอ่านจาก state ได้ตรงๆ
+    const onRoundEnd = (data) =>
+      setGame((g) => ({
+        ...g,
+        summary: data,
+        round: null,
+        word: null,
+        options: null,
+        hint: null,
+        messages: g.timeLeft === 0 ? [...g.messages, { system: true, kind: "timeout", text: "หมดเวลา!" }] : g.messages,
+      }));
 
     // จบเกม: เก็บอันดับไว้โชว์ ส่วนประวัติแชทคงไว้ให้อ่านย้อนหลังได้ระหว่างดูอันดับ
     const onGameEnd = (data) =>
@@ -163,7 +174,7 @@ export function useGame() {
       setGame((g) => ({
         ...g,
         guessed: [...g.guessed, data.playerId],
-        messages: [...g.messages, { system: true, text: `${data.name} ทายถูก` }],
+        messages: [...g.messages, { system: true, kind: "correct", text: `${data.name} ทายถูก` }],
       }));
 
     // ข้อความระบบ "ใครเข้าออก" — server ไม่ได้ส่ง event นี้มา ต้องเทียบรายชื่อเอาเอง
@@ -172,10 +183,10 @@ export function useGame() {
       const notes = [];
       if (prev) {
         for (const p of next.players) {
-          if (!prev.has(p.id)) notes.push({ system: true, text: `${p.name} เข้าห้อง` });
+          if (!prev.has(p.id)) notes.push({ system: true, kind: "join", text: `${p.name} เข้าห้อง` });
         }
         for (const p of prev.values()) {
-          if (!next.players.some((x) => x.id === p.id)) notes.push({ system: true, text: `${p.name} ออกจากห้อง` });
+          if (!next.players.some((x) => x.id === p.id)) notes.push({ system: true, kind: "leave", text: `${p.name} ออกจากห้อง` });
         }
       }
       playersRef.current = new Map(next.players.map((p) => [p.id, p]));
