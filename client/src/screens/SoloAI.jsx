@@ -13,6 +13,7 @@ import { TopIcons, InfoModal, ExitModal } from "../components/TopIcons";
 import { play } from "../sound/sfx";
 import { beginStroke, extendStroke, endStroke, clearBoard } from "../canvas/actions";
 import { PAINT_COLORS, SIZE_DEFAULT, TOOLS } from "../canvas/palette";
+import { Icon } from "../components/Icons";
 
 // ส่งภาพให้ AI ดูทุก 5 วินาที (server รับห่างกันได้ไม่ต่ำกว่า 4 วิ)
 const SNAPSHOT_MS = 5000;
@@ -338,7 +339,9 @@ export default function SoloAI({ initialName = "", onBack }) {
         <Logo />
         <Ribbon tone="purple">SOLO VS AI</Ribbon>
         <form className="panel solo-intro" onSubmit={start}>
-          <h2 className="panel__title">🤖 Solo แข่งกับ AI</h2>
+          <h2 className="panel__title">
+            <Icon name="robot" size={28} /> Solo แข่งกับ AI
+          </h2>
           <p className="solo-intro__text">
             คุณวาดตามคำที่ได้ AI ดูภาพแล้วทาย · ทายถูกขึ้นด่านถัดไป ยิ่งผ่านมากยิ่งยาก
             ทายไม่ออกในเวลาเสีย 1 ชีวิต (มี 3 ชีวิต)
@@ -360,7 +363,7 @@ export default function SoloAI({ initialName = "", onBack }) {
             START
           </button>
           <button type="button" className="btn btn--wide" onClick={onBack}>
-            ← กลับหน้าแรก
+            <Icon name="arrowL" size={14} /> กลับหน้าแรก
           </button>
         </form>
       </div>
@@ -368,7 +371,14 @@ export default function SoloAI({ initialName = "", onBack }) {
   }
 
   const tool = toolChoice;
-  const hearts = Array.from({ length: 3 }, (_, i) => (i < lives ? "❤️" : "🖤")).join("");
+  // หัวใจพิกเซล 3 ดวง (เต็ม = ชีวิตที่เหลือ · เทา = ชีวิตที่เสียไป)
+  const hearts = (
+    <span className="hearts">
+      {Array.from({ length: 3 }, (_, i) => (
+        <Icon key={i} name={i < lives ? "heart" : "heartOff"} size={22} />
+      ))}
+    </span>
+  );
   const lastGuess = guesses[guesses.length - 1];
 
   return (
@@ -475,7 +485,7 @@ export default function SoloAI({ initialName = "", onBack }) {
               <div className="ai-box__body">
                 {lastGuess ? (
                   <p className={`ai-box__guess${lastGuess.correct ? " ai-box__guess--ok" : ""}`}>
-                    {lastGuess.correct ? "✅" : "🤔"} {lastGuess.text}
+                    <Icon name={lastGuess.correct ? "check" : "question"} size={24} /> {lastGuess.text}
                   </p>
                 ) : (
                   <p className="ai-box__hint">
@@ -527,8 +537,8 @@ export default function SoloAI({ initialName = "", onBack }) {
           <Mascot mood={result.correct ? "happy" : "shock"} className="mascot--modal" />
           <h2 className="modal__title" id="solo-rest-title">
             {result.kind === "guess"
-              ? result.correct ? "🎉 ทายถูก!" : "⏰ ทายไม่ทัน"
-              : result.correct ? "🎉 AI ทายถูก!" : "💔 AI ทายไม่ออก"}
+              ? result.correct ? "ทายถูก!" : "ทายไม่ทัน"
+              : result.correct ? "AI ทายถูก!" : "AI ทายไม่ออก"}
           </h2>
           <p className="modal__note">{result.kind === "guess" ? "คำตอบของภาพนี้คือ" : "คำที่ให้วาดคือ"}</p>
           <p className="answer">{result.word}</p>
@@ -565,7 +575,13 @@ export default function SoloAI({ initialName = "", onBack }) {
           <p className="solo-final__score">{final.totalScore}</p>
           <p className="modal__note">คะแนนรวม · ถึงด่าน {final.levelReached}</p>
           <p className="solo-result solo-result--ok">
-            {final.rank ? `🏆 อันดับ ${final.rank} ของตลอดกาล` : "บันทึกคะแนนไม่สำเร็จ"}
+            {final.rank ? (
+              <>
+                <Icon name="trophy" size={22} /> อันดับ {final.rank} ของตลอดกาล
+              </>
+            ) : (
+              "บันทึกคะแนนไม่สำเร็จ"
+            )}
           </p>
           <div className="modal__actions">
             <button type="button" className="btn btn--primary" onClick={start}>

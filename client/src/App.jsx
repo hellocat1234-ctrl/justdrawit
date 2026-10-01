@@ -7,16 +7,21 @@ import WaitingRoom from "./screens/WaitingRoom";
 import Game from "./screens/Game";
 import Leaderboard from "./screens/Leaderboard";
 import SoloAI from "./screens/SoloAI";
+import SetUp from "./screens/SetUp";
+import { roomCodeFromUrl } from "./invite";
 import Toast from "./components/Toast";
 
 // App เป็นที่เดียวที่ผูก socket ไว้ หน้าจออื่นรับข้อมูลเป็น props
 // ทำแบบนี้เพราะ socket เป็นของกลาง ถ้าต่างคนต่างผูก จะมี listener ซ้ำและลืมถอดออกง่าย
 export default function App() {
   const [connected, setConnected] = useState(socket.connected);
-  const [screen, setScreen] = useState("lobby"); // lobby | waiting | game | leaderboard | solo
+  const [screen, setScreen] = useState("lobby"); // lobby | setup | waiting | game | leaderboard | solo
   const [room, setRoom] = useState(null); // RoomState ก้อนล่าสุดจาก server
   const [me, setMe] = useState(null); // { playerId, name, avatar } ของเครื่องนี้
-  const [soloName, setSoloName] = useState(""); // ชื่อที่กรอกไว้ในหน้าแรก ส่งต่อให้หน้า Solo
+  // ชื่อ + อวตารที่เลือกในหน้าแรก อยู่ที่นี่เพื่อให้ติดไปหน้า SET UP / Solo ได้ ไม่ต้องกรอกซ้ำ
+  const [profile, setProfile] = useState({ name: "", avatar: 0 });
+  // เปิดจากลิงก์เชิญ ?room=12345 → หน้าแรกเปิดกล่องใส่รหัสให้เอง (อ่านครั้งเดียวตอนเปิดเว็บ)
+  const [inviteCode, setInviteCode] = useState(() => roomCodeFromUrl());
   const [toast, setToast] = useState(null);
   const toastTimer = useRef(null);
 
@@ -75,6 +80,9 @@ export default function App() {
   useEffect(() => () => clearTimeout(toastTimer.current), []);
 
   function handleEntered(info) {
+    // เข้าห้องแล้ว ลบ ?room= ออกจากที่อยู่เว็บ กันรีโหลดแล้วกล่องเด้งซ้ำ
+    if (inviteCode) window.history.replaceState(null, "", window.location.pathname);
+    setInviteCode(null);
     setMe(info);
     setScreen("waiting");
   }
@@ -92,14 +100,26 @@ export default function App() {
       {screen === "lobby" && (
         <Lobby
           connected={connected}
+          profile={profile}
+          onProfile={setProfile}
+          inviteCode={inviteCode}
           onEntered={handleEntered}
           // หน้า Lobby ส่ง "รหัส error" มา ที่นี่แปลงเป็นข้อความไทยก่อนโชว์
           onError={(code) => showToast(errorText(code))}
+          onOpenSetup={() => setScreen("setup")}
           onOpenLeaderboard={() => setScreen("leaderboard")}
-          onOpenSolo={(name) => {
-            setSoloName(name);
-            setScreen("solo");
-          }}
+          onOpenSolo={() => setScreen("solo")}
+        />
+      )}
+
+      {/* SET UP: เลือกโหมด/รอบ/เวลา แล้วสร้างห้อง */}
+      {screen === "setup" && (
+        <SetUp
+          connected={connected}
+          profile={profile}
+          onBack={() => setScreen("lobby")}
+          onEntered={handleEntered}
+          onError={(code) => showToast(errorText(code))}
         />
       )}
 
@@ -107,7 +127,7 @@ export default function App() {
       {screen === "leaderboard" && <Leaderboard onBack={() => setScreen("lobby")} />}
 
       {/* Solo ผูก socket event ของตัวเองในหน้านั้น (ไม่เกี่ยวกับห้อง) */}
-      {screen === "solo" && <SoloAI initialName={soloName} onBack={() => setScreen("lobby")} />}
+      {screen === "solo" && <SoloAI initialName={profile.name} onBack={() => setScreen("lobby")} />}
 
       {/* room ยังมาไม่ถึงก็มีให้เห็นว่ากำลังทำอะไรอยู่ ไม่ใช่จอเปล่า */}
       {screen === "waiting" &&

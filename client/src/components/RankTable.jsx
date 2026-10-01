@@ -1,8 +1,9 @@
 // ตารางอันดับ ใช้ทั้งหน้าแรก (compact, 10 อันดับ) และหน้า Leaderboard (20 อันดับ)
 // รับ { status, top, retry } จาก useLeaderboard แล้วจัดการทั้งสามสถานะ: โหลด · error · ว่าง
 import YouTag from "./YouTag";
+import { Icon } from "./Icons";
 
-const MEDALS = { 1: "🥇", 2: "🥈", 3: "🥉" };
+const MEDALS = { 1: "medal1", 2: "medal2", 3: "medal3" };
 
 export default function RankTable({ board, limit = 20, compact = false, emptyText, meName = "" }) {
   const rows = board.top.slice(0, limit);
@@ -22,7 +23,9 @@ export default function RankTable({ board, limit = 20, compact = false, emptyTex
     if (board.status === "loading") return <p className="board-empty">กำลังโหลด...</p>;
     return (
       <div className="board-empty">
-        <p className="board-empty__icon">🤖</p>
+        <p className="board-empty__icon">
+          <Icon name="robot" size={44} />
+        </p>
         <p>{emptyText}</p>
         <p className="muted">ลองเล่นโหมด Solo แข่งกับ AI แล้วมาเป็นคนแรกบนกระดานนี้กัน!</p>
       </div>
@@ -50,7 +53,7 @@ export default function RankTable({ board, limit = 20, compact = false, emptyTex
             key={row.rank}
             className={`${row.rank <= 3 ? `rank-row rank-row--${row.rank}` : "rank-row"}${meName && row.name === meName ? " rank-row--me" : ""}`}
           >
-            <td className="rank-row__rank">{MEDALS[row.rank] ?? row.rank}</td>
+            <td className="rank-row__rank">{MEDALS[row.rank] ? <Icon name={MEDALS[row.rank]} size={compact ? 20 : 26} label={`อันดับ ${row.rank}`} /> : row.rank}</td>
             {/* ชื่อแสดงผ่าน {} ของ React = ข้อความธรรมดาเสมอ
                 ชื่อแบบ <b>x</b> จะขึ้นเป็นตัวอักษรตามนั้น ไม่ถูกตีความเป็น HTML
                 (ห้ามเปลี่ยนไปใช้ dangerouslySetInnerHTML ที่นี่เด็ดขาด) */}

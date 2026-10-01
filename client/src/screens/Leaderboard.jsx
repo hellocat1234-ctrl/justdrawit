@@ -3,6 +3,7 @@ import Logo from "../components/Logo";
 import Ribbon from "../components/Ribbon";
 import RankTable from "../components/RankTable";
 import { monthKey, useLeaderboard } from "../hooks/useLeaderboard";
+import { Icon } from "../components/Icons";
 
 // หน้า Leaderboard เต็ม (ข้อ 6) — 20 อันดับ เลือกย้อนหลังได้ 12 เดือน + ตลอดกาล
 // หน้าแรกมีกล่องย่อ (Top 10) อยู่แล้ว หน้านี้เปิดจากลิงก์ "ดูทั้งหมด" ใต้กล่องนั้น
@@ -33,7 +34,7 @@ export default function Leaderboard({ onBack }) {
 
       <section className="panel board-panel">
         <div className="board-panel__head">
-          <h2 className="panel__title board-panel__title">🏆 Leaderboard</h2>
+          <h2 className="panel__title board-panel__title"><Icon name="trophy" size={28} /> Leaderboard</h2>
           <div className="board-panel__picker">
             <label className="field__label board-panel__label" htmlFor="lb-month">
               MONTH
@@ -59,7 +60,7 @@ export default function Leaderboard({ onBack }) {
         <RankTable board={board} limit={20} emptyText={`ยังไม่มีใครติดอันดับ${periodText}`} />
 
         <button type="button" className="btn btn--wide board-panel__back" onClick={onBack}>
-          ← กลับหน้าแรก
+          <Icon name="arrowL" size={14} /> กลับหน้าแรก
         </button>
       </section>
     </div>

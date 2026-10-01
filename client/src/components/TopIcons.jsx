@@ -2,6 +2,8 @@ import { useEffect, useRef } from "react";
 import Modal from "./Modal";
 import TeamRules from "./TeamRules";
 import { useReduceMotion, useSoundMuted } from "../hooks/usePrefs";
+import { Icon } from "./Icons";
+import { copyText, inviteUrl } from "../invite";
 
 // รูปประตูพิกเซลของเราเอง (วาดจากสี่เหลี่ยมล้วน เหมือนมาสคอต) ใช้ในกล่องยืนยันออก
 // ตารางกว้าง 12 สูง 14 · crispEdges ให้ขอบคม ไม่เบลอเมื่อขยาย
@@ -107,9 +109,15 @@ export function ExitModal({ onYes, onNo, note }) {
   );
 }
 
-// ── ไอคอนสามปุ่มบนแถบบน: 🔊 ℹ️ ออก (สูง ≥44px ให้นิ้วแตะบนไอแพดได้) ──
-export function TopIcons({ onInfo, onExit }) {
+// ── ไอคอนบนแถบบน: เสียง · แชร์ลิงก์ (เฉพาะในห้อง) · ข้อมูล · ออก (สูง ≥44px ให้นิ้วแตะบนไอแพดได้) ──
+export function TopIcons({ onInfo, onExit, shareCode = null, onToast }) {
   const [muted, setMuted] = useSoundMuted();
+
+  // ลิงก์เชิญ: คัดลอก URL ที่มี ?room=รหัส ให้เพื่อนกดแล้วเข้าห้องได้เลย
+  async function share() {
+    const ok = await copyText(inviteUrl(shareCode));
+    onToast?.(ok ? "คัดลอกลิงก์เชิญแล้ว" : `คัดลอกไม่ได้ ส่งรหัสห้อง ${shareCode} ให้เพื่อนแทน`);
+  }
   return (
     <div className="top-icons">
       <button
@@ -120,10 +128,15 @@ export function TopIcons({ onInfo, onExit }) {
         aria-label={muted ? "เปิดเสียง" : "ปิดเสียง"}
         title={muted ? "เปิดเสียง" : "ปิดเสียง"}
       >
-        {muted ? "🔇" : "🔊"}
+        <Icon name={muted ? "mute" : "sound"} size={26} />
       </button>
+      {shareCode && (
+        <button type="button" className="icon-btn" onClick={share} aria-label="คัดลอกลิงก์เชิญ" title="คัดลอกลิงก์เชิญ">
+          <Icon name="share" size={24} />
+        </button>
+      )}
       <button type="button" className="icon-btn" onClick={onInfo} aria-label="กติกา" title="กติกา">
-        ℹ️
+        <Icon name="info" size={26} />
       </button>
       <button type="button" className="icon-btn icon-btn--exit" onClick={onExit} title="ออกจากเกม">
         <DoorArt className="door--icon" />

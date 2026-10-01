@@ -184,31 +184,10 @@ input {
 
 /* ============================ แท็บ ============================ */
 
-.tabs {
-  display: flex;
-  gap: 6px;
-  margin-bottom: 20px;
-}
 
-.tab {
-  flex: 1;
-  min-height: 44px;
-  padding: 10px 12px;
-  border: var(--border);
-  background: var(--tab-idle);
-  color: var(--ink);
-  font-family: var(--font-pixel);
-  font-size: 12px;
-  letter-spacing: 0.5px;
-  cursor: pointer;
-}
 
 /* แท็บที่เลือก พื้นเดียวกับแผงและขอบล่างหายไป เพื่อให้ดูต่อเป็นแผงเดียวกัน
    (DESIGN.md เขียนว่าพื้นขาว แต่แผงเป็นครีม ถ้าใช้ขาวจะดูเหมือนแปะทับ ไม่ต่อกัน) */
-.tab--active {
-  background: var(--cream);
-  border-bottom-color: transparent;
-}
 
 /* ============================ ช่องกรอก ============================ */
 
@@ -244,32 +223,10 @@ input {
 
 /* ============================ อวตาร ============================ */
 
-.avatars {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-bottom: 20px;
-}
 
 /* ปุ่มเลือกอวตาร (มีแต่ในหน้า Lobby) */
-.avatar {
-  width: 54px;
-  height: 54px;
-  border: var(--border);
-  border-radius: 50%; /* อวตารเป็นข้อยกเว้นเดียวที่ DESIGN.md ให้โค้งได้ */
-  background: var(--white);
-  font-size: 27px;
-  line-height: 1;
-  cursor: pointer;
-  display: grid;
-  place-items: center;
-}
 
 /* ตัวที่เลือกมีวงแหวนสีฟ้าหนา */
-.avatar--selected {
-  outline: 4px solid var(--blue);
-  outline-offset: 2px;
-}
 
 /* อวตารแบบแสดงเฉยๆ ใช้ในห้องรอและแถบคะแนน */
 .avatar-chip {
@@ -321,75 +278,15 @@ input {
 /* จอคอม: ฟอร์ม + วิธีเล่นซ้าย · Top 10 ขวา (สูงยาวสองแถว)
    ใช้ grid-template-areas เพราะจอมือถือต้องสลับลำดับเป็น ฟอร์ม → Top 10 → วิธีเล่น
    ถ้าใช้ HTML เรียงตายตัว จะได้ลำดับที่ถูกแค่จอเดียว */
-.lobby {
-  width: 100%;
-  max-width: 920px;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  grid-template-areas:
-    "form board"
-    "rules board";
-  gap: 20px 24px;
-  align-items: start;
-}
 
-.lobby__form {
-  grid-area: form;
-}
 
 /* คอลัมน์ขวา: Top 10 + ปุ่ม Solo ใต้กล่อง (grid-area ตัวเดิมของกล่อง Top 10) */
-.lobby__right {
-  grid-area: board;
-  display: grid;
-  grid-template-rows: 1fr auto; /* กล่อง Top 10 ยืดให้ขอบล่างของสองฝั่งเสมอกัน */
-  gap: 20px;
-  min-width: 0;
-  align-self: stretch;
-}
 
-.lobby__rules {
-  grid-area: rules;
-  padding: 10px 20px 12px;
-}
 
-.lobby__rules .panel__title {
-  margin-bottom: 6px;
-  font-size: 18px;
-}
 
 /* ป้าย Mini Challenge ในกล่องย่อ บางลงกว่าเดิม (ที่อื่นไม่กระทบ เพราะขึ้นต้นด้วย .lobby__rules) */
-.lobby__rules .rules-tip {
-  margin-bottom: 0;
-  padding: 8px 12px;
-}
 
 /* จอเล็กเรียงบนล่าง ฟอร์มก่อน (ของที่ต้องใช้) Leaderboard ตามมา */
-@media (max-width: 760px) {
-  .lobby {
-    grid-template-columns: 1fr;
-    grid-template-areas:
-      "form"
-      "board"
-      "rules";
-  }
-}
-
-.rules-short {
-  margin: 0;
-  font-size: 16px;
-  line-height: 1.5;
-}
-
-.rules-tip {
-  margin-top: 10px;
-  padding: 12px;
-  border: var(--border);
-  background: var(--purple);
-  color: var(--white);
-  font-size: 15px;
-  line-height: 1.5;
-}
-
 .hint-text {
   margin: 0;
   font-size: 15px;
@@ -1821,56 +1718,13 @@ select[class] {
 /* ============================ Solo แข่งกับ AI (ข้อ 7) ============================ */
 
 /* ปุ่มเข้า Solo ใต้กล่อง Top 10 ของหน้าแรก — ใหญ่ สีชมพูเด่นกว่าปุ่มอื่น (ปุ่มหลักสีเขียวคือ START) */
-.solo-cta {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  width: 100%;
-  min-height: 76px;
-  padding: 10px 18px;
-  border: var(--border-thick);
-  box-shadow: var(--shadow);
-  background: var(--pink);
-  color: var(--white);
-  text-align: left;
-  cursor: pointer;
-}
 
-.solo-cta:hover:not(:disabled) {
-  filter: brightness(1.06);
-}
 
-.solo-cta:active:not(:disabled) {
-  transform: translate(6px, 6px);
-  box-shadow: none;
-}
 
-.solo-cta:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
 
-.solo-cta__icon {
-  font-size: 40px;
-  line-height: 1;
-}
 
-.solo-cta__text {
-  display: grid;
-  gap: 2px;
-}
 
-.solo-cta__title {
-  font-family: var(--font-pixel);
-  font-size: 24px;
-  letter-spacing: 1px;
-  text-shadow: 2px 2px 0 var(--ink);
-}
 
-.solo-cta__sub {
-  font-family: var(--font-head);
-  font-size: 15px;
-}
 
 /* หน้ากรอกชื่อก่อนเริ่ม */
 .solo-intro {
@@ -2751,84 +2605,16 @@ select[class] {
 }
 
 /* หน้าแรก: การ์ดเลือกโหมด */
-.mode-cards {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 10px;
-}
 
-.mode-card {
-  display: grid;
-  gap: 2px;
-  justify-items: start;
-  align-content: start;
-  padding: 8px 10px;
-  border: var(--border);
-  background: var(--tab-idle);
-  color: var(--ink);
-  font-family: var(--font-body);
-  text-align: left;
-  cursor: pointer;
-  min-height: 44px;
-}
 
-.mode-card--active {
-  background: var(--white);
-  border: 4px solid var(--blue);
-  box-shadow: var(--shadow-xs);
-  padding: 7px 9px;
-}
 
-.mode-card__icon {
-  font-size: 22px;
-  line-height: 1;
-}
 
-.mode-card__title {
-  font-family: var(--font-head);
-  font-weight: 600;
-  font-size: 16px;
-}
 
-.mode-card__desc {
-  font-size: 13px;
-  line-height: 1.3;
-  color: var(--muted);
-}
 
-.lobby__opts {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 8px 12px;
-}
 
 /* หน้าแรกสูงอยู่แล้ว: รอบกับเวลาวางข้างกัน ปุ่มหดแนวนอนได้ (ความสูงยัง 44px ตามกฎ) */
-.lobby__opts .segmented {
-  flex-wrap: nowrap;
-  gap: 4px;
-}
 
-.lobby__opts .seg {
-  flex: 1;
-  min-width: 0;
-  padding: 8px 0;
-}
 
-.lobby__opt {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-}
-
-@media (max-width: 480px) {
-  .lobby__opts {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .mode-cards {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
 
 /* กติกาโหมดทีม + หัวข้อย่อยในกล่อง ℹ️ */
 .modal__subtitle {
@@ -2885,4 +2671,410 @@ select[class] {
 
 .team-me-banner--B {
   background: var(--team-b);
+}
+
+/* ==========================================================================
+   รอบ 3A — ไอคอนพิกเซล · หน้าแรกแบบใหม่ · หน้า SET UP
+   ไอคอนทั้งหมดอยู่ที่ components/Icons.jsx (SVG พิกเซลของเราเอง ไม่มีอีโมจิ)
+   ========================================================================== */
+
+.pix {
+  display: inline-block;
+  vertical-align: middle;
+  flex: none;
+  image-rendering: pixelated;
+}
+
+/* ไอคอนในปุ่มเครื่องมือ / ปุ่มแถบบน อยู่กลางปุ่มเสมอ */
+.tool .pix,
+.icon-btn .pix {
+  display: block;
+  margin: 0 auto;
+}
+
+.note__icon .pix,
+.tag .pix,
+.score-row__icons .pix {
+  display: block;
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.hearts {
+  display: inline-flex;
+  gap: 4px;
+  vertical-align: middle;
+}
+
+.challenge .pix,
+.hint-btn .pix {
+  vertical-align: -5px;
+}
+
+.board-empty__icon {
+  display: flex;
+  justify-content: center;
+}
+
+.rank-row__rank .pix {
+  display: block;
+  margin: 0 auto;
+}
+
+/* อวตารแบบแสดงเฉยๆ ใส่รูปพิกเซลแล้ว (เดิมเป็นตัวอักษรอีโมจิ) */
+.avatar-chip .pix {
+  display: block;
+}
+
+/* ---- ปุ่มใหญ่ (หน้าแรก / SET UP) ---- */
+.big-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 58px;
+  padding: 8px 18px;
+  border: var(--border-thick);
+  box-shadow: var(--shadow-sm);
+  color: var(--white);
+  font-family: var(--font-head);
+  font-weight: 600;
+  font-size: 22px;
+  line-height: 1.1;
+  cursor: pointer;
+  text-shadow: 2px 2px 0 var(--ink);
+}
+
+.big-btn small {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  text-shadow: none;
+}
+
+.big-btn:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.big-btn:active:not(:disabled) {
+  transform: translate(4px, 4px);
+  box-shadow: 0 0 0 var(--ink);
+}
+
+.big-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.big-btn--green { background: var(--green); }
+.big-btn--blue { background: var(--blue); }
+.big-btn--pink { background: var(--pink); }
+
+/* ---- หน้าแรก ---- */
+.screen--home,
+.screen--setup {
+  gap: 16px;
+  padding: 18px 16px;
+}
+
+.lobby {
+  width: 100%;
+  max-width: 940px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 24px;
+  align-items: stretch;
+}
+
+.home {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 16px;
+}
+
+.home .ribbon {
+  align-self: center;
+  margin: 0 0 4px;
+}
+
+.home__buttons {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.avatar-picker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin: 2px 0 6px;
+}
+
+.avatar-picker__stage {
+  display: grid;
+  place-items: center;
+  width: 148px;
+  height: 148px;
+  border: var(--border-thick);
+  border-radius: 50%; /* อวตารเป็นข้อยกเว้นเดียวที่ DESIGN.md ให้โค้งได้ */
+  background: var(--white);
+  box-shadow: var(--shadow-sm);
+}
+
+.avatar-picker__arrow {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 56px;
+  border: var(--border);
+  background: var(--cream);
+  box-shadow: var(--shadow-xs);
+  cursor: pointer;
+}
+
+.avatar-picker__arrow:active {
+  transform: translate(2px, 2px);
+  box-shadow: none;
+}
+
+.home .field__label {
+  margin-bottom: 0;
+}
+
+.home .input {
+  margin-bottom: 0;
+}
+
+.lobby__board {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ---- หน้า SET UP ---- */
+.screen--setup {
+  position: relative;
+  padding-top: 24px;
+}
+
+.back-btn {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 14px;
+  border: var(--border);
+  background: var(--cream);
+  box-shadow: var(--shadow-xs);
+  font-family: var(--font-head);
+  font-weight: 600;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.back-btn:active {
+  transform: translate(2px, 2px);
+  box-shadow: none;
+}
+
+.screen--setup .ribbon {
+  margin-top: 0;
+}
+
+.setup {
+  width: 100%;
+  max-width: 940px;
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 22px;
+  align-items: stretch;
+}
+
+.setup__opts {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.setup__opts .panel__title {
+  margin-bottom: 0;
+}
+
+.setup__opt {
+  display: grid;
+  gap: 6px;
+}
+
+.setup__who {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: auto 0 0;
+  padding-top: 10px;
+  border-top: 3px dashed var(--ink);
+  font-family: var(--font-head);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.mode-cards {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 18px;
+}
+
+.mode-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  padding: 14px;
+  border: var(--border-thick);
+  background: var(--cream);
+  box-shadow: var(--shadow-sm);
+  color: var(--ink);
+  font-family: var(--font-body);
+  text-align: left;
+  cursor: pointer;
+  opacity: 0.8;
+}
+
+.mode-card--active {
+  opacity: 1;
+  background: var(--white);
+  border-color: var(--blue);
+  box-shadow: 6px 6px 0 var(--blue);
+}
+
+.mode-card__art {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 190px;
+  border: var(--border);
+  background: var(--tab-idle);
+}
+
+.mode-card__art--classic {
+  background: var(--yellow);
+}
+
+.mode-card__frame {
+  display: grid;
+  place-items: center;
+  padding: 8px;
+  border: var(--border);
+  background: var(--white);
+}
+
+.mode-card__side {
+  display: grid;
+  grid-template-columns: repeat(2, auto);
+  gap: 4px;
+  padding: 8px;
+  border: var(--border);
+}
+
+.mode-card__side--A { background: var(--team-a); }
+.mode-card__side--B { background: var(--team-b); }
+
+.mode-card__vs {
+  font-family: var(--font-pixel);
+  font-size: 20px;
+  color: var(--white);
+  text-shadow: 2px 2px 0 var(--ink);
+}
+
+.mode-card__art--team {
+  background: var(--purple);
+  gap: 6px;
+}
+
+.mode-card__title {
+  font-family: var(--font-head);
+  font-weight: 600;
+  font-size: 20px;
+}
+
+.mode-card__desc {
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.setup__create {
+  width: 100%;
+  max-width: 940px;
+  min-height: 64px;
+  font-size: 24px;
+}
+
+.btn--invite {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+/* ---- จอเตี้ย (โน้ตบุ๊ก 1366×768) ให้หน้าแรกกับ SET UP ไม่ต้องเลื่อน ---- */
+@media (max-height: 820px) {
+  .screen--home .logo {
+    font-size: 38px;
+  }
+
+  .avatar-picker__stage {
+    width: 124px;
+    height: 124px;
+  }
+
+  .avatar-picker__stage .pix {
+    width: 96px;
+    height: 96px;
+  }
+
+  .big-btn {
+    min-height: 52px;
+  }
+
+  .mode-card__art {
+    min-height: 150px;
+  }
+
+  .screen--setup {
+    gap: 12px;
+  }
+}
+
+/* ไอแพดแนวตั้งลงไป: SET UP เรียงบนล่าง (ตั้งค่า → การ์ดโหมด) หน้าแรกเรียงบนล่างที่ ≤760px */
+@media (max-width: 900px) {
+  .setup {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .screen--setup {
+    padding-top: 70px;
+  }
+}
+
+@media (max-width: 760px) {
+  .lobby {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 560px) {
+  .mode-cards {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

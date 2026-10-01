@@ -8,6 +8,8 @@ import { InfoModal } from "../components/TopIcons";
 import YouTag from "../components/YouTag";
 import TeamRules from "../components/TeamRules";
 import { markRulesSeen, rulesSeen } from "../prefs";
+import { Icon } from "../components/Icons";
+import { copyText, inviteUrl } from "../invite";
 
 // ค่าที่ server ยอมรับ ตาม events.md (ค่าอื่น server จะเมิน)
 const ROUND_CHOICES = [1, 2, 3, 4, 5];
@@ -18,6 +20,7 @@ const TEAM_MIN = 2; // โหมดทีมต้องมีทีมละอ
 
 export default function WaitingRoom({ room, me, onLeave }) {
   const [copied, setCopied] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
   // กล่องกติกาโชว์เองครั้งแรกที่เข้าห้อง (จำไว้ในเบราว์เซอร์) ครั้งต่อไปกดดูเองได้จากปุ่ม ℹ️ ในหน้าเกม
   const [showRules, setShowRules] = useState(() => !rulesSeen());
   const isHost = room.hostId === me?.playerId;
@@ -26,6 +29,14 @@ export default function WaitingRoom({ room, me, onLeave }) {
   const teamsReady = TEAMS.every((t) => teamSize(t) >= TEAM_MIN);
   const canStart = teamMode ? teamsReady : room.players.length >= 2;
   const myTeam = room.players.find((p) => p.id === me?.playerId)?.team ?? null;
+
+  // ลิงก์เชิญ: เพื่อนเปิดแล้วหน้าแรกเติมรหัสห้องให้เอง
+  async function copyLink() {
+    if (await copyText(inviteUrl(room.code))) {
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 1500);
+    }
+  }
 
   function copyCode() {
     navigator.clipboard?.writeText(room.code).then(
@@ -58,7 +69,7 @@ export default function WaitingRoom({ room, me, onLeave }) {
           {/* ใช้ hostId เป็นหลัก เพราะ server เป็นคนตัดสินว่าใครเป็นหัวห้อง */}
           {player.id === room.hostId && (
             <span title="หัวห้อง" aria-label="หัวห้อง">
-              👑
+              <Icon name="crown" size={22} />
             </span>
           )}
         </span>
@@ -84,6 +95,9 @@ export default function WaitingRoom({ room, me, onLeave }) {
           <p className="code-hint">
             {copied ? "คัดลอกรหัสห้องแล้ว!" : "กดรหัสเพื่อคัดลอก แล้วส่งให้เพื่อน"}
           </p>
+          <button type="button" className="btn btn--invite" onClick={copyLink}>
+            <Icon name="share" size={20} /> {linkCopied ? "คัดลอกลิงก์แล้ว!" : "คัดลอกลิงก์เชิญ"}
+          </button>
         </div>
 
         <div className="panel">

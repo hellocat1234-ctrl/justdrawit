@@ -1,141 +1,50 @@
 import { useState } from "react";
-import { socket } from "../socket";
-import { AVATARS } from "../avatars";
 import Logo from "../components/Logo";
 import Ribbon from "../components/Ribbon";
 import RankTable from "../components/RankTable";
+import AvatarPicker from "../components/AvatarPicker";
+import JoinModal from "../components/JoinModal";
+import { Icon } from "../components/Icons";
+import { useEnterRoom } from "../hooks/useEnterRoom";
 import { monthKey, useLeaderboard } from "../hooks/useLeaderboard";
 
-// หน้าแรก: แท็บ CREATE / JOIN · เลือกอวตาร · ใส่ชื่อ · (แท็บ JOIN มีช่องรหัสห้อง)
-// ขวาเป็นกล่อง Top 10 (เดือนนี้/ตลอดกาล) · วิธีเล่นแบบย่ออยู่ใต้ฟอร์ม
-// ฝั่งนี้แค่ช่วยให้ใช้ง่าย ของจริง server เป็นคนตรวจซ้ำเสมอ (server-authoritative)
-export default function Lobby({ connected, onEntered, onError, onOpenLeaderboard, onOpenSolo }) {
-  const [tab, setTab] = useState("create"); // create | join
-  const [name, setName] = useState("");
-  const [code, setCode] = useState("");
-  const [avatar, setAvatar] = useState(0);
-  const [busy, setBusy] = useState(false);
-  // ค่าที่เลือกตอนสร้างห้อง (server เช็คซ้ำ ค่าไม่ถูกจะใช้ค่าเริ่มต้น)
-  const [mode, setMode] = useState("classic"); // classic | team
-  const [rounds, setRounds] = useState(3);
-  const [drawTime, setDrawTime] = useState(60);
+// หน้าแรก (หน้าเดียว ไม่รก)
+// ซ้าย: ริบบิ้น PLAY · อวตารใหญ่ + ลูกศร · ชื่อ · ปุ่มใหญ่ 3 ปุ่ม (สร้างห้อง / เข้าห้อง / Solo)
+// ขวา: Top 10 (เดือนนี้/ตลอดกาล)
+// ชื่อกับอวตารอยู่ที่ App (profile) เพื่อให้ติดไปหน้า SET UP ได้ ฝั่งนี้แค่ช่วยให้ใช้ง่าย server ตรวจซ้ำเสมอ
+export default function Lobby({
+  connected,
+  profile,
+  onProfile,
+  inviteCode,
+  onEntered,
+  onError,
+  onOpenSetup,
+  onOpenLeaderboard,
+  onOpenSolo,
+}) {
+  // เปิดจากลิงก์เชิญ (?room=12345) → กล่องใส่รหัสขึ้นเองพร้อมรหัสที่เติมไว้แล้ว
+  const [joining, setJoining] = useState(Boolean(inviteCode));
+  const { busy, enter } = useEnterRoom({ connected, onEntered, onError });
   // กล่อง Top 10 — Lobby ถูกสร้างใหม่ทุกครั้งที่กลับมาหน้าแรก จึงโหลดคะแนนใหม่ทุกครั้งเอง
   const [period, setPeriod] = useState("month"); // month | all
   const board = useLeaderboard(period === "month" ? monthKey() : "");
 
-  function submit(event) {
-    event.preventDefault();
-    if (busy || !connected) return;
-    setBusy(true);
+  const name = profile.name;
 
-    // กันตอบซ้ำ: ถ้า server ไม่ตอบใน 6 วิ (เช่น ลืมเปิด server) ให้ปลดล็อกปุ่มแล้วบอกผู้ใช้
-    let answered = false;
-    const finish = (fn) => {
-      if (answered) return;
-      answered = true;
-      setBusy(false);
-      fn();
-    };
-
-    const isCreate = tab === "create";
-    const payload = isCreate ? { name, avatar, mode, rounds, drawTime } : { code, name, avatar };
-
-    socket.timeout(6000).emit(isCreate ? "create_room" : "join_room", payload, (err, res) => {
-      if (err) return finish(() => onError("CONNECT_FAILED"));
-      if (!res?.ok) return finish(() => onError(res?.error));
-      // join_room ไม่ได้ส่ง code กลับมา เราใช้รหัสที่ผู้ใช้พิมพ์เอง
-      finish(() => onEntered({ playerId: res.playerId, code: res.code ?? code, name, avatar }));
-    });
+  function join(code) {
+    enter("join_room", { code, name, avatar: profile.avatar }, { name, avatar: profile.avatar });
   }
 
   return (
-    <div className="screen">
+    <div className="screen screen--home">
       <Logo />
-      <Ribbon tone="red">PLAY</Ribbon>
 
       <div className="lobby">
-        <form className="panel lobby__form" onSubmit={submit}>
-          <div className="tabs">
-            <button
-              type="button"
-              className={tab === "create" ? "tab tab--active" : "tab"}
-              onClick={() => setTab("create")}
-            >
-              CREATE GAME
-            </button>
-            <button
-              type="button"
-              className={tab === "join" ? "tab tab--active" : "tab"}
-              onClick={() => setTab("join")}
-            >
-              JOIN GAME
-            </button>
-          </div>
+        <section className="panel home" aria-label="เริ่มเล่น">
+          <Ribbon tone="red">PLAY</Ribbon>
 
-          {/* เลือกโหมดก่อนกด START (เฉพาะตอนสร้างห้อง) */}
-          {tab === "create" && (
-            <>
-              <span className="field__label" id="mode-label">
-                CHOOSE MODE
-              </span>
-              <div className="mode-cards" role="radiogroup" aria-labelledby="mode-label">
-                {[
-                  ["classic", "🎨", "แข่งเดี่ยว", "ทุกคนแข่งกันเอง ผลัดกันวาด"],
-                  ["team", "👥", "ทีม A vs B", "แบ่งสองทีม วาดคำเดียวกันพร้อมกัน ทีมไหนทายถูกก่อนได้โบนัส (ต้องมี 4 คนขึ้นไป)"],
-                ].map(([m, icon, title, desc]) => (
-                  <button
-                    key={m}
-                    type="button"
-                    role="radio"
-                    aria-checked={mode === m}
-                    className={mode === m ? "mode-card mode-card--active" : "mode-card"}
-                    onClick={() => setMode(m)}
-                  >
-                    <span className="mode-card__icon" aria-hidden="true">
-                      {icon}
-                    </span>
-                    <span className="mode-card__title">{title}</span>
-                    <span className="mode-card__desc">{desc}</span>
-                  </button>
-                ))}
-              </div>
-
-              <div className="lobby__opts">
-                <div className="lobby__opt">
-                  <span className="field__label">จำนวนรอบ</span>
-                  <div className="segmented" role="group" aria-label="จำนวนรอบ">
-                    {[1, 2, 3, 4, 5].map((n) => (
-                      <button
-                        key={n}
-                        type="button"
-                        className={rounds === n ? "seg seg--active" : "seg"}
-                        aria-pressed={rounds === n}
-                        onClick={() => setRounds(n)}
-                      >
-                        {n}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="lobby__opt">
-                  <span className="field__label">เวลาวาด (วินาที)</span>
-                  <div className="segmented" role="group" aria-label="เวลาวาดต่อตา">
-                    {[30, 45, 60, 90].map((n) => (
-                      <button
-                        key={n}
-                        type="button"
-                        className={drawTime === n ? "seg seg--active" : "seg"}
-                        aria-pressed={drawTime === n}
-                        onClick={() => setDrawTime(n)}
-                      >
-                        {n}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </>
-          )}
+          <AvatarPicker value={profile.avatar} onChange={(avatar) => onProfile({ ...profile, avatar })} />
 
           <label className="field__label" htmlFor="player-name">
             CHOOSE YOUR NAME
@@ -144,65 +53,40 @@ export default function Lobby({ connected, onEntered, onError, onOpenLeaderboard
             id="player-name"
             className="input"
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) => onProfile({ ...profile, name: e.target.value })}
             maxLength={20}
             placeholder="ชื่อเล่นของคุณ"
             autoComplete="off"
           />
 
-          {tab === "join" && (
-            <>
-              <label className="field__label" htmlFor="room-code">
-                ROOM CODE
-              </label>
-              <input
-                id="room-code"
-                className="input input--code"
-                value={code}
-                // รับเฉพาะตัวเลข 5 หลัก (server ยังตรวจซ้ำอีกชั้น)
-                onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 5))}
-                inputMode="numeric"
-                placeholder="12345"
-                autoComplete="off"
-              />
-            </>
-          )}
-
-          <span className="field__label" id="avatar-label">
-            PICK YOUR AVATAR
-          </span>
-          <div className="avatars" role="group" aria-labelledby="avatar-label">
-            {AVATARS.map((emoji, index) => (
-              <button
-                type="button"
-                key={emoji}
-                className={avatar === index ? "avatar avatar--selected" : "avatar"}
-                aria-label={`อวตาร ${emoji}`}
-                aria-pressed={avatar === index}
-                onClick={() => setAvatar(index)}
-              >
-                {emoji}
-              </button>
-            ))}
+          <div className="home__buttons">
+            <button type="button" className="big-btn big-btn--green" disabled={!connected} onClick={onOpenSetup}>
+              <Icon name="star" size={26} />
+              <span>สร้างห้อง</span>
+            </button>
+            <button type="button" className="big-btn big-btn--blue" disabled={!connected} onClick={() => setJoining(true)}>
+              <Icon name="door" size={26} />
+              <span>เข้าห้อง</span>
+            </button>
+            <button type="button" className="big-btn big-btn--pink" disabled={!connected} onClick={onOpenSolo}>
+              <Icon name="robot" size={28} />
+              <span>
+                SOLO <small>แข่งกับ AI</small>
+              </span>
+            </button>
           </div>
-
-          <button type="submit" className="btn btn--primary btn--wide" disabled={!connected || busy}>
-            {busy ? "กำลังเข้า..." : tab === "create" ? "START" : "JOIN"}
-          </button>
 
           {!connected && (
             <p className="form-note">
               ยังต่อ server ไม่ได้ — เปิด server ด้วย <code>cd server && node index.js</code> ก่อน
             </p>
           )}
-        </form>
+        </section>
 
-        {/* ขวา: Top 10 + ปุ่ม Solo ใหญ่ใต้กล่อง ให้สองฝั่งของหน้าสูงใกล้เคียงกัน */}
-        <div className="lobby__right">
         <section className="panel lobby__board" aria-labelledby="lobby-board-title">
           <div className="lobby__board-head">
             <h2 className="panel__title lobby__board-title" id="lobby-board-title">
-              🏆 Top 10
+              <Icon name="trophy" size={26} /> Top 10
             </h2>
             <div className="period-toggle" role="group" aria-label="ช่วงเวลา">
               <button
@@ -234,29 +118,12 @@ export default function Lobby({ connected, onEntered, onError, onOpenLeaderboard
 
           {/* หน้า Leaderboard เต็ม (20 อันดับ เลือกเดือนย้อนหลังได้) */}
           <button type="button" className="link-btn lobby__see-all" onClick={onOpenLeaderboard}>
-            ดูทั้งหมด →
+            ดูทั้งหมด <Icon name="arrowR" size={12} />
           </button>
         </section>
-
-        {/* Solo ไม่ต้องเข้าห้อง ส่งชื่อที่กรอกไว้ไปให้ ไม่ต้องพิมพ์ซ้ำ */}
-        <button type="button" className="solo-cta" disabled={!connected} onClick={() => onOpenSolo(name)}>
-          <span className="solo-cta__icon" aria-hidden="true">🤖</span>
-          <span className="solo-cta__text">
-            <span className="solo-cta__title">SOLO VS AI</span>
-            <span className="solo-cta__sub">เล่นคนเดียว วาดให้ AI ทาย</span>
-          </span>
-        </button>
-        </div>
-
-        {/* วิธีเล่นแบบย่อ ให้หน้าแรกไม่ต้องเลื่อนบนจอคอม */}
-        <aside className="panel lobby__rules">
-          <h2 className="panel__title">วิธีเล่น</h2>
-          <p className="rules-short">คนหนึ่งวาด คนอื่นพิมพ์ทาย ทายถูกเร็วได้คะแนนเยอะ</p>
-          <p className="rules-tip">
-            🎨 <strong>Mini Challenge</strong> บางตาสุ่มกติกาพิเศษ
-          </p>
-        </aside>
       </div>
+
+      {joining && <JoinModal initialCode={inviteCode ?? ""} busy={busy} onSubmit={join} onClose={() => setJoining(false)} />}
     </div>
   );
 }

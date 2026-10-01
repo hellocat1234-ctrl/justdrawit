@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Icon } from "./Icons";
 import {
   PAINT_COLORS,
   SIZE_MIN,
@@ -81,7 +82,7 @@ export default function Toolbar({
           disabled={locked || !canUndo}
           onClick={onUndo}
         >
-          ↶
+          <Icon name="undo" size={24} />
         </button>
         <button
           type="button"
@@ -91,7 +92,7 @@ export default function Toolbar({
           disabled={locked || !canRedo}
           onClick={onRedo}
         >
-          ↷
+          <Icon name="redo" size={24} />
         </button>
       </div>
 
@@ -104,7 +105,7 @@ export default function Toolbar({
           aria-pressed={tool === TOOLS.PEN}
           onClick={() => onTool(TOOLS.PEN)}
         >
-          ✏️
+          <Icon name="pen" size={26} />
         </button>
         <button
           type="button"
@@ -113,7 +114,7 @@ export default function Toolbar({
           aria-pressed={tool === TOOLS.ERASER}
           onClick={() => onTool(TOOLS.ERASER)}
         >
-          🧽
+          <Icon name="eraser" size={26} />
         </button>
         {/* ถังสี — dont_lift_pen ซ่อนไปเลย เพราะกติกาคือ "ห้ามยกปากกา"
             การเทสีทั้งพื้นที่ในคลิกเดียวไม่ใช่การวาดเส้นต่อเนื่อง และ server ก็ทิ้ง fill ทุกครั้งอยู่แล้ว */}
@@ -125,12 +126,12 @@ export default function Toolbar({
             aria-pressed={tool === TOOLS.BUCKET}
             onClick={() => onTool(TOOLS.BUCKET)}
           >
-            🪣
+            <Icon name="bucket" size={26} />
           </button>
         )}
         {/* ล้างจอทำทันที ไม่ใช่โหมด จึงไม่ได้ค้างสถานะกดไว้แบบสามปุ่มบน */}
         <button type="button" className="tool tool--danger" aria-label="ล้างจอ" onClick={onClear}>
-          🗑️
+          <Icon name="trash" size={26} />
         </button>
       </div>
 

@@ -1,9 +1,10 @@
 import Avatar from "./Avatar";
 import AnimatedNumber from "./AnimatedNumber";
 import YouTag from "./YouTag";
+import { Icon } from "./Icons";
 
 // แถบคะแนน — เรียงจากคะแนนมากไปน้อย
-// 👑 = หัวห้อง  ✏️ = คนวาดตานี้  ✅ = คนที่ทายถูกแล้ว (พื้นเขียวอ่อน)
+// มงกุฎ = หัวห้อง  ดินสอ = คนวาดตานี้  ติ๊ก = คนที่ทายถูกแล้ว (พื้นเขียวอ่อน)
 //
 // ที่มาของ guessed มีสองทาง รวมกันแล้วได้ครบทุกกรณี
 //   1) อยู่ในห้องตั้งแต่ต้นตา — สะสมเองจาก event correct_guess (ผูกไว้ใน useGame)
@@ -62,9 +63,9 @@ export default function Scoreboard({
         const hasGuessed = guessed.includes(p.id);
         const isNext = drawing && !isDrawer && nextDrawerId === p.id;
         const tags = [];
-        if (p.isHost) tags.push(["host", "👑 หัวห้อง"]);
-        if (drawing && isDrawer) tags.push(["drawing", "✏️ กำลังวาด"]);
-        if (isNext) tags.push(["next", "⏭ วาดคนถัดไป"]);
+        if (p.isHost) tags.push(["host", "crown", "หัวห้อง"]);
+        if (drawing && isDrawer) tags.push(["drawing", "pen", "กำลังวาด"]);
+        if (isNext) tags.push(["next", "skip", "วาดคนถัดไป"]);
         const classes = ["score-row"];
         if (isDrawer) classes.push("score-row--drawer");
         if (hasGuessed) classes.push("score-row--guessed");
@@ -78,15 +79,17 @@ export default function Scoreboard({
               {(tags.length > 0 || p.id === meId) && (
                 <span className="score-row__tags">
                   {p.id === meId && <YouTag />}
-                  {tags.map(([kind, text]) => (
+                  {tags.map(([kind, icon, text]) => (
                     <span className={`tag tag--${kind}`} key={kind}>
-                      {text}
+                      <Icon name={icon} size={13} /> {text}
                     </span>
                   ))}
                 </span>
               )}
             </span>
-            <span className="score-row__icons">{hasGuessed && <span title="ทายถูกแล้ว">✅</span>}</span>
+            <span className="score-row__icons">{hasGuessed && <span title="ทายถูกแล้ว">
+                  <Icon name="check" size={16} />
+                </span>}</span>
             <span className="score-row__score">
               <AnimatedNumber value={p.score} />
             </span>

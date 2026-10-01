@@ -17,6 +17,7 @@ import { markTeamRulesSeen, teamRulesSeen } from "../prefs";
 import { play } from "../sound/sfx";
 import { clearBoard } from "../canvas/actions";
 import { PAINT_COLORS, SIZE_DEFAULT, TOOLS } from "../canvas/palette";
+import { Icon } from "../components/Icons";
 
 /**
  * หน้าเกมทั้งหมด (ข้อ 2 + กระดานวาดข้อ 3)
@@ -189,8 +190,7 @@ export default function Game({
             <span className="topbar__label">คนวาด</span>
           )}
           <span className="topbar__name">
-            {teamMode ? "✏️ " : ""}
-            {drawerName}
+            {teamMode && <Icon name="pen" size={16} />} {drawerName}
           </span>
         </div>
 
@@ -246,7 +246,7 @@ export default function Game({
                 : "ให้ทุกคนเห็นช่องคำใบ้ก่อนเวลา (ได้ครั้งเดียวต่อตา)"
             }
           >
-            {game.hint !== null ? "💡 เปิดคำใบ้แล้ว" : "💡 ให้คำใบ้"}
+            <Icon name="bulb" size={20} /> {game.hint !== null ? "เปิดคำใบ้แล้ว" : "ให้คำใบ้"}
           </button>
         )}
 
@@ -267,7 +267,12 @@ export default function Game({
           <Timer timeLeft={drawing ? game.timeLeft : null} />
         </div>
 
-        <TopIcons onInfo={() => setShowInfo(true)} onExit={() => setShowExit(true)} />
+        <TopIcons
+          onInfo={() => setShowInfo(true)}
+          onExit={() => setShowExit(true)}
+          shareCode={room.code}
+          onToast={onToast}
+        />
       </header>
 
       {/* เรียงตาม DESIGN.md: รายชื่อซ้าย · กระดานกลาง · เครื่องมือขวา

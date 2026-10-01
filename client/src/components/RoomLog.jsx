@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { Icon } from "./Icons";
 
 /**
  * กล่อง "ในห้อง" — ใต้กระดาน ฝั่งขวา (DESIGN.md หัวข้อหน้าเกม)
@@ -10,14 +11,14 @@ import { useEffect, useRef } from "react";
  * ข้อความระบบล้วน ๆ จึงไม่มีช่องพิมพ์ และอ่านย้อนหลังได้อย่างเดียว
  */
 const KINDS = {
-  join: "🚪",
-  leave: "👋",
-  correct: "✅",
-  timeout: "⏰",
-  hint: "💡",
-  pen: "🖊️",
-  team: "🏁",
-  info: "ℹ️",
+  join: "door",
+  leave: "door",
+  correct: "check",
+  timeout: "clock",
+  hint: "bulb",
+  pen: "pen",
+  team: "flag",
+  info: "info",
 };
 
 export default function RoomLog({ messages = [] }) {
@@ -41,7 +42,7 @@ export default function RoomLog({ messages = [] }) {
           return (
             <p className={`chat__row chat__row--system note note--${kind}`} key={i}>
               <span className="note__icon" aria-hidden="true">
-                {KINDS[kind]}
+                <Icon name={KINDS[kind]} size={16} />
               </span>
               <span className="note__text">{m.text}</span>
             </p>
