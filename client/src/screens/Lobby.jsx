@@ -2,8 +2,11 @@ import { useState } from "react";
 import { socket } from "../socket";
 import { AVATARS } from "../avatars";
 import Logo from "../components/Logo";
+import RankTable from "../components/RankTable";
+import { monthKey, useLeaderboard } from "../hooks/useLeaderboard";
 
 // หน้าแรก: แท็บ CREATE / JOIN · เลือกอวตาร · ใส่ชื่อ · (แท็บ JOIN มีช่องรหัสห้อง)
+// ขวาเป็นกล่อง Top 10 (เดือนนี้/ตลอดกาล) · วิธีเล่นแบบย่ออยู่ใต้ฟอร์ม
 // ฝั่งนี้แค่ช่วยให้ใช้ง่าย ของจริง server เป็นคนตรวจซ้ำเสมอ (server-authoritative)
 export default function Lobby({ connected, onEntered, onError, onOpenLeaderboard }) {
   const [tab, setTab] = useState("create"); // create | join
@@ -11,6 +14,9 @@ export default function Lobby({ connected, onEntered, onError, onOpenLeaderboard
   const [code, setCode] = useState("");
   const [avatar, setAvatar] = useState(0);
   const [busy, setBusy] = useState(false);
+  // กล่อง Top 10 — Lobby ถูกสร้างใหม่ทุกครั้งที่กลับมาหน้าแรก จึงโหลดคะแนนใหม่ทุกครั้งเอง
+  const [period, setPeriod] = useState("month"); // month | all
+  const board = useLeaderboard(period === "month" ? monthKey() : "");
 
   function submit(event) {
     event.preventDefault();
@@ -42,7 +48,7 @@ export default function Lobby({ connected, onEntered, onError, onOpenLeaderboard
       <Logo />
 
       <div className="lobby">
-        <form className="panel" onSubmit={submit}>
+        <form className="panel lobby__form" onSubmit={submit}>
           <div className="tabs">
             <button
               type="button"
@@ -120,26 +126,53 @@ export default function Lobby({ connected, onEntered, onError, onOpenLeaderboard
           )}
         </form>
 
-        <aside className="panel">
+        <section className="panel lobby__board" aria-labelledby="lobby-board-title">
+          <div className="lobby__board-head">
+            <h2 className="panel__title lobby__board-title" id="lobby-board-title">
+              🏆 Top 10
+            </h2>
+            <div className="period-toggle" role="group" aria-label="ช่วงเวลา">
+              <button
+                type="button"
+                className={period === "month" ? "period-toggle__btn period-toggle__btn--active" : "period-toggle__btn"}
+                aria-pressed={period === "month"}
+                onClick={() => setPeriod("month")}
+              >
+                เดือนนี้
+              </button>
+              <button
+                type="button"
+                className={period === "all" ? "period-toggle__btn period-toggle__btn--active" : "period-toggle__btn"}
+                aria-pressed={period === "all"}
+                onClick={() => setPeriod("all")}
+              >
+                ตลอดกาล
+              </button>
+            </div>
+          </div>
+
+          <RankTable
+            board={board}
+            limit={10}
+            compact
+            emptyText={period === "month" ? "เดือนนี้ยังไม่มีใครติดอันดับ" : "ยังไม่มีใครติดอันดับเลย"}
+          />
+
+          {/* หน้า Leaderboard เต็ม (20 อันดับ เลือกเดือนย้อนหลังได้) */}
+          <button type="button" className="link-btn lobby__see-all" onClick={onOpenLeaderboard}>
+            ดูทั้งหมด →
+          </button>
+        </section>
+
+        {/* วิธีเล่นแบบย่อ ให้หน้าแรกไม่ต้องเลื่อนบนจอคอม */}
+        <aside className="panel lobby__rules">
           <h2 className="panel__title">วิธีเล่น</h2>
-          <ol className="rules">
-            <li>คนหนึ่งเป็นคนวาด คนอื่นเห็นภาพสดๆ แล้วพิมพ์ทายในช่องแชท</li>
-            <li>ทายถูกเร็วได้คะแนนมาก คนวาดก็ได้คะแนนเมื่อมีคนทายถูก</li>
-            <li>สลับกันวาดจนครบรอบ ใครคะแนนมากที่สุดชนะ</li>
-          </ol>
+          <p className="rules-short">คนหนึ่งวาด คนอื่นพิมพ์ทาย ทายถูกเร็วได้คะแนนเยอะ</p>
           <p className="rules-tip">
-            🎨 <strong>Mini Challenge</strong> — บางตาจะมีกติกาพิเศษสุ่มมา เช่น วาดได้สีเดียว (Colour Fix)
-            หรือห้ามยกปากกา (Don&apos;t Lift Pen)
+            🎨 <strong>Mini Challenge</strong> บางตาสุ่มกติกาพิเศษ
           </p>
         </aside>
       </div>
-
-      {/* ลิงก์ล่างหน้าแรกตาม DESIGN.md (🤖 Solo จะมาในข้อ 7) */}
-      <nav className="lobby-links">
-        <button type="button" className="btn" onClick={onOpenLeaderboard}>
-          🏆 Leaderboard
-        </button>
-      </nav>
     </div>
   );
 }

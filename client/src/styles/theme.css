@@ -318,33 +318,64 @@ input {
 
 /* ============================ หน้า Lobby ============================ */
 
+/* จอคอม: ฟอร์ม + วิธีเล่นซ้าย · Top 10 ขวา (สูงยาวสองแถว)
+   ใช้ grid-template-areas เพราะจอมือถือต้องสลับลำดับเป็น ฟอร์ม → Top 10 → วิธีเล่น
+   ถ้าใช้ HTML เรียงตายตัว จะได้ลำดับที่ถูกแค่จอเดียว */
 .lobby {
   width: 100%;
-  max-width: 880px;
+  max-width: 920px;
   display: grid;
-  grid-template-columns: 1.05fr 0.95fr;
-  gap: 24px;
+  grid-template-columns: 1fr 1fr;
+  grid-template-areas:
+    "form board"
+    "rules board";
+  gap: 20px 24px;
   align-items: start;
 }
 
-/* จอเล็กให้เรียงบนล่าง */
+.lobby__form {
+  grid-area: form;
+}
+
+.lobby__board {
+  grid-area: board;
+}
+
+.lobby__rules {
+  grid-area: rules;
+  padding: 16px 20px;
+}
+
+.lobby__rules .panel__title {
+  margin-bottom: 6px;
+  font-size: 18px;
+}
+
+/* ป้าย Mini Challenge ในกล่องย่อ บางลงกว่าเดิม (ที่อื่นไม่กระทบ เพราะขึ้นต้นด้วย .lobby__rules) */
+.lobby__rules .rules-tip {
+  margin-bottom: 0;
+  padding: 8px 12px;
+}
+
+/* จอเล็กเรียงบนล่าง ฟอร์มก่อน (ของที่ต้องใช้) Leaderboard ตามมา */
 @media (max-width: 760px) {
   .lobby {
     grid-template-columns: 1fr;
+    grid-template-areas:
+      "form"
+      "board"
+      "rules";
   }
 }
 
-.rules {
+.rules-short {
   margin: 0;
-  padding-left: 22px;
-  display: grid;
-  gap: 10px;
   font-size: 16px;
   line-height: 1.5;
 }
 
 .rules-tip {
-  margin-top: 16px;
+  margin-top: 10px;
   padding: 12px;
   border: var(--border);
   background: var(--purple);
@@ -1504,12 +1535,66 @@ input {
 
 /* ============================ Leaderboard (ข้อ 6) ============================ */
 
-/* ลิงก์ใต้แผงหน้าแรก (🏆 Leaderboard · ข้อ 7 จะเติม 🤖 Solo) */
-.lobby-links {
+/* ---- กล่อง Top 10 ในหน้าแรก ---- */
+.lobby__board {
+  display: grid;
+  gap: 12px;
+}
+
+.lobby__board-head {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
-  justify-content: center;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.lobby__board-title {
+  margin: 0;
+}
+
+/* ปุ่มสลับสองตัวติดกัน ใช้ฟอนต์ Mitr เพราะเป็นภาษาไทย (Silkscreen ไม่มีไทย) */
+.period-toggle {
+  display: flex;
+}
+
+.period-toggle__btn {
+  min-height: 44px;
+  padding: 6px 14px;
+  border: var(--border);
+  background: var(--white);
+  color: var(--ink);
+  font-family: var(--font-head);
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.period-toggle__btn + .period-toggle__btn {
+  border-left: none;
+}
+
+.period-toggle__btn--active {
+  background: var(--blue);
+  color: var(--white);
+}
+
+/* ปุ่มหน้าตาเป็นลิงก์ (ยังกดได้ 44px ตามกฎ) */
+.link-btn {
+  min-height: 44px;
+  padding: 0 4px;
+  border: none;
+  background: none;
+  color: var(--blue);
+  font-family: var(--font-head);
+  font-weight: 600;
+  font-size: 16px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.lobby__see-all {
+  justify-self: end;
 }
 
 .board-panel {
@@ -1647,6 +1732,22 @@ input {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-weight: 600;
+}
+
+/* แบบย่อในหน้าแรก แถวเตี้ยลง หน้าแรกจะได้ไม่ต้องเลื่อนบนจอคอม */
+.rank-table--compact {
+  font-size: 16px;
+}
+
+.rank-table--compact th,
+.rank-table--compact td {
+  padding: 5px 10px;
+}
+
+.rank-table--compact .rank-row--1 .rank-row__rank,
+.rank-table--compact .rank-row--2 .rank-row__rank,
+.rank-table--compact .rank-row--3 .rank-row__rank {
+  font-size: 20px;
 }
 
 .rank-row__level,
