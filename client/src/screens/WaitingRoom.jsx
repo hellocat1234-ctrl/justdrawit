@@ -2,6 +2,8 @@ import { useState } from "react";
 import { socket } from "../socket";
 import Avatar from "../components/Avatar";
 import Logo from "../components/Logo";
+import Ribbon from "../components/Ribbon";
+import { MascotNote } from "../components/Mascot";
 
 // ค่าที่ server ยอมรับ ตาม events.md (ค่าอื่น server จะเมิน)
 const ROUND_CHOICES = [1, 2, 3, 4, 5];
@@ -32,6 +34,7 @@ export default function WaitingRoom({ room, me, onLeave }) {
   return (
     <div className="screen">
       <Logo />
+      <Ribbon tone="teal">ห้องรอ</Ribbon>
 
       <div className="room">
         <div className="panel">
@@ -74,6 +77,8 @@ export default function WaitingRoom({ room, me, onLeave }) {
               </div>
             ))}
           </div>
+          {/* อยู่คนเดียว = มาสคอตถือนาฬิการอเพื่อน */}
+          {room.players.length < 2 && <MascotNote mood="wait">รอเพื่อนเข้าห้อง...</MascotNote>}
         </div>
 
         <div className="panel">

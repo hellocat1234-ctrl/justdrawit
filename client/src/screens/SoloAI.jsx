@@ -5,6 +5,9 @@ import Timer from "../components/Timer";
 import Canvas from "../components/Canvas";
 import Toolbar from "../components/Toolbar";
 import Modal from "../components/Modal";
+import TimeBar from "../components/TimeBar";
+import Ribbon from "../components/Ribbon";
+import Mascot, { MascotNote } from "../components/Mascot";
 import { clearBoard } from "../canvas/actions";
 import { PAINT_COLORS, SIZE_DEFAULT, TOOLS } from "../canvas/palette";
 
@@ -12,6 +15,16 @@ import { PAINT_COLORS, SIZE_DEFAULT, TOOLS } from "../canvas/palette";
 const SNAPSHOT_MS = 5000;
 const SNAPSHOT_WIDTH = 512;
 const THINK_TIMEOUT_MS = 20000; // server รอ AI สูงสุด 15 วิ เผื่อไว้อีกนิดกันค้างถ้าตอบหาย
+// แปรงหนาสุดใน Solo — วัดแล้วแปรงหนามาก (24px ในภาพ 512px) ทำให้ AI ทายถูกแค่ครึ่งเดียว (84% → 49%)
+// เป็นแค่การช่วยผู้เล่น ไม่ใช่กติกากันโกง (server ไม่ได้จำกัด)
+const SOLO_MAX_SIZE = 12;
+
+// ข้อความบอกโหมดของ AI ให้ตรงกับ aiMode ที่ server ส่งมาจริงในด่านนี้
+const MODE_TEXT = {
+  model: "AI ในเครื่อง — ดูภาพจริงด้วยโมเดลทายภาพวาด (ฟรี ไม่ใช้ API key)",
+  claude: "AI Claude — ดูภาพจริง",
+  mock: "โหมดจำลอง — ไม่มีโมเดลและไม่มี API key AI เดาสุ่ม ไม่ได้ดูภาพจริง",
+};
 const NEXT_DELAY_S = 4; // server พัก 4 วิก่อนด่านถัดไป (ใช้แสดงนับถอยหลังเฉยๆ)
 
 // การกระทำที่ "ย้อนได้ทีละหนึ่งอัน" — หนึ่งเส้น (start..end) หนึ่งครั้งเทสี หนึ่งครั้งล้างจอ
@@ -227,6 +240,7 @@ export default function SoloAI({ initialName = "", onBack }) {
     return (
       <div className="screen">
         <Logo />
+        <Ribbon tone="purple">SOLO VS AI</Ribbon>
         <form className="panel solo-intro" onSubmit={start}>
           <h2 className="panel__title">🤖 Solo แข่งกับ AI</h2>
           <p className="solo-intro__text">
@@ -301,9 +315,14 @@ export default function SoloAI({ initialName = "", onBack }) {
             canDraw={canDraw}
             tool={tool}
             color={color}
-            size={size}
+            size={Math.min(size, SOLO_MAX_SIZE)}
             onAction={handleAction}
+            empty={
+              phase === "playing" && round ? <MascotNote mood="draw">วาด “{round.word}” เลย!</MascotNote> : null
+            }
           />
+
+          <TimeBar timeLeft={phase === "playing" ? timeLeft : null} total={round?.time ?? null} />
 
           <div className="game__answers game__answers--solo">
             <section className="panel ai-box" aria-live="polite">
@@ -325,8 +344,10 @@ export default function SoloAI({ initialName = "", onBack }) {
                   </p>
                 )}
               </div>
-              {round?.aiMode === "mock" && (
-                <p className="ai-box__mode">โหมดจำลอง — ยังไม่มี API key AI เดาสุ่มไม่ได้ดูภาพจริง</p>
+              {round && MODE_TEXT[round.aiMode] && (
+                <p className={`ai-box__mode${round.aiMode === "mock" ? " ai-box__mode--mock" : ""}`}>
+                  {MODE_TEXT[round.aiMode]}
+                </p>
               )}
               <button type="button" className="link-btn ai-box__leave" onClick={handleLeave}>
                 ออกจากเกม (ไม่บันทึกคะแนน)
@@ -349,6 +370,7 @@ export default function SoloAI({ initialName = "", onBack }) {
             canUndo={hist.undo}
             canRedo={hist.redo}
             locked={!canDraw}
+            maxSize={SOLO_MAX_SIZE}
           />
         </aside>
       </main>
@@ -356,6 +378,7 @@ export default function SoloAI({ initialName = "", onBack }) {
       {/* พักระหว่างด่าน — บอกผลด่านที่เพิ่งจบให้ชัด server เปลี่ยนด่านเอง ไม่มีปุ่มกด */}
       {phase === "rest" && result && (
         <Modal labelledBy="solo-rest-title">
+          <Mascot mood={result.correct ? "happy" : "shock"} className="mascot--modal" />
           <h2 className="modal__title" id="solo-rest-title">
             {result.correct ? "🎉 AI ทายถูก!" : "💔 AI ทายไม่ออก"}
           </h2>
@@ -374,6 +397,7 @@ export default function SoloAI({ initialName = "", onBack }) {
 
       {phase === "over" && final && (
         <Modal labelledBy="solo-over-title">
+          <Mascot mood="trophy" className="mascot--modal" />
           <h2 className="modal__title" id="solo-over-title">
             จบเกม
           </h2>

@@ -50,7 +50,14 @@ const clamp01 = (v) => Math.min(1, Math.max(0, v));
  * ลิสต์ action ยังเป็นแหล่งความจริงเดียวของ "ตานี้วาดอะไรไปแล้ว"
  * ใช้ทั้งตอนจอเปลี่ยนขนาด (วาดซ้ำ) และจะใช้เป็น canvas_history ในข้อ 4
  */
-const Canvas = forwardRef(function Canvas({ canDraw, tool, color, size, onAction }, ref) {
+// empty = สิ่งที่โชว์กลางกระดานตอนยังไม่มีเส้น (มาสคอต) · หายเองเมื่อมีเส้นแรก และกลับมาถ้าล้างจอ
+const Canvas = forwardRef(function Canvas({ canDraw, tool, color, size, onAction, empty = null }, ref) {
+  const [hasInk, setHasInk] = useState(false);
+  // มีหมึกบนกระดานไหม: action ล่าสุดไม่ใช่การล้างจอ (ถ้าลิสต์ว่างก็ไม่มี)
+  const syncInk = () => {
+    const list = actionsRef.current;
+    setHasInk(list.length > 0 && list[list.length - 1].type !== "clear_canvas");
+  };
   const wrapRef = useRef(null);
   const canvasRef = useRef(null);
   const painterRef = useRef(null);
@@ -151,6 +158,7 @@ const Canvas = forwardRef(function Canvas({ canDraw, tool, color, size, onAction
   function dispatch(action) {
     painterRef.current?.apply(action);
     actionsRef.current.push(action);
+    syncInk();
     onActionRef.current?.(action); // ข้อ 4 ต่อ socket ตรงนี้
   }
 
@@ -211,6 +219,7 @@ const Canvas = forwardRef(function Canvas({ canDraw, tool, color, size, onAction
     actionsRef.current = [];
     pendingRef.current = [];
     painterRef.current?.replay([]);
+    syncInk();
   }
 
   // ── โหมดดีบักชั่วคราว: ดึงตัวเลขออกมาแสดงเป็นรอบๆ ทุก 250ms ──
@@ -232,6 +241,7 @@ const Canvas = forwardRef(function Canvas({ canDraw, tool, color, size, onAction
     applyRemote(action) {
       painterRef.current?.apply(action);
       actionsRef.current.push(action);
+      syncInk();
     },
     // ขึ้นตาใหม่ — useGame เรียกผ่านประตูเดียวกับ action อื่น จึงไม่แซงกัน
     resetBoard,
@@ -239,6 +249,7 @@ const Canvas = forwardRef(function Canvas({ canDraw, tool, color, size, onAction
     applyHistory(items) {
       actionsRef.current = [...items];
       painterRef.current?.replay(actionsRef.current);
+      syncInk();
     },
     // ภาพกระดานตอนนี้เป็น data URL JPEG ย่อให้กว้างไม่เกิน maxWidth (ข้อ 7 Solo ส่งให้ AI ดู)
     // กระดานเป็นพื้นขาวทึบ (painter ถมสีพื้นเอง) JPEG จึงไม่ได้พื้นดำ · ย่อก่อนส่งเพื่อให้ข้อความเล็กและเร็ว
@@ -573,6 +584,7 @@ const Canvas = forwardRef(function Canvas({ canDraw, tool, color, size, onAction
         onPointerLeave={handleLeave}
         onLostPointerCapture={handleLostCapture}
       />
+      {!hasInk && empty && <div className="board__empty">{empty}</div>}
       {dbgText && <pre className="board__debug">{dbgText}</pre>}
     </div>
   );

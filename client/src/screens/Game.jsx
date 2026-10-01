@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import HintSlots from "../components/HintSlots";
 import Timer from "../components/Timer";
+import TimeBar from "../components/TimeBar";
+import { MascotNote } from "../components/Mascot";
 import Scoreboard from "../components/Scoreboard";
 import Chat from "../components/Chat";
 import RoomLog from "../components/RoomLog";
@@ -39,6 +41,21 @@ export default function Game({
   const isDrawer = game.drawerId === meId;
   const drawing = Boolean(game.round); // กำลังวาดอยู่ (round_start มาแล้ว ยังไม่ round_end)
   const drawerName = players.find((p) => p.id === game.drawerId)?.name ?? "—";
+
+  // มาสคอตกลางกระดานตอนยังไม่มีเส้น (หายเองเมื่อมีเส้นแรก) — เลือกอารมณ์ตามสถานะของตา
+  // ถ้ามีหน้าต่างสรุปตา/จบเกมเปิดอยู่ ภาพของตาที่แล้วยังค้างบนกระดาน มาสคอตจึงไปอยู่ในหน้าต่างนั้นแทน
+  let boardMascot = null;
+  if (drawing) {
+    boardMascot = isDrawer ? (
+      <MascotNote mood="draw">ถึงตาคุณวาดแล้ว!</MascotNote>
+    ) : (
+      <MascotNote mood="wait">รอ {drawerName} เริ่มวาด...</MascotNote>
+    );
+  } else if (!game.summary && !game.ranking) {
+    boardMascot = (
+      <MascotNote mood="think">{game.options ? "เลือกคำที่จะวาดเลย" : "คนวาดกำลังเลือกคำ..."}</MascotNote>
+    );
+  }
 
   // ── Mini Challenge ของตานี้ (ข้อ 5) ──
   // มาจาก server เท่านั้น (game.round.challenge ติดมากับ round_start) client ไม่สุ่มเอง
@@ -200,7 +217,11 @@ export default function Game({
             // ทุกอย่างที่วาดบนกระดานของเราออกทางนี้ทางเดียว → useGame ยิงต่อให้ server
             // แล้ว server เป็นคนส่งให้คนอื่น (ไม่ส่งกลับมาหาเรา จึงไม่มีภาพซ้อน)
             onAction={sendAction}
+            empty={boardMascot}
           />
+
+          {/* แถบเวลาวิ่งลดลงใต้กระดาน (ความสูงนับรวมใน 386px ของ .board แล้ว) */}
+          <TimeBar timeLeft={drawing ? game.timeLeft : null} total={game.round?.time ?? null} />
 
           {/* ใต้กระดาน สองกล่องข้างกัน: คำที่คนทาย กับ เรื่องที่เกิดในห้อง */}
           <div className="game__answers">

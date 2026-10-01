@@ -2,6 +2,7 @@ import { useState } from "react";
 import { socket } from "../socket";
 import { AVATARS } from "../avatars";
 import Logo from "../components/Logo";
+import Ribbon from "../components/Ribbon";
 import RankTable from "../components/RankTable";
 import { monthKey, useLeaderboard } from "../hooks/useLeaderboard";
 
@@ -46,6 +47,7 @@ export default function Lobby({ connected, onEntered, onError, onOpenLeaderboard
   return (
     <div className="screen">
       <Logo />
+      <Ribbon tone="red">PLAY</Ribbon>
 
       <div className="lobby">
         <form className="panel lobby__form" onSubmit={submit}>
@@ -126,6 +128,8 @@ export default function Lobby({ connected, onEntered, onError, onOpenLeaderboard
           )}
         </form>
 
+        {/* ขวา: Top 10 + ปุ่ม Solo ใหญ่ใต้กล่อง ให้สองฝั่งของหน้าสูงใกล้เคียงกัน */}
+        <div className="lobby__right">
         <section className="panel lobby__board" aria-labelledby="lobby-board-title">
           <div className="lobby__board-head">
             <h2 className="panel__title lobby__board-title" id="lobby-board-title">
@@ -164,6 +168,16 @@ export default function Lobby({ connected, onEntered, onError, onOpenLeaderboard
           </button>
         </section>
 
+        {/* Solo ไม่ต้องเข้าห้อง ส่งชื่อที่กรอกไว้ไปให้ ไม่ต้องพิมพ์ซ้ำ */}
+        <button type="button" className="solo-cta" disabled={!connected} onClick={() => onOpenSolo(name)}>
+          <span className="solo-cta__icon" aria-hidden="true">🤖</span>
+          <span className="solo-cta__text">
+            <span className="solo-cta__title">SOLO VS AI</span>
+            <span className="solo-cta__sub">เล่นคนเดียว วาดให้ AI ทาย</span>
+          </span>
+        </button>
+        </div>
+
         {/* วิธีเล่นแบบย่อ ให้หน้าแรกไม่ต้องเลื่อนบนจอคอม */}
         <aside className="panel lobby__rules">
           <h2 className="panel__title">วิธีเล่น</h2>
@@ -171,15 +185,6 @@ export default function Lobby({ connected, onEntered, onError, onOpenLeaderboard
           <p className="rules-tip">
             🎨 <strong>Mini Challenge</strong> บางตาสุ่มกติกาพิเศษ
           </p>
-          {/* Solo ไม่ต้องเข้าห้อง ส่งชื่อที่กรอกไว้ไปให้ ไม่ต้องพิมพ์ซ้ำ */}
-          <button
-            type="button"
-            className="btn btn--wide lobby__solo"
-            disabled={!connected}
-            onClick={() => onOpenSolo(name)}
-          >
-            🤖 Solo แข่งกับ AI
-          </button>
         </aside>
       </div>
     </div>

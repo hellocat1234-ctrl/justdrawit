@@ -54,10 +54,10 @@ body {
   font-family: var(--font-body);
   font-size: 16px;
   color: var(--ink);
-  /* พื้นเหลืองมีลายจุดจางๆ ตาม DESIGN.md */
+  /* พื้นเหลืองมีลายไอคอน "วาดเล่น" จางๆ (ดาว หัวใจ เมฆ ดินสอ จานสี ถังสี) ไทล์ SVG พิกเซลของเราเอง */
   background: var(--yellow);
-  background-image: radial-gradient(rgba(43, 43, 43, 0.12) 1px, transparent 1px);
-  background-size: 14px 14px;
+  background-image: url("../assets/doodle-yellow.svg");
+  background-size: 200px 200px;
 }
 
 /* ปุ่ม/ช่องกรอกของเบราว์เซอร์ไม่ต้องมีมุมโค้ง */
@@ -82,8 +82,8 @@ input {
 /* หน้าเกมใช้พื้นฟ้าลายจุด บอกความรู้สึกว่า "กำลังเล่นอยู่" */
 .screen--game {
   background: var(--blue);
-  background-image: radial-gradient(rgba(255, 255, 255, 0.16) 1px, transparent 1px);
-  background-size: 14px 14px;
+  background-image: url("../assets/doodle-blue.svg");
+  background-size: 200px 200px;
   color: var(--white);
   /* ต่างจากหน้าอื่นตรงที่ไม่จัดกลางจอ เพราะหน้าเกมกินพื้นที่เต็มจอ */
   align-items: stretch;
@@ -337,8 +337,14 @@ input {
   grid-area: form;
 }
 
-.lobby__board {
+/* คอลัมน์ขวา: Top 10 + ปุ่ม Solo ใต้กล่อง (grid-area ตัวเดิมของกล่อง Top 10) */
+.lobby__right {
   grid-area: board;
+  display: grid;
+  grid-template-rows: 1fr auto; /* กล่อง Top 10 ยืดให้ขอบล่างของสองฝั่งเสมอกัน */
+  gap: 20px;
+  min-width: 0;
+  align-self: stretch;
 }
 
 .lobby__rules {
@@ -885,10 +891,10 @@ input {
   background: var(--white);
   /* จำกัดความสูงโดยคิดจากความกว้าง (ไม่ใช้ max-height เพราะจะไปทับอัตราส่วน 4:3)
      กันไม่ให้กระดานสูงจนดันกล่องใต้กระดานตกจอ ต้องเลื่อนลงไปดูทุกที
-     360px คือที่กันไว้ให้: แถบบน 66 + ป้าย Mini Challenge 44 + กล่องใต้กระดาน 176
-     + ช่องว่าง 24 + ขอบจอ 28 + เผื่ออีก 22 — คำนวณจากของจริงแล้ววัดซ้ำในเบราว์เซอร์
+     392px คือที่กันไว้ให้: แถบบน 66 + ป้าย Mini Challenge 44 + แถบเวลา 14 + กล่องใต้กระดาน 176
+     + ช่องว่าง 36 + ขอบจอ 28 + เผื่ออีก 28 (เดิม 360 ก่อนมีแถบเวลา · วัดจริงแล้วที่ 386 ล้น 3px) — คำนวณจากของจริงแล้ววัดซ้ำในเบราว์เซอร์
      ตั้งใจให้กระดานกินที่ที่เหลือทั้งหมด เพราะเป็นสิ่งที่ผู้เล่นจ้องตลอดเวลา */
-  max-width: calc((100dvh - 360px) * 4 / 3);
+  max-width: calc((100dvh - 392px) * 4 / 3);
   margin: 0 auto;
 }
 
@@ -1418,6 +1424,10 @@ input {
     order: 1;
   }
 
+  .timebar {
+    order: 1; /* ตามหลังกระดาน (ลำดับใน DOM เรียงให้อยู่แล้ว) */
+  }
+
   .game__tools {
     order: 2;
   }
@@ -1791,9 +1801,56 @@ select[class] {
 }
 /* ============================ Solo แข่งกับ AI (ข้อ 7) ============================ */
 
-/* ปุ่มเข้า Solo ในกล่องวิธีเล่นของหน้าแรก */
-.lobby__solo {
-  margin-top: 6px;
+/* ปุ่มเข้า Solo ใต้กล่อง Top 10 ของหน้าแรก — ใหญ่ สีชมพูเด่นกว่าปุ่มอื่น (ปุ่มหลักสีเขียวคือ START) */
+.solo-cta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  min-height: 76px;
+  padding: 10px 18px;
+  border: var(--border-thick);
+  box-shadow: var(--shadow);
+  background: var(--pink);
+  color: var(--white);
+  text-align: left;
+  cursor: pointer;
+}
+
+.solo-cta:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.solo-cta:active:not(:disabled) {
+  transform: translate(6px, 6px);
+  box-shadow: none;
+}
+
+.solo-cta:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.solo-cta__icon {
+  font-size: 40px;
+  line-height: 1;
+}
+
+.solo-cta__text {
+  display: grid;
+  gap: 2px;
+}
+
+.solo-cta__title {
+  font-family: var(--font-pixel);
+  font-size: 24px;
+  letter-spacing: 1px;
+  text-shadow: 2px 2px 0 var(--ink);
+}
+
+.solo-cta__sub {
+  font-family: var(--font-head);
+  font-size: 15px;
 }
 
 /* หน้ากรอกชื่อก่อนเริ่ม */
@@ -1864,6 +1921,13 @@ select[class] {
   font-size: 12px;
 }
 
+/* โหมดจำลอง = เดาสุ่ม ไม่ได้ดูภาพ เน้นให้เห็นเป็นสีแดงกว่าโหมดอื่น */
+.ai-box__mode--mock {
+  color: var(--red);
+  font-style: normal;
+  font-weight: 600;
+}
+
 .ai-box__leave {
   align-self: flex-end;
   min-height: 32px;
@@ -1890,4 +1954,160 @@ select[class] {
   margin: 4px 0 0;
   font-family: var(--font-pixel);
   font-size: 44px;
+}
+
+
+/* ============================ ตกแต่งให้มีชีวิตชีวา (รอบที่ 1) ============================ */
+
+/* ---- ป้ายริบบิ้นบนหัวหน้า ---- */
+.ribbon {
+  position: relative;
+  margin: -10px 0 0;
+  padding: 0 34px;
+  color: var(--white);
+  background: var(--ribbon-bg, var(--red));
+  border-top: var(--border);
+  border-bottom: var(--border);
+  box-shadow: var(--shadow-sm);
+  /* ปลายหยักรูปตัว V ทั้งสองข้าง */
+  clip-path: polygon(0 0, 100% 0, calc(100% - 14px) 50%, 100% 100%, 0 100%, 14px 50%);
+}
+
+.ribbon__text {
+  display: block;
+  padding: 8px 4px;
+  font-family: var(--font-pixel);
+  font-size: 18px;
+  letter-spacing: 3px;
+  text-shadow: 2px 2px 0 var(--ink);
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* ห้องรอ เป็นข้อความไทย ใช้ฟอนต์หัวข้อไทย (Silkscreen ไม่มีภาษาไทย) */
+.ribbon--th .ribbon__text {
+  font-family: var(--font-head);
+}
+
+.ribbon--red { --ribbon-bg: var(--red); }
+.ribbon--purple { --ribbon-bg: var(--purple); }
+.ribbon--teal { --ribbon-bg: var(--teal); }
+.ribbon--blue { --ribbon-bg: var(--blue); }
+
+/* ---- มาสคอต ---- */
+.mascot {
+  display: block;
+  width: 100%;
+  height: auto;
+  image-rendering: pixelated;
+  overflow: visible;
+}
+
+/* ลอยขึ้นลงทีละพิกเซลของตาราง (steps) ให้ดูเป็นพิกเซลอาร์ต ไม่ไหลลื่นเกินไป */
+.mascot__bob {
+  animation: mascot-bob 1.6s steps(1, end) infinite;
+}
+
+@keyframes mascot-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-1px); }
+}
+
+/* กระพริบตาทุกประมาณ 4 วินาที */
+.mascot__eyes {
+  transform-box: view-box;
+  transform-origin: 0 10px;
+  animation: mascot-blink 4s steps(1, end) infinite;
+}
+
+@keyframes mascot-blink {
+  0%, 94%, 100% { transform: scaleY(1); }
+  96%, 98% { transform: scaleY(0.12); }
+}
+
+.mascot--wait .mascot__prop,
+.mascot--happy .mascot__prop {
+  animation: mascot-wiggle 1s steps(1, end) infinite;
+}
+
+@keyframes mascot-wiggle {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(1px); }
+}
+
+.mascot--modal {
+  width: 150px;
+  margin: 0 auto 6px;
+}
+
+.mascot-note {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  width: min(100%, 200px);
+  margin: 0 auto;
+}
+
+.mascot-note__text {
+  margin: 0;
+  padding: 4px 10px;
+  border: var(--border);
+  background: var(--cream);
+  color: var(--ink);
+  box-shadow: var(--shadow-xs);
+  font-family: var(--font-head);
+  font-size: 14px;
+  text-align: center;
+}
+
+/* ซ้อนกลางกระดานตอนยังไม่มีเส้น · ไม่รับเมาส์/นิ้ว เพื่อไม่ขวางการวาด */
+.board__empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.board__empty .mascot-note {
+  width: min(46%, 220px);
+}
+
+/* ---- แถบเวลาใต้กระดาน ---- */
+.timebar {
+  width: 100%;
+  height: 14px;
+  margin: 0 auto;
+  border: var(--border);
+  background: var(--cream);
+  box-shadow: var(--shadow-xs);
+  max-width: calc((100dvh - 392px) * 4 / 3);
+  overflow: hidden;
+}
+
+.timebar__fill {
+  height: 100%;
+  background: var(--green);
+  transition: width 1s linear;
+}
+
+.timebar__fill--urgent {
+  background: var(--red);
+}
+
+@media (max-width: 1000px) {
+  .timebar {
+    max-width: 100%;
+  }
+}
+
+/* ---- ตัวเลือกลดภาพเคลื่อนไหว: ผู้ใช้ตั้งไว้ที่ระบบ (prefers-reduced-motion) ---- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
 }

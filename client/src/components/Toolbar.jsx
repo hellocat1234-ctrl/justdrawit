@@ -42,6 +42,8 @@ export default function Toolbar({
   // hideBucket : dont_lift_pen ซ่อนปุ่มถังสี ไม่ใช่แค่ปิด (กติกาคือ "ห้ามยกปากกา" การเทสีคือการวาด)
   // historyLocked: dont_lift_pen ห้ามย้อน/ทำซ้ำ — ใช้แค่เปลี่ยนข้อความ tooltip ให้อธิบายได้
   lockedColor = null,
+  // maxSize: เพดานขนาดแปรงของหน้านี้ (Solo ตั้ง 12 เพราะแปรงหนาทำให้ AI ทายแม่นลดลงครึ่งหนึ่ง) · ไม่ใส่ = SIZE_MAX
+  maxSize = SIZE_MAX,
   hideBucket = false,
   historyLocked = false,
 }) {
@@ -192,12 +194,12 @@ export default function Toolbar({
           type="range"
           className="toolbar__range"
           min={SIZE_MIN}
-          max={SIZE_MAX}
-          value={size}
+          max={Math.min(SIZE_MAX, maxSize)}
+          value={Math.min(size, maxSize)}
           aria-label="ขนาดแปรง"
           onChange={(e) => onSize(Number(e.target.value))}
         />
-        <span className="toolbar__size-value">{size}</span>
+        <span className="toolbar__size-value">{Math.min(size, maxSize)}</span>
       </div>
     </div>
   );

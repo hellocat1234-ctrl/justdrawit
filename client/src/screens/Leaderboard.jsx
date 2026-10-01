@@ -1,5 +1,6 @@
 import { useState } from "react";
 import Logo from "../components/Logo";
+import Ribbon from "../components/Ribbon";
 import RankTable from "../components/RankTable";
 import { monthKey, useLeaderboard } from "../hooks/useLeaderboard";
 
@@ -28,6 +29,7 @@ export default function Leaderboard({ onBack }) {
   return (
     <div className="screen">
       <Logo />
+      <Ribbon tone="blue">LEADERBOARD</Ribbon>
 
       <section className="panel board-panel">
         <div className="board-panel__head">

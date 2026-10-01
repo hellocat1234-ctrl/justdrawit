@@ -1,4 +1,5 @@
 import Modal from "./Modal";
+import Mascot from "./Mascot";
 
 const MEDALS = ["🥇", "🥈", "🥉"];
 
@@ -12,6 +13,7 @@ export default function GameOverModal({ ranking, isHost, onPlayAgain, onLeave })
 
   return (
     <Modal labelledBy="game-over-title">
+      <Mascot mood="trophy" className="mascot--modal" />
       <h2 className="modal__title" id="game-over-title">
         จบเกมแล้ว
       </h2>

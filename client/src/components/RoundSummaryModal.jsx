@@ -1,4 +1,5 @@
 import Modal from "./Modal";
+import Mascot from "./Mascot";
 
 // สรุปจบตา — เฉลยคำ + คะแนนที่แต่ละคนได้ในตานี้
 // results จาก server มีแค่ { playerId, gained } ต้องไปหาชื่อจากรายชื่อผู้เล่นเอง
@@ -8,6 +9,8 @@ export default function RoundSummaryModal({ summary, players }) {
 
   return (
     <Modal labelledBy="round-end-title">
+      {/* ไม่มีใครทายถูก = มาสคอตตกใจ · มีคนทายถูก = ดีใจ */}
+      <Mascot mood={gains.length === 0 ? "shock" : "happy"} className="mascot--modal" />
       <h2 className="modal__title" id="round-end-title">
         เฉลยคำตอบ
       </h2>
