@@ -52,7 +52,7 @@ const clamp01 = (v) => Math.min(1, Math.max(0, v));
  * ใช้ทั้งตอนจอเปลี่ยนขนาด (วาดซ้ำ) และจะใช้เป็น canvas_history ในข้อ 4
  */
 // empty = สิ่งที่โชว์กลางกระดานตอนยังไม่มีเส้น (มาสคอต) · หายเองเมื่อมีเส้นแรก และกลับมาถ้าล้างจอ
-const Canvas = forwardRef(function Canvas({ canDraw, tool, color, size, onAction, empty = null }, ref) {
+const Canvas = forwardRef(function Canvas({ canDraw, tool, color, size, onAction, empty = null, notice = null }, ref) {
   const [hasInk, setHasInk] = useState(false);
   // ── มาสคอตกลางกระดาน (prop empty) ──
   // ขึ้นตอนเริ่มตา/ช่วงเลือกคำเท่านั้น หายเมื่อมีเส้นแรก หรือครบ 3 วิ อย่างใดอย่างหนึ่งก่อน
@@ -622,6 +622,11 @@ const Canvas = forwardRef(function Canvas({ canDraw, tool, color, size, onAction
       />
       {(mascotOn || fading) && (
         <div className={`board__empty${mascotOn ? "" : " board__empty--out"}`}>{empty || lastEmptyRef.current}</div>
+      )}
+      {notice && (
+        <div className="board__notice" role="status">
+          {notice}
+        </div>
       )}
       {dbgText && <pre className="board__debug">{dbgText}</pre>}
     </div>

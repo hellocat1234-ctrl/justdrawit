@@ -16,6 +16,7 @@ const KINDS = {
   timeout: "⏰",
   hint: "💡",
   pen: "🖊️",
+  team: "🏁",
   info: "ℹ️",
 };
 

@@ -11,13 +11,19 @@ import { markRulesSeen, rulesSeen } from "../prefs";
 const ROUND_CHOICES = [1, 2, 3, 4, 5];
 const TIME_CHOICES = [30, 45, 60, 90];
 const MAX_PLAYERS = 8;
+const TEAMS = ["A", "B"];
+const TEAM_MIN = 2; // โหมดทีมต้องมีทีมละอย่างน้อย 2 คน (server เช็คซ้ำ)
 
 export default function WaitingRoom({ room, me, onLeave }) {
   const [copied, setCopied] = useState(false);
   // กล่องกติกาโชว์เองครั้งแรกที่เข้าห้อง (จำไว้ในเบราว์เซอร์) ครั้งต่อไปกดดูเองได้จากปุ่ม ℹ️ ในหน้าเกม
   const [showRules, setShowRules] = useState(() => !rulesSeen());
   const isHost = room.hostId === me?.playerId;
-  const canStart = room.players.length >= 2;
+  const teamMode = room.settings.mode === "team";
+  const teamSize = (t) => room.players.filter((p) => p.team === t).length;
+  const teamsReady = TEAMS.every((t) => teamSize(t) >= TEAM_MIN);
+  const canStart = teamMode ? teamsReady : room.players.length >= 2;
+  const myTeam = room.players.find((p) => p.id === me?.playerId)?.team ?? null;
 
   function copyCode() {
     navigator.clipboard?.writeText(room.code).then(
@@ -33,6 +39,29 @@ export default function WaitingRoom({ room, me, onLeave }) {
   // ส่งไปทั้งก้อนตามหน้าตาใน events.md (server อ่านแค่ rounds กับ drawTime)
   function changeSetting(patch) {
     socket.emit("update_settings", { ...room.settings, ...patch });
+  }
+
+  function renderPlayer(player) {
+    return (
+      <div
+        key={player.id}
+        className={player.id === me?.playerId ? "player-card player-card--me" : "player-card"}
+      >
+        <Avatar index={player.avatar} />
+        <span className="player-card__name">
+          {player.name}
+          {player.id === me?.playerId ? " (คุณ)" : ""}
+        </span>
+        <span className="player-card__badges">
+          {/* ใช้ hostId เป็นหลัก เพราะ server เป็นคนตัดสินว่าใครเป็นหัวห้อง */}
+          {player.id === room.hostId && (
+            <span title="หัวห้อง" aria-label="หัวห้อง">
+              👑
+            </span>
+          )}
+        </span>
+      </div>
+    );
   }
 
   return (
@@ -59,28 +88,30 @@ export default function WaitingRoom({ room, me, onLeave }) {
           <h2 className="panel__title">
             ผู้เล่น ({room.players.length}/{MAX_PLAYERS})
           </h2>
-          <div className="player-list">
-            {room.players.map((player) => (
-              <div
-                key={player.id}
-                className={player.id === me?.playerId ? "player-card player-card--me" : "player-card"}
-              >
-                <Avatar index={player.avatar} />
-                <span className="player-card__name">
-                  {player.name}
-                  {player.id === me?.playerId ? " (คุณ)" : ""}
-                </span>
-                <span className="player-card__badges">
-                  {/* ใช้ hostId เป็นหลัก เพราะ server เป็นคนตัดสินว่าใครเป็นหัวห้อง */}
-                  {player.id === room.hostId && (
-                    <span title="หัวห้อง" aria-label="หัวห้อง">
-                      👑
-                    </span>
+          {teamMode ? (
+            // โหมดทีม: สองฝั่ง ทีม A แดง ทีม B ฟ้า · ย้ายได้เฉพาะตัวเอง (set_team ของ server เป็นของตัวเองเท่านั้น)
+            <div className="team-cols">
+              {TEAMS.map((t) => (
+                <section className={`team-col team-col--${t}`} key={t} aria-label={`ทีม ${t}`}>
+                  <h3 className="team-col__title">
+                    <span>ทีม {t}</span>
+                    <span className="team-col__count">{teamSize(t)} คน</span>
+                  </h3>
+                  <div className="player-list">
+                    {room.players.filter((p) => p.team === t).map(renderPlayer)}
+                    {teamSize(t) === 0 && <p className="team-col__empty">ยังไม่มีใคร</p>}
+                  </div>
+                  {myTeam !== t && (
+                    <button type="button" className="btn team-col__join" onClick={() => socket.emit("set_team", { team: t })}>
+                      ย้ายมาทีม {t}
+                    </button>
                   )}
-                </span>
-              </div>
-            ))}
-          </div>
+                </section>
+              ))}
+            </div>
+          ) : (
+            <div className="player-list">{room.players.map(renderPlayer)}</div>
+          )}
           {/* อยู่คนเดียว = มาสคอตถือนาฬิการอเพื่อน */}
           {room.players.length < 2 && <MascotNote mood="wait">รอเพื่อนเข้าห้อง...</MascotNote>}
         </div>
@@ -88,6 +119,26 @@ export default function WaitingRoom({ room, me, onLeave }) {
         <div className="panel">
           {isHost ? (
             <div className="settings">
+              <div className="settings__row">
+                <span className="field__label">โหมด</span>
+                <div className="segmented" role="group" aria-label="โหมดเกม">
+                  {[
+                    ["classic", "แข่งเดี่ยว"],
+                    ["team", "ทีม A vs B"],
+                  ].map(([m, label]) => (
+                    <button
+                      key={m}
+                      type="button"
+                      className={room.settings.mode === m ? "seg seg--active" : "seg"}
+                      aria-pressed={room.settings.mode === m}
+                      onClick={() => changeSetting({ mode: m })}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div className="settings__row">
                 <span className="field__label">จำนวนรอบ</span>
                 <div className="segmented" role="group" aria-label="จำนวนรอบ">
@@ -123,7 +174,9 @@ export default function WaitingRoom({ room, me, onLeave }) {
               </div>
             </div>
           ) : (
-            <p className="hint-text">รอหัวห้องเริ่มเกม...</p>
+            <p className="hint-text">
+              โหมด: {teamMode ? "ทีม A vs B" : "แข่งเดี่ยว"} · รอหัวห้องเริ่มเกม...
+            </p>
           )}
 
           <div className="actions">
@@ -143,7 +196,14 @@ export default function WaitingRoom({ room, me, onLeave }) {
           </div>
 
           {isHost && !canStart && (
-            <p className="form-note">ต้องมีผู้เล่นอย่างน้อย 2 คนจึงเริ่มได้</p>
+            <p className="form-note">
+              {teamMode
+                ? `ต้องมีทีมละอย่างน้อย ${TEAM_MIN} คนจึงเริ่มได้ (ตอนนี้ทีม A ${teamSize("A")} คน · ทีม B ${teamSize("B")} คน)`
+                : "ต้องมีผู้เล่นอย่างน้อย 2 คนจึงเริ่มได้"}
+            </p>
+          )}
+          {!isHost && teamMode && !teamsReady && (
+            <p className="form-note">โหมดทีมต้องมีทีมละอย่างน้อย {TEAM_MIN} คนถึงจะเริ่มได้</p>
           )}
         </div>
       </div>

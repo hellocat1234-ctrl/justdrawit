@@ -20,6 +20,13 @@ function emptyGame() {
     chooseTime: 10,
     summary: null, // จาก round_end (เฉลย + คะแนนที่ได้แต่ละคน)
     ranking: null, // จาก game_end
+    // ── โหมดทีม (events.md หัวข้อ 8) — โหมดปกติค่าเหล่านี้ไม่ถูกใช้เลย ──
+    team: null, // ทีมของเรา จาก round_start
+    solvedTeams: [], // ทีมที่มีคนทายถูกแล้วในตานี้ (ชื่อทีมเท่านั้น)
+    firstTeam: null, // ทีมที่ทายถูกก่อน (ได้โบนัส +100 ต่อคนที่ทายถูก) null = ยังไม่มี/ไม่รู้
+    teamSkipped: false, // ตานี้ทีมเราไม่มีคนวาด (ถูกข้าม)
+    teamRanking: null, // จาก game_end
+    winner: null, // "A" | "B" | null (เสมอ)
     guessed: [], // playerId ที่ทายถูกในตานี้ ไว้ขึ้น ✅
     messages: [], // แชท
     // นับขึ้นทุกครั้งที่ขึ้นตาใหม่ — ใช้เป็นคีย์บอกกล่องแชทว่า "ขึ้นตาใหม่แล้ว โฟกัสช่องพิมพ์ให้หน่อย"
@@ -106,6 +113,12 @@ export function useGame() {
         // คนที่ทายถูกไปก่อนเราเข้าห้อง server บอกมาพร้อม round_start (guessedIds)
         // ไม่งั้นคนที่เข้าห้องกลางตาจะไม่เห็น ✅ ของคนที่ทายไปแล้ว (งานค้างจากข้อ 2)
         guessed: data.guessedIds ?? [],
+        // โหมดทีม: ทีมของเรา · ทีมที่ทายถูกไปแล้ว (ถ้าเข้ากลางตา) · ทีมเราไม่มีคนวาดไหม
+        // (round_start ของทีมที่ถูกข้างตั้งแต่เลือกคำมี drawerId: null)
+        team: data.team ?? null,
+        solvedTeams: data.solvedTeams ?? [],
+        firstTeam: data.solvedTeams?.length === 1 ? data.solvedTeams[0] : null,
+        teamSkipped: Boolean(data.team) && data.drawerId === null,
         roundKey: g.roundKey + 1,
         canUndo: false, // ตาใหม่ = กระดานว่าง server ล้างประวัติแล้ว
         canRedo: false,
@@ -121,6 +134,14 @@ export function useGame() {
     // dont_lift_pen: คนวาดยกปากกาแล้ว — server ส่งครั้งเดียวต่อตา (events.md pen_locked)
     // เอาไว้ปิดเครื่องมือวาดของเรา เป็นแค่การช่วยให้ใช้ง่าย ของจริง server บังคับอยู่แล้ว
     // ข้อความระบบใส่กล่อง "ในห้อง" เพื่อให้ทุกคน (รวมคนที่ไม่ได้วาด) เข้าใจว่าทำไมภาพหยุด
+    // โหมดทีม: คนวาดของทีมเราหลุดกลางตา → ทีมเราถูกข้ามตานี้ (server ส่งถึงทีมเราเท่านั้น)
+    const onTeamSkipped = () =>
+      setGame((g) => ({
+        ...g,
+        teamSkipped: true,
+        messages: [...g.messages, { system: true, kind: "leave", text: "คนวาดของทีมหลุด ตานี้ทีมเราไม่มีคนวาด" }],
+      }));
+
     const onPenLocked = () =>
       setGame((g) => ({
         ...g,
@@ -163,6 +184,8 @@ export function useGame() {
         ...emptyGame(),
         messages: g.messages,
         ranking: data.ranking,
+        teamRanking: data.teamRanking ?? null,
+        winner: data.winner ?? null,
         totalRounds: g.totalRounds,
       }));
 
@@ -170,12 +193,48 @@ export function useGame() {
 
     // ทายถูก: เก็บ id ไว้ขึ้น ✅ ที่แถบรายชื่อ และเพิ่มข้อความระบบไว้กล่อง "ในห้อง"
     // server ไม่ได้ส่งข้อความระบบนี้มา (ส่งมาแค่ id กับชื่อ) จึงประกอบเองฝั่งนี้
+    //
+    // โหมดทีม (events.md หัวข้อ 8) มีสองหน้าตา:
+    //   { playerId, name, team } — คนในทีมเราทายถูก (ติ๊ก ✅ ได้)
+    //   { team }                 — ทีมอื่นมีคนทายถูกคนแรก (ไม่มีชื่อ ไม่มีคำ) ใช้บอกใน "ในห้อง" เท่านั้น
+    // ทีมที่ทายถูกก่อนได้โบนัส +100 ต่อคน — จำว่าทีมไหนก่อนจากลำดับที่ event มาถึง (server ส่งเรียงตามจริง)
     const onCorrectGuess = (data) =>
-      setGame((g) => ({
-        ...g,
-        guessed: [...g.guessed, data.playerId],
-        messages: [...g.messages, { system: true, kind: "correct", text: `${data.name} ทายถูก` }],
-      }));
+      setGame((g) => {
+        const note = (kind, text) => ({ system: true, kind, text });
+        if (!data.team) {
+          return {
+            ...g,
+            guessed: [...g.guessed, data.playerId],
+            messages: [...g.messages, note("correct", `${data.name} ทายถูก`)],
+          };
+        }
+        const isFirst = !g.solvedTeams.includes(data.team) && g.solvedTeams.length === 0;
+        const teamNew = !g.solvedTeams.includes(data.team);
+        const solvedTeams = teamNew ? [...g.solvedTeams, data.team] : g.solvedTeams;
+        const firstTeam = isFirst ? data.team : g.firstTeam;
+        const msgs = [];
+        if (data.playerId) {
+          const bonus = firstTeam === data.team ? " (โบนัสทีมแรก +100)" : "";
+          msgs.push(note("correct", `${data.name} ทายถูก${bonus}`));
+        }
+        if (teamNew) {
+          msgs.push(
+            note(
+              "team",
+              isFirst
+                ? `ทีม ${data.team} ทายถูกก่อน! ทุกคนที่ทายถูกในทีมได้โบนัส +100`
+                : `ทีม ${data.team} ทายถูกแล้ว (ทีมที่สองไม่ได้โบนัส)`
+            )
+          );
+        }
+        return {
+          ...g,
+          guessed: data.playerId ? [...g.guessed, data.playerId] : g.guessed,
+          solvedTeams,
+          firstTeam,
+          messages: [...g.messages, ...msgs],
+        };
+      });
 
     // ข้อความระบบ "ใครเข้าออก" — server ไม่ได้ส่ง event นี้มา ต้องเทียบรายชื่อเอาเอง
     const onRoomUpdate = (next) => {
@@ -231,6 +290,7 @@ export function useGame() {
     socket.on("your_word", onYourWord);
     socket.on("hint_reveal", onHintReveal);
     socket.on("pen_locked", onPenLocked);
+    socket.on("team_skipped", onTeamSkipped);
     socket.on("timer", onTimer);
     socket.on("round_end", onRoundEnd);
     socket.on("game_end", onGameEnd);
@@ -247,6 +307,7 @@ export function useGame() {
       socket.off("your_word", onYourWord);
       socket.off("hint_reveal", onHintReveal);
       socket.off("pen_locked", onPenLocked);
+      socket.off("team_skipped", onTeamSkipped);
       socket.off("timer", onTimer);
       socket.off("round_end", onRoundEnd);
       socket.off("game_end", onGameEnd);

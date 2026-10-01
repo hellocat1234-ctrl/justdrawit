@@ -2010,6 +2010,8 @@ async function main() {
     H2.socket.disconnect(); // คนวาดทีม A หลุดกลางตา
     await wait(300);
     check("คนวาดหลุดกลางตา: เกมเดินต่อ", last(a3, "room_update").status, "playing");
+    check("คนวาดหลุดกลางตา: ทีม A ได้ team_skipped {team:A} · ทีม B ไม่ได้",
+      [count(a3, "team_skipped") === 1 && last(a3, "team_skipped").team === "A", count(b1, "team_skipped")], [true, 0]);
     a3.socket.emit("guess", { text: w3 });
     await wait(300);
     check("ทีม A ไม่มีคนวาดแล้ว ทายถูกก็ไม่ได้คะแนน", last(a3, "room_update").players.find((p) => p.name === "a3").score, 0);

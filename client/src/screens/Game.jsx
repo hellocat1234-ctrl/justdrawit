@@ -42,12 +42,19 @@ export default function Game({
   const players = room.players;
   const isDrawer = game.drawerId === meId;
   const drawing = Boolean(game.round); // กำลังวาดอยู่ (round_start มาแล้ว ยังไม่ round_end)
-  const drawerName = players.find((p) => p.id === game.drawerId)?.name ?? "—";
+  // โหมดทีม: drawerId/hint/✅ ที่ได้รับเป็นของ "ทีมเรา" เสมอ (server ส่งแยกทีม)
+  const teamMode = room.settings.mode === "team";
+  const myTeam = teamMode ? players.find((p) => p.id === meId)?.team ?? null : null;
+  const teamSkipped = teamMode && game.teamSkipped && drawing; // ตานี้ทีมเราไม่มีคนวาด
+  const drawerName =
+    players.find((p) => p.id === game.drawerId)?.name ?? (teamSkipped ? "ไม่มีคนวาด" : "—");
 
   // มาสคอตกลางกระดานตอนยังไม่มีเส้น (หายเองเมื่อมีเส้นแรก) — เลือกอารมณ์ตามสถานะของตา
   // ถ้ามีหน้าต่างสรุปตา/จบเกมเปิดอยู่ ภาพของตาที่แล้วยังค้างบนกระดาน มาสคอตจึงไปอยู่ในหน้าต่างนั้นแทน
   let boardMascot = null;
-  if (drawing) {
+  if (teamSkipped) {
+    boardMascot = <MascotNote mood="shock">ตานี้ทีมเราไม่มีคนวาด รอตาหน้านะ</MascotNote>;
+  } else if (drawing) {
     boardMascot = isDrawer ? (
       <MascotNote mood="draw">ถึงตาคุณวาดแล้ว!</MascotNote>
     ) : (
@@ -169,9 +176,24 @@ export default function Game({
     <div className="screen screen--game">
       <header className="topbar">
         <div className="topbar__who">
-          <span className="topbar__label">คนวาด</span>
+          <span className="topbar__label">{teamMode ? `คนวาดทีม ${myTeam ?? ""}` : "คนวาด"}</span>
           <span className="topbar__name">{drawerName}</span>
         </div>
+
+        {/* โหมดทีม: คะแนนทีม A vs B (ผลรวมสมาชิก จาก room.teamScores) ทีมเราขอบหนากว่า */}
+        {teamMode && (
+          <div className="team-vs" aria-label="คะแนนทีม">
+            {["A", "B"].map((t, i) => (
+              <span key={t} className="team-vs__item">
+                {i === 1 && <span className="team-vs__sep">vs</span>}
+                <span className={`team-vs__chip team-vs__chip--${t}${myTeam === t ? " team-vs__chip--mine" : ""}`}>
+                  <span className="team-vs__word">ทีม </span>
+                  {t} <b>{room.teamScores?.[t] ?? 0}</b>
+                </span>
+              </span>
+            ))}
+          </div>
+        )}
 
         {/* คนวาดเห็นคำจริง (ได้จาก your_word) คนอื่นเห็นคำใบ้เป็นขีด */}
         <div className="topbar__word">
@@ -241,6 +263,9 @@ export default function Game({
           <Scoreboard
             players={players}
             drawerId={game.drawerId}
+            drawerIds={game.round?.drawerIds ?? null}
+            teamScores={teamMode ? room.teamScores ?? { A: 0, B: 0 } : null}
+            myTeam={myTeam}
             nextDrawerId={game.round?.nextDrawerId ?? null}
             drawing={drawing}
             guessed={game.guessed}
@@ -261,6 +286,8 @@ export default function Game({
             // แล้ว server เป็นคนส่งให้คนอื่น (ไม่ส่งกลับมาหาเรา จึงไม่มีภาพซ้อน)
             onAction={sendAction}
             empty={boardMascot}
+            // โหมดทีม: ทีมเราถูกข้ามกลางตา (คนวาดหลุด) — แถบแจ้งบนกระดาน อยู่ใน .board ไม่เพิ่มความสูง
+            notice={teamSkipped ? "ตานี้ทีมเราไม่มีคนวาด (คนวาดของทีมหลุด) รอตาหน้านะ" : null}
           />
 
           {/* แถบเวลาวิ่งลดลงใต้กระดาน (ความสูงนับรวมใน 386px ของ .board แล้ว) */}
@@ -309,10 +336,13 @@ export default function Game({
       {game.options && (
         <WordChoiceModal options={game.options} secondsLeft={chooseLeft} onChoose={chooseWord} />
       )}
-      {game.summary && <RoundSummaryModal summary={game.summary} players={players} />}
+      {game.summary && <RoundSummaryModal summary={game.summary} players={players} myTeam={myTeam} />}
       {game.ranking && (
         <GameOverModal
           ranking={game.ranking}
+          teamRanking={teamMode ? game.teamRanking : null}
+          winner={game.winner}
+          myTeam={myTeam}
           isHost={room.hostId === meId}
           onPlayAgain={startGame}
           onLeave={onLeave}

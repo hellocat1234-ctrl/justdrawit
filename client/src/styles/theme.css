@@ -2435,3 +2435,266 @@ select[class] {
 :root[data-motion="reduce"] .confetti {
   display: none;
 }
+
+
+/* ============================ โหมดทีม (ส่วนที่ 2) ============================
+   ทีม A = แดง · ทีม B = ฟ้า  ทุกที่ที่ใช้สีบอกทีม มีตัวอักษร "ทีม A/B" กำกับด้วยเสมอ (ไม่พึ่งสีอย่างเดียว) */
+
+:root {
+  --team-a: #d9363e;
+  --team-a-soft: #fde3e1;
+  --team-b: #1e6fe8;
+  --team-b-soft: #dce9fc;
+}
+
+/* ห้องรอ: สองคอลัมน์ข้างกัน (มือถือเรียงลง) */
+.team-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.team-col {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  padding: 10px;
+  border: var(--border);
+  min-width: 0;
+}
+
+.team-col--A {
+  background: var(--team-a-soft);
+  border-color: var(--team-a);
+}
+
+.team-col--B {
+  background: var(--team-b-soft);
+  border-color: var(--team-b);
+}
+
+.team-col .player-list {
+  margin-top: 0;
+}
+
+.team-col .player-card {
+  min-width: 0;
+}
+
+.team-col .player-card__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.team-col__title {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin: 0;
+  font-family: var(--font-head);
+  font-weight: 600;
+  font-size: 18px;
+}
+
+.team-col--A .team-col__title {
+  color: var(--team-a);
+}
+
+.team-col--B .team-col__title {
+  color: var(--team-b);
+}
+
+.team-col__count {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.team-col__empty {
+  margin: 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.team-col__join {
+  min-height: 44px;
+}
+
+@media (max-width: 620px) {
+  .team-cols {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ชิปคะแนนทีม ใช้ทั้งแถบบน หน้าต่างสรุปตา และจบเกม */
+.team-vs {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.team-vs__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.team-vs__sep {
+  font-family: var(--font-pixel);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.team-vs__chip {
+  padding: 4px 10px;
+  border: var(--border);
+  font-family: var(--font-head);
+  font-weight: 500;
+  font-size: 15px;
+  white-space: nowrap;
+  color: var(--ink);
+}
+
+.team-vs__chip b {
+  font-family: var(--font-pixel);
+  font-weight: 700;
+  margin-left: 4px;
+}
+
+.team-vs__chip--A {
+  background: var(--team-a-soft);
+  border-color: var(--team-a);
+}
+
+.team-vs__chip--B {
+  background: var(--team-b-soft);
+  border-color: var(--team-b);
+}
+
+/* ทีมของเรา ขอบหนากว่า + เงา */
+.team-vs__chip--mine {
+  border-width: 4px;
+  box-shadow: var(--shadow-xs);
+}
+
+/* แถบคะแนนจัดกลุ่มตามทีม */
+.score-teams {
+  display: grid;
+  gap: 10px;
+}
+
+.score-team {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.score-team__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin: 0;
+  padding: 3px 8px;
+  border: var(--border);
+  font-family: var(--font-head);
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.score-team--A .score-team__head {
+  background: var(--team-a-soft);
+  border-color: var(--team-a);
+  color: var(--team-a);
+}
+
+.score-team--B .score-team__head {
+  background: var(--team-b-soft);
+  border-color: var(--team-b);
+  color: var(--team-b);
+}
+
+.score-team__total {
+  font-family: var(--font-pixel);
+}
+
+/* ป้ายแจ้งบนกระดานเมื่อทีมถูกข้ามกลางตา (อยู่ใน .board ไม่เพิ่มความสูง) */
+.board__notice {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  padding: 8px 12px;
+  border: var(--border);
+  background: var(--cream);
+  box-shadow: var(--shadow-xs);
+  font-family: var(--font-head);
+  font-size: 15px;
+  text-align: center;
+  pointer-events: none;
+}
+
+/* หน้าต่างสรุปตา / จบเกม */
+.team-result,
+.team-winner {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  margin: 8px 0;
+}
+
+.team-result__first {
+  margin: 0;
+  font-family: var(--font-head);
+  font-weight: 500;
+}
+
+.team-winner {
+  padding: 10px;
+  border: var(--border-thick);
+  background: var(--white);
+}
+
+.team-winner--A {
+  background: var(--team-a-soft);
+  border-color: var(--team-a);
+}
+
+.team-winner--B {
+  background: var(--team-b-soft);
+  border-color: var(--team-b);
+}
+
+.team-winner__title {
+  margin: 0;
+  font-family: var(--font-head);
+  font-weight: 600;
+  font-size: 24px;
+}
+
+/* ไอแพดแนวนอน/จอแคบ: คะแนนทีมในแถบบนลงบรรทัดเดียวกับคำใบ้ได้ แถวคะแนนทีมเรียงข้างกัน */
+/* ไอแพดแนวนอน/โน้ตบุ๊กเล็ก: แถบบนแน่น ตัดคำว่า "ทีม" ในชิปแถบบนออก เหลือ "A 120 vs B 80" (สีกับตัวอักษร A/B ยังบอกทีมครบ)
+   ไม่งั้นแถบบนขึ้นสองบรรทัด สูงขึ้น 15px แล้วดันกล่องใต้กระดานตกจอที่ 1024×768 */
+@media (max-width: 1400px) {
+  .topbar .team-vs__word {
+    display: none;
+  }
+
+  .topbar .team-vs__chip {
+    padding: 3px 7px;
+  }
+}
+
+@media (max-width: 1000px) {
+  .score-teams {
+    grid-auto-flow: row;
+  }
+
+  .team-vs__chip {
+    font-size: 14px;
+    padding: 3px 8px;
+  }
+}

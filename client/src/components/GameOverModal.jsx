@@ -6,7 +6,9 @@ const MEDALS = ["🥇", "🥈", "🥉"];
 
 // จบเกม — แท่นรางวัลอันดับ 1-3
 // หัวห้องมีปุ่มเล่นอีกรอบ (start_game) ทุกคนมีปุ่มกลับหน้าแรก (leave_room)
-export default function GameOverModal({ ranking, isHost, onPlayAgain, onLeave }) {
+export default function GameOverModal({ ranking, isHost, onPlayAgain, onLeave, teamRanking = null, winner = null, myTeam = null }) {
+  // โหมดทีม: ประกาศทีมที่ชนะ (เสมอ = winner เป็น null) พลุเล่นเหมือนเดิมเพราะอยู่ในกล่องเดียวกัน
+  const teamMode = Boolean(teamRanking);
   const top3 = ranking.slice(0, 3);
   const rest = ranking.slice(3);
   // เรียงให้ที่ 1 อยู่กลาง เวลาตกแต่งด้วย CSS จะได้เหมือนแท่นรางวัลจริง
@@ -19,7 +21,24 @@ export default function GameOverModal({ ranking, isHost, onPlayAgain, onLeave })
         จบเกมแล้ว
       </h2>
 
+      {teamMode && (
+        <div className={`team-winner${winner ? ` team-winner--${winner}` : ""}`}>
+          <p className="team-winner__title">
+            {winner ? `🏆 ทีม ${winner} ชนะ!` : "🤝 เสมอกัน!"}
+            {winner && winner === myTeam ? " (ทีมคุณ)" : ""}
+          </p>
+          <div className="team-vs">
+            {teamRanking.map((t) => (
+              <span key={t.team} className={`team-vs__chip team-vs__chip--${t.team}`}>
+                ทีม {t.team} <b>{t.score}</b>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* พลุพุ่งจากแท่นรางวัล: กล่อง relative ครอบเฉพาะแท่น ให้พลุเริ่มที่แท่นไม่ใช่ที่มุมหน้าต่าง */}
+      {teamMode && <p className="modal__note">คะแนนรายคน</p>}
       <div className="podium-stage">
         <Confetti />
         <ol className="podium">

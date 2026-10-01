@@ -13,13 +13,51 @@ import AnimatedNumber from "./AnimatedNumber";
 //   หัวห้อง · กำลังวาด · วาดคนถัดไป
 // "กำลังวาด/วาดคนถัดไป" โชว์เฉพาะตอนกำลังวาด (drawing) เพราะระหว่างพักตา drawerId ยังเป็นคนเก่าค้างอยู่
 // nextDrawerId มาจาก server (round_start) client เดาไม่ได้ · เช็คว่ายังอยู่ในห้องก่อนโชว์ เพราะอาจออกไประหว่างตา
-export default function Scoreboard({ players, drawerId, nextDrawerId = null, drawing = false, guessed = [], meId }) {
-  const sorted = [...players].sort((a, b) => b.score - a.score);
+//
+// โหมดทีม (teamScores มีค่า): จัดกลุ่มตามทีม A / B หัวกลุ่มบอกคะแนนทีม (ผลรวมสมาชิก) · ในทีมเรียงตามคะแนนเหมือนเดิม
+// หมายเหตุ: ใน round_start ของโหมดทีม drawerId/nextDrawerId เป็นของ "ทีมเรา" เท่านั้น
+//   ป้าย ✏️ ของทีมอื่นจึงอาศัย drawerIds (คนวาดของทั้งสองทีม) ซึ่ง server ส่งมาให้
+export default function Scoreboard({
+  players,
+  drawerId,
+  drawerIds = null,
+  nextDrawerId = null,
+  drawing = false,
+  guessed = [],
+  meId,
+  teamScores = null,
+  myTeam = null,
+}) {
+  const byScore = (list) => [...list].sort((a, b) => b.score - a.score);
+  const drawerSet = new Set([drawerId, ...(drawerIds ? Object.values(drawerIds) : [])].filter(Boolean));
 
+  if (teamScores) {
+    return (
+      <div className="score-teams">
+        {["A", "B"].map((t) => (
+          <section className={`score-team score-team--${t}`} key={t} aria-label={`ทีม ${t}`}>
+            <h3 className="score-team__head">
+              <span>
+                ทีม {t}
+                {myTeam === t ? " (ทีมคุณ)" : ""}
+              </span>
+              <span className="score-team__total">
+                <AnimatedNumber value={teamScores[t] ?? 0} />
+              </span>
+            </h3>
+            {renderList(byScore(players.filter((p) => p.team === t)))}
+          </section>
+        ))}
+      </div>
+    );
+  }
+  return renderList(byScore(players));
+
+  function renderList(sorted) {
   return (
     <ul className="score-list">
       {sorted.map((p) => {
-        const isDrawer = p.id === drawerId;
+        const isDrawer = drawerSet.has(p.id);
         const hasGuessed = guessed.includes(p.id);
         const isNext = drawing && !isDrawer && nextDrawerId === p.id;
         const tags = [];
@@ -55,4 +93,5 @@ export default function Scoreboard({ players, drawerId, nextDrawerId = null, dra
       })}
     </ul>
   );
+  }
 }

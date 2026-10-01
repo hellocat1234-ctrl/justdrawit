@@ -810,6 +810,8 @@ function leaveRoom(socket) {
       lane.drawerId = null;
       lane.skipped = true;
       lane.done = true;
+      // บอกทีมนั้นให้รู้ว่าตานี้ทีมเราไม่มีคนวาด (ส่งถึงแค่ทีมตัวเอง ไม่มีชื่อ ไม่มีคำ)
+      io.to(lane.code).emit("team_skipped", { team: lane.team });
     }
     checkTeamRoundEnd(room); // คนทายหลุดก็ทำให้ทีมทายครบได้ จึงต้องเช็คเสมอ
   } else if (room.status === "playing") {

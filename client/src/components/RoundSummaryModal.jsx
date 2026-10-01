@@ -3,7 +3,7 @@ import Mascot from "./Mascot";
 
 // สรุปจบตา — เฉลยคำ + คะแนนที่แต่ละคนได้ในตานี้
 // results จาก server มีแค่ { playerId, gained } ต้องไปหาชื่อจากรายชื่อผู้เล่นเอง
-export default function RoundSummaryModal({ summary, players }) {
+export default function RoundSummaryModal({ summary, players, myTeam = null }) {
   const nameOf = (id) => players.find((p) => p.id === id)?.name ?? "?";
   const gains = summary.results ?? [];
 
@@ -15,6 +15,24 @@ export default function RoundSummaryModal({ summary, players }) {
         เฉลยคำตอบ
       </h2>
       <p className="answer">{summary.word}</p>
+
+      {/* โหมดทีม: ทีมไหนทายถูกก่อน (ได้โบนัส +100) และคะแนนที่แต่ละทีมได้ตานี้ */}
+      {summary.teamGained && (
+        <div className="team-result">
+          <p className="team-result__first">
+            {summary.firstTeam
+              ? `ทีม ${summary.firstTeam}${summary.firstTeam === myTeam ? " (ทีมคุณ)" : ""} ทายถูกก่อน! โบนัส +100 ต่อคน`
+              : "ตานี้ไม่มีทีมไหนทายถูก"}
+          </p>
+          <div className="team-vs">
+            {["A", "B"].map((t) => (
+              <span key={t} className={`team-vs__chip team-vs__chip--${t}`}>
+                ทีม {t} <b>+{summary.teamGained[t] ?? 0}</b>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       {gains.length === 0 ? (
         <p className="modal__note">ตานี้ไม่มีใครทายถูก</p>
