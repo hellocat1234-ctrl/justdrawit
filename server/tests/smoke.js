@@ -1811,6 +1811,214 @@ async function main() {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
+  await runPart("27. โหมดทีม — แยกทีม (ภาพ แชท คำใบ้ ย้อนกลับ) · คะแนนทีม · หมุนคนวาด · คนวาดหลุด", async () => {
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const mk = async (name) => track(await connect());
+    const count = (P, name, from = 0) => P.dump().slice(from).filter((e) => e.name === name).length;
+    const last = (P, name) => P.dump().filter((e) => e.name === name).at(-1)?.args[0];
+    const all = [];
+    const join = async (code, name) => {
+      const P = await mk(name); all.push(P);
+      const r = await emitAck(P.socket, "join_room", { code, name, avatar: 0 });
+      await wait(150); // ให้ room_update ถึงทุกคนก่อนเช็ค
+      return { P, r };
+    };
+    const teamOf = (host, id) => last(host, "room_update").players.find((p) => p.id === id).team;
+
+    // ---------- ตั้งค่า + จัดทีมอัตโนมัติ ----------
+    const H = await mk("H"); all.push(H);
+    const created = await emitAck(H.socket, "create_room", { name: "Hh", avatar: 0 });
+    const code = created.code;
+    await wait(200);
+    check("classic: ยังไม่มี teamScores และไม่มีทีม", [last(H, "room_update").teamScores, last(H, "room_update").players[0].team], [undefined, null]);
+    const { P: P2 } = await join(code, "B2");  // เข้าตอนยัง classic
+    H.socket.emit("update_settings", { mode: "team", rounds: 1, drawTime: 30 });
+    await wait(200);
+    let st = last(H, "room_update");
+    check("หัวห้องเลือก mode team → settings.mode และมี teamScores", [st.settings.mode, st.teamScores], ["team", { A: 0, B: 0 }]);
+    check("คนที่มีอยู่แล้วถูกจัดทีมสมดุล (A,B)", st.players.map((p) => p.team), ["A", "B"]);
+    const { P: P3 } = await join(code, "A3");
+    const { P: P4 } = await join(code, "B4");
+    check("คนเข้าใหม่เข้าทีมที่คนน้อยกว่า: A3→A, B4→B", [teamOf(H, P3.socket.id), teamOf(H, P4.socket.id)], ["A", "B"]);
+    P2.socket.emit("update_settings", { mode: "classic" });
+    check("ไม่ใช่หัวห้องสลับโหมด → NOT_HOST", (await P2.tryWait("game_error", (e) => e.code === "NOT_HOST", 800)) !== null, true);
+    H.socket.emit("update_settings", { mode: "banana" });
+    await wait(150);
+    check("mode แปลกๆ ถูกเมิน", last(H, "room_update").settings.mode, "team");
+
+    P3.socket.emit("set_team", { team: "C" });
+    P3.socket.emit("set_team", null);
+    P3.socket.emit("set_team", { team: "B" });
+    await wait(200);
+    check("set_team ค่าผิดถูกเมิน · ค่าถูกเปลี่ยนทีมได้", teamOf(H, P3.socket.id), "B");
+    // ทีม A เหลือคนเดียว → เริ่มไม่ได้
+    H.socket.emit("start_game");
+    checkOk("ทีมไม่ครบ 2 คน → เริ่มเกมไม่ได้ (NOT_ENOUGH_PLAYERS)", (await H.tryWait("game_error", (e) => e.code === "NOT_ENOUGH_PLAYERS", 1000)) !== null);
+    P3.socket.emit("set_team", { team: "A" });
+    await wait(150);
+    check("กลับมาสมดุล 2 ต่อ 2", [teamOf(H, H.socket.id), teamOf(H, P2.socket.id), teamOf(H, P3.socket.id), teamOf(H, P4.socket.id)], ["A", "B", "A", "B"]);
+
+    // ---------- เริ่มเกม: คำเดียวกัน คนวาดคนละทีม ----------
+    clearAll(H, P2, P3, P4);
+    H.socket.emit("start_game");
+    const ch = await H.wait("choose_word");
+    const chB = await P2.wait("choose_word");
+    check("คนวาดสองทีมได้ตัวเลือกชุดเดียวกัน", ch.options, chB.options);
+    check("คนทายไม่ได้ choose_word", count(P3, "choose_word") + count(P4, "choose_word"), 0);
+    P3.socket.emit("word_chosen", { word: ch.options[0] });
+    await wait(150);
+    check("คนที่ไม่ใช่คนวาดเลือกคำไม่ได้", count(H, "round_start"), 0);
+    const word = ch.options[1];
+    P2.socket.emit("word_chosen", { word }); // คนวาดทีม B เลือกก่อน → ใช้กับทั้งสองทีม
+    const rsA = await P3.wait("round_start");
+    const rsB = await P4.wait("round_start");
+    const wA = await H.wait("your_word");
+    const wB = await P2.wait("your_word");
+    check("ทั้งสองทีมได้คำเดียวกัน (เฉพาะคนวาด)", [wA.word, wB.word, count(P3, "your_word"), count(P4, "your_word")], [word, word, 0, 0]);
+    check("round_start ทีม A: team/drawerIds ถูก ไม่มีคำใบ้", [rsA.team, rsA.drawerIds, rsA.hint, rsA.drawerId], ["A", { A: H.socket.id, B: P2.socket.id }, null, H.socket.id]);
+    check("round_start ทีม B: team/drawerId เป็นของทีมตัวเอง", [rsB.team, rsB.drawerId], ["B", P2.socket.id]);
+    checkOk("round_start ไม่มีคำจริง", !JSON.stringify([rsA, rsB]).includes(word));
+    check("ทุกคนได้ round_start แค่ครั้งเดียว", [count(H, "round_start"), count(P2, "round_start"), count(P3, "round_start"), count(P4, "round_start")], [1, 1, 1, 1]);
+    check("Mini Challenge เหมือนกันทั้งสองทีม", rsA.challenge, rsB.challenge);
+
+    // ---------- เส้นของทีม A ไปถึงแค่ทีม A ----------
+    // สีตาม challenge ของตานี้ เผื่อเป็น colour_fix/dont_lift_pen: ใช้ eraser ถ้าล็อกสี
+    const ch0 = rsA.challenge;
+    const color = ch0.type === "colour_fix" ? ch0.color : "#000000";
+    const mark = (Ps) => Object.fromEntries(Ps.map((P, i) => [i, P.dump().length]));
+    const m = { H: H.dump().length, P2: P2.dump().length, P3: P3.dump().length, P4: P4.dump().length };
+    const draw = (D, c = color) => { D.socket.emit("stroke_start", { x: 0.1, y: 0.1, color: c, size: 5, tool: "pen" }); D.socket.emit("stroke_points", { points: [{ x: 0.2, y: 0.2 }, { x: 0.3, y: 0.3 }] }); D.socket.emit("stroke_end", {}); };
+    draw(H);
+    await wait(300);
+    check("คนทีม A เห็นเส้นทีม A (stroke_start/points/end)", [count(P3, "stroke_start", m.P3), count(P3, "stroke_points", m.P3), count(P3, "stroke_end", m.P3)], [1, 1, 1]);
+    check("ทีม B ไม่ได้รับเส้นของทีม A เลย", [P2, P4].map((P, i) => ["stroke_start", "stroke_points", "stroke_end"].reduce((n, e) => n + count(P, e, [m.P2, m.P4][i]), 0)), [0, 0]);
+    check("คนวาดไม่ได้รับเส้นของตัวเองกลับ", count(H, "stroke_start", m.H), 0);
+    // คนทายทีม A / ทีม B พยายามวาดเข้าทีมอื่น
+    const m2 = { H: H.dump().length, P2: P2.dump().length, P3: P3.dump().length, P4: P4.dump().length };
+    draw(P3); draw(P4); // คนทายส่งการวาด (ทีมตัวเองและทีมอื่น) ต้องไม่มีผลกับใครเลย
+    await wait(300);
+    check("คนทายส่งการวาด → ไม่มีใครได้รับ", ["H", "P2", "P3", "P4"].reduce((n, k) => n + count({ H, P2, P3, P4 }[k], "stroke_start", m2[k]), 0), 0);
+    // คนวาดทีม B วาด → ทีม A ไม่เห็น
+    const m3 = { H: H.dump().length, P3: P3.dump().length, P4: P4.dump().length };
+    draw(P2);
+    await wait(300);
+    check("เส้นทีม B ถึง P4 (ทีมเดียวกัน) แต่ไม่ถึงทีม A", [count(P4, "stroke_start", m3.P4), count(H, "stroke_start", m3.H), count(P3, "stroke_start", m3.P3)], [1, 0, 0]);
+
+    // ---------- แชท/ทายผิดอยู่ในทีม ----------
+    const c0 = { H: H.dump().length, P2: P2.dump().length, P3: P3.dump().length, P4: P4.dump().length };
+    P3.socket.emit("guess", { text: "ทายมั่วทีมเอ" });
+    await wait(300);
+    check("ทายผิดทีม A เห็นเฉพาะทีม A", [count(H, "chat_message", c0.H), count(P3, "chat_message", c0.P3), count(P2, "chat_message", c0.P2), count(P4, "chat_message", c0.P4)], [1, 1, 0, 0]);
+    H.socket.emit("guess", { text: "คนวาดพิมพ์" });
+    await wait(200);
+    check("คนวาดพิมพ์ไม่ได้ (ไม่มีใครได้รับ)", count(P3, "chat_message", c0.P3), 1);
+
+    // ---------- คำใบ้แยกทีม ----------
+    const h0 = { H: H.dump().length, P2: P2.dump().length, P3: P3.dump().length, P4: P4.dump().length };
+    H.socket.emit("request_hint");
+    await wait(300);
+    check("คำใบ้ทีม A ถึงทีม A เท่านั้น", [count(H, "hint_reveal", h0.H), count(P3, "hint_reveal", h0.P3), count(P2, "hint_reveal", h0.P2), count(P4, "hint_reveal", h0.P4)], [1, 1, 0, 0]);
+    P3.socket.emit("request_hint"); // คนทายขอคำใบ้ → ทิ้ง
+    await wait(150);
+    check("คนทายขอคำใบ้ไม่ได้", count(P3, "hint_reveal", h0.P3), 1);
+
+    // ---------- ย้อนกลับแยกทีม ----------
+    const u0 = { H: H.dump().length, P2: P2.dump().length, P3: P3.dump().length, P4: P4.dump().length };
+    if (ch0.type !== "dont_lift_pen") {
+      H.socket.emit("undo");
+      await wait(300);
+      check("undo ทีม A → canvas_history ถึงทีม A เท่านั้น", [count(H, "canvas_history", u0.H), count(P3, "canvas_history", u0.P3), count(P2, "canvas_history", u0.P2), count(P4, "canvas_history", u0.P4)], [1, 1, 0, 0]);
+      H.socket.emit("redo");
+      await wait(200);
+    }
+
+    // ---------- คนเข้ากลางตาได้ภาพของทีมตัวเอง (เข้าทีม A เพราะ 2:2 → A) ----------
+    const { P: P5 } = await join(code, "A5");
+    check("คนเข้ากลางเกมเข้าทีมที่คนน้อยกว่า", teamOf(H, P5.socket.id), "A");
+    const rs5 = await P5.wait("round_start");
+    const hist5 = await P5.wait("canvas_history");
+    check("คนเข้ากลางตา: round_start ทีม A ที่เปิดคำใบ้แล้ว ไม่มีคำจริง", [rs5.team, Array.isArray(rs5.hint), JSON.stringify(rs5).includes(word)], ["A", true, false]);
+    checkOk("คนเข้ากลางตาได้ภาพทีม A (ไม่ใช่ทีม B)", hist5.items.some((e) => e.type === "stroke_start" && e.x === 0.1));
+    checkOk("room_update ทุกคนเห็นคนใหม่", last(P2, "room_update").players.length === 5);
+
+    // ---------- ทายถูก: ทีม A ก่อน ----------
+    const g0 = { H: H.dump().length, P2: P2.dump().length, P3: P3.dump().length, P4: P4.dump().length, P5: P5.dump().length };
+    P3.socket.emit("guess", { text: word });
+    await wait(400);
+    check("ทีม A: สมาชิกเห็นคนทายถูกพร้อมชื่อ", H.dump().slice(g0.H).filter((e) => e.name === "correct_guess").map((e) => e.args[0]), [{ playerId: P3.socket.id, name: "A3", team: "A" }]);
+    check("ทีม B รู้แค่ว่าทีม A ทายถูก (ไม่มีชื่อ/คำ)", P4.dump().slice(g0.P4).filter((e) => e.name === "correct_guess").map((e) => e.args[0]), [{ team: "A" }]);
+    check("ทีม B ไม่เห็นแชทของทีม A เลย (ไม่แม้แต่ ******)", count(P4, "chat_message", g0.P4) + count(P2, "chat_message", g0.P2), 0);
+    checkOk("ทีม A: คนทายเห็นคำตัวเอง คนอื่นในทีมเห็น ******", last(P3, "chat_message").text === word && last(H, "chat_message").text === "******" && last(P5, "chat_message").text === "******");
+    P5.socket.emit("guess", { text: word }); // ทีม A ยังไม่ครบ (P5 เพิ่งเข้า) → ตายังไม่จบ
+    await wait(300);
+    check("ทายถูกครบทีม A แล้ว ตายังไม่จบเพราะทีม B ยังไม่ถูก", count(H, "round_end", g0.H), 0);
+    P4.socket.emit("guess", { text: word }); // ทีม B ทายถูกเป็นทีมที่สอง
+    const end = await H.wait("round_end", null, 3000);
+    check("จบตาเมื่อทั้งสองทีมถูกครบ · firstTeam = A", [end.word, end.firstTeam], [word, "A"]);
+    const gain = (id) => end.results.find((r) => r.playerId === id)?.gained;
+    const tA = (gain(P3.socket.id) ?? 0) + (gain(P5.socket.id) ?? 0) + (gain(H.socket.id) ?? 0);
+    const tB = (gain(P4.socket.id) ?? 0) + (gain(P2.socket.id) ?? 0);
+    check("teamGained = ผลรวมของสมาชิก", end.teamGained, { A: tA, B: tB });
+    checkOk("ทีมแรกได้โบนัส: คนทายถูกทีม A ได้ 150–280 (50+เวลา×5+100)", [gain(P3.socket.id)].every((g) => g >= 150 && g <= 300 && (g - 150) % 5 === 0));
+    checkOk("ทีมที่สองไม่มีโบนัส: P4 ได้ 50–200", gain(P4.socket.id) >= 50 && gain(P4.socket.id) <= 200);
+    check("คนวาดได้ 50 ต่อคนที่ทายถูกในทีมตัวเอง (A มี 2 คน, B มี 1)", [gain(H.socket.id), gain(P2.socket.id)], [100, 50]);
+    await wait(200);
+    st = last(H, "room_update");
+    check("teamScores = ผลรวมคะแนนสมาชิก", st.teamScores, { A: tA, B: tB });
+    check("คะแนนรายคนตรงกับที่ได้", st.players.map((p) => p.score), [gain(H.socket.id), gain(P2.socket.id), gain(P3.socket.id), gain(P4.socket.id), gain(P5.socket.id)]);
+
+    // ---------- ตาที่ 2: หมุนคนวาดในทีม · คนวาดทีม A หลุดตอนเลือกคำ → ข้ามทีม A ----------
+    const nxt = await P3.wait("choose_word", null, 8000);
+    const nxtB = await P4.wait("choose_word", null, 2000);
+    checkOk("หมุนคนวาดภายในทีม: A→A3, B→B4", Array.isArray(nxt.options) && Array.isArray(nxtB.options));
+    P3.socket.disconnect();
+    await wait(300);
+    check("ทีม A ยังเหลือ 2 คน เกมเดินต่อ", [(await serverIsUp()), last(H, "room_update").status], [true, "playing"]);
+    const word2 = nxtB.options[0];
+    P4.socket.emit("word_chosen", { word: word2 });
+    const rs2A = await H.wait("round_start", (e) => e.round === 1 && e.drawerIds.A === null, 3000);
+    check("ตาที่ 2: ทีม A ถูกข้าม (drawerIds.A = null) ทีม B ยังมีคนวาด", [rs2A.drawerIds.A, rs2A.drawerIds.B], [null, P4.socket.id]);
+    const e0 = { H: H.dump().length, P2: P2.dump().length };
+    const c2nd = rs2A.challenge.type === "colour_fix" ? rs2A.challenge.color : "#000000";
+    draw(H, c2nd); // ทีม A ไม่มีคนวาด → วาดไม่ได้
+    draw(P4, c2nd);
+    await wait(300);
+    check("ทีมที่ถูกข้ามวาดไม่ได้ · ทีม B วาดได้ถึงเพื่อนในทีม", [count(P2, "stroke_start", e0.P2), count(H, "stroke_start", e0.H)], [1, 0]);
+    P2.socket.emit("guess", { text: word2 });
+    const end2 = await H.wait("round_end", (e) => e.word === word2, 3000);
+    check("ทีม B ถูกครบ + ทีม A ถูกข้าม → จบตา firstTeam = B", end2.firstTeam, "B");
+    const over = await H.wait("game_end", null, 8000);
+    const sc = last(H, "room_update").teamScores;
+    check("game_end: teamRanking/winner ตรงกับคะแนนทีม", [over.teamRanking.map((t) => t.team + t.score), over.winner], [Object.entries(sc).sort((a, b) => b[1] - a[1]).map(([t, v]) => t + v), sc.A === sc.B ? null : sc.A > sc.B ? "A" : "B"]);
+    for (const P of all) P.socket.disconnect();
+
+    // ---------- ห้อง 3 ต่อ 2: คนวาดทีม A หลุด "กลางตาวาด" ----------
+    const H2 = await mk("h"); const created2 = await emitAck(H2.socket, "create_room", { name: "H2", avatar: 0 });
+    const c2 = created2.code;
+    H2.socket.emit("update_settings", { mode: "team", rounds: 1, drawTime: 30 });
+    const members = [];
+    for (const n of ["b1", "a3", "b2", "a5"]) members.push((await join(c2, n)).P);
+    const [b1, a3, b2, a5] = members;
+    await wait(200);
+    check("จัดทีม 3 ต่อ 2 (A: H2,a3,a5 · B: b1,b2)", last(H2, "room_update").players.map((p) => p.team), ["A", "B", "A", "B", "A"]);
+    H2.socket.emit("start_game");
+    const o = await b1.wait("choose_word");
+    const w3 = o.options[0];
+    b1.socket.emit("word_chosen", { word: w3 });
+    await H2.wait("your_word");
+    await b1.wait("your_word");
+    H2.socket.disconnect(); // คนวาดทีม A หลุดกลางตา
+    await wait(300);
+    check("คนวาดหลุดกลางตา: เกมเดินต่อ", last(a3, "room_update").status, "playing");
+    a3.socket.emit("guess", { text: w3 });
+    await wait(300);
+    check("ทีม A ไม่มีคนวาดแล้ว ทายถูกก็ไม่ได้คะแนน", last(a3, "room_update").players.find((p) => p.name === "a3").score, 0);
+    b2.socket.emit("guess", { text: w3 });
+    const e3 = await b1.wait("round_end", null, 3000);
+    check("ทีม B ทายถูก → จบตา (ทีม A ถูกข้าม) ไม่ล่ม", [e3.word, e3.firstTeam], [w3, "B"]);
+    for (const P of [b1, a3, b2, a5, H2]) P.socket.disconnect();
+  });
+
   // ปิดทุก socket เพื่อให้โปรเซสจบได้
   for (const rec of [A, B, C, ...others]) rec.socket.disconnect();
 }
