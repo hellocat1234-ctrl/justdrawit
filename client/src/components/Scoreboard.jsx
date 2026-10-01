@@ -1,5 +1,6 @@
 import Avatar from "./Avatar";
 import AnimatedNumber from "./AnimatedNumber";
+import YouTag from "./YouTag";
 
 // แถบคะแนน — เรียงจากคะแนนมากไปน้อย
 // 👑 = หัวห้อง  ✏️ = คนวาดตานี้  ✅ = คนที่ทายถูกแล้ว (พื้นเขียวอ่อน)
@@ -74,8 +75,9 @@ export default function Scoreboard({
             <Avatar index={p.avatar} />
             <span className="score-row__main">
               <span className="score-row__name">{p.name}</span>
-              {tags.length > 0 && (
+              {(tags.length > 0 || p.id === meId) && (
                 <span className="score-row__tags">
+                  {p.id === meId && <YouTag />}
                   {tags.map(([kind, text]) => (
                     <span className={`tag tag--${kind}`} key={kind}>
                       {text}

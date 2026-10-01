@@ -1,12 +1,13 @@
 import Modal from "./Modal";
 import Mascot from "./Mascot";
 import Confetti from "./Confetti";
+import YouTag from "./YouTag";
 
 const MEDALS = ["🥇", "🥈", "🥉"];
 
 // จบเกม — แท่นรางวัลอันดับ 1-3
 // หัวห้องมีปุ่มเล่นอีกรอบ (start_game) ทุกคนมีปุ่มกลับหน้าแรก (leave_room)
-export default function GameOverModal({ ranking, isHost, onPlayAgain, onLeave, teamRanking = null, winner = null, myTeam = null }) {
+export default function GameOverModal({ ranking, isHost, onPlayAgain, onLeave, teamRanking = null, winner = null, myTeam = null, meId = null }) {
   // โหมดทีม: ประกาศทีมที่ชนะ (เสมอ = winner เป็น null) พลุเล่นเหมือนเดิมเพราะอยู่ในกล่องเดียวกัน
   const teamMode = Boolean(teamRanking);
   const top3 = ranking.slice(0, 3);
@@ -45,9 +46,10 @@ export default function GameOverModal({ ranking, isHost, onPlayAgain, onLeave, t
           {podiumOrder.map((p) => {
             const place = top3.indexOf(p);
             return (
-              <li className={`podium__item podium__item--${place + 1}`} key={p.playerId}>
+              <li className={`podium__item podium__item--${place + 1}${p.playerId === meId ? " podium__item--me" : ""}`} key={p.playerId}>
                 <span className="podium__medal">{MEDALS[place]}</span>
                 <span className="podium__name">{p.name}</span>
+                {p.playerId === meId && <YouTag />}
                 <span className="podium__score">{p.score}</span>
               </li>
             );
@@ -58,9 +60,10 @@ export default function GameOverModal({ ranking, isHost, onPlayAgain, onLeave, t
       {rest.length > 0 && (
         <ul className="gains">
           {rest.map((p, i) => (
-            <li className="gains__row" key={p.playerId}>
+            <li className={p.playerId === meId ? "gains__row gains__row--me" : "gains__row"} key={p.playerId}>
               <span>
                 {i + 4}. {p.name}
+                {p.playerId === meId && <YouTag />}
               </span>
               <span className="gains__value">{p.score}</span>
             </li>

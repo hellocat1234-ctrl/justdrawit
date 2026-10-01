@@ -769,6 +769,19 @@ function endGame(room) {
   io.to(room.code).emit("room_update", roomState(room));
 }
 
+// ตรวจและใส่ค่าตั้งค่าห้อง (rounds drawTime mode) — ใช้ร่วมกันระหว่าง create_room กับ update_settings
+// ค่าที่ไม่อยู่ในรายการที่อนุญาตถูกเมินเงียบๆ (คงค่าเดิม)
+function applySettings(room, data) {
+  const rounds = Number(data?.rounds);
+  const drawTime = Number(data?.drawTime);
+  if ([1, 2, 3, 4, 5].includes(rounds)) room.settings.rounds = rounds;
+  if ([30, 45, 60, 90].includes(drawTime)) room.settings.drawTime = drawTime;
+  if ((data?.mode === "classic" || data?.mode === "team") && room.settings.mode !== data.mode) {
+    room.settings.mode = data.mode;
+    applyMode(room);
+  }
+}
+
 function leaveRoom(socket) {
   const code = socket.data.roomCode;
   if (!code) return;
@@ -1040,6 +1053,7 @@ io.on("connection", (socket) => {
 
     socket.join(code);
     socket.data.roomCode = code;
+    applySettings(room, data); // ค่าที่เลือกตั้งแต่หน้าแรก (โหมดทีม → หัวห้องเข้าทีม A และเข้า room ย่อยแล้ว)
 
     callback({ ok: true, code, playerId: socket.id });
     io.to(code).emit("room_update", roomState(room));
@@ -1091,14 +1105,7 @@ io.on("connection", (socket) => {
     if (room.hostId !== socket.id) {
       return socket.emit("game_error", { code: "NOT_HOST", message: "เฉพาะหัวห้องเท่านั้น" });
     }
-    const rounds = Number(data?.rounds);
-    const drawTime = Number(data?.drawTime);
-    if ([1, 2, 3, 4, 5].includes(rounds)) room.settings.rounds = rounds;
-    if ([30, 45, 60, 90].includes(drawTime)) room.settings.drawTime = drawTime;
-    if ((data?.mode === "classic" || data?.mode === "team") && room.settings.mode !== data.mode) {
-      room.settings.mode = data.mode;
-      applyMode(room);
-    }
+    applySettings(room, data);
     io.to(room.code).emit("room_update", roomState(room));
   });
 

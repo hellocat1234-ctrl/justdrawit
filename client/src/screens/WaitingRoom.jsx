@@ -5,6 +5,8 @@ import Logo from "../components/Logo";
 import Ribbon from "../components/Ribbon";
 import { MascotNote } from "../components/Mascot";
 import { InfoModal } from "../components/TopIcons";
+import YouTag from "../components/YouTag";
+import TeamRules from "../components/TeamRules";
 import { markRulesSeen, rulesSeen } from "../prefs";
 
 // ค่าที่ server ยอมรับ ตาม events.md (ค่าอื่น server จะเมิน)
@@ -50,8 +52,8 @@ export default function WaitingRoom({ room, me, onLeave }) {
         <Avatar index={player.avatar} />
         <span className="player-card__name">
           {player.name}
-          {player.id === me?.playerId ? " (คุณ)" : ""}
         </span>
+        {player.id === me?.playerId && <YouTag />}
         <span className="player-card__badges">
           {/* ใช้ hostId เป็นหลัก เพราะ server เป็นคนตัดสินว่าใครเป็นหัวห้อง */}
           {player.id === room.hostId && (
@@ -88,6 +90,11 @@ export default function WaitingRoom({ room, me, onLeave }) {
           <h2 className="panel__title">
             ผู้เล่น ({room.players.length}/{MAX_PLAYERS})
           </h2>
+          {teamMode && myTeam && (
+            <p className={`team-me-banner team-me-banner--${myTeam}`}>
+              คุณอยู่ทีม {myTeam} · อยากย้ายทีม กดปุ่ม "ย้ายมาทีม {myTeam === "A" ? "B" : "A"}" ได้เลย
+            </p>
+          )}
           {teamMode ? (
             // โหมดทีม: สองฝั่ง ทีม A แดง ทีม B ฟ้า · ย้ายได้เฉพาะตัวเอง (set_team ของ server เป็นของตัวเองเท่านั้น)
             <div className="team-cols">
@@ -115,6 +122,13 @@ export default function WaitingRoom({ room, me, onLeave }) {
           {/* อยู่คนเดียว = มาสคอตถือนาฬิการอเพื่อน */}
           {room.players.length < 2 && <MascotNote mood="wait">รอเพื่อนเข้าห้อง...</MascotNote>}
         </div>
+
+        {teamMode && (
+          <div className="panel">
+            <h2 className="panel__title">กติกาโหมดทีม</h2>
+            <TeamRules />
+          </div>
+        )}
 
         <div className="panel">
           {isHost ? (

@@ -62,8 +62,9 @@
 
 ### `create_room` C → S
 ```js
-{ name: "Mew", avatar: 3 }
+{ name: "Mew", avatar: 3, mode: "team", rounds: 3, drawTime: 60 }   // mode rounds drawTime ไม่ส่งก็ได้
 ```
+`mode` `rounds` `drawTime` (ไม่บังคับ) เลือกตั้งแต่หน้าแรก — ตรวจด้วยกติกาเดียวกับ `update_settings` (ค่าที่ไม่อนุญาตถูกเมิน ใช้ค่าเริ่มต้น `classic` / 3 / 60)
 ตอบกลับผ่าน callback (ack)
 ```js
 { ok: true, code: "48213", playerId: "abc123" }
@@ -658,3 +659,4 @@ server เรียก `saveScore` เองตอนจบ client ส่งค�
 | 1 ต.ค. | Mew | **Solo ช่วง "AI วาด เราทาย"** — ทุกด่านมีสองช่วง · `ai_round_start` เพิ่ม `drawNext` · event ใหม่ `ai_draw_start` `ai_draw_stroke` `ai_draw_guess` `ai_draw_reply` `ai_draw_end` · ผ่านด่านยังตัดสินที่ช่วง 1 · ไม่มีไฟล์ภาพ = ข้ามช่วง 2 · ภาพเป็นการเล่นซ้ำภาพคนจริง (Quick, Draw!) ไม่ใช่ AI สร้างภาพ |
 | 1 ต.ค. | Mew | **โหมดทีม (ส่วนที่ 1 ฝั่ง server)** — เอา Team Mode กลับมา · `update_settings` รับ `mode` · `set_team` · `RoomState.teamScores` (เฉพาะโหมดทีม) · `round_start` ส่งแยกทีมและมี `team` `drawerIds` `solvedTeams` · `correct_guess` ถึงทีมอื่นเป็น `{ team }` · `round_end` เพิ่ม `teamGained` `firstTeam` · `game_end` เพิ่ม `teamRanking` `winner` · โบนัสทีมแรก +100 |
 | 1 ต.ค. | Mew | **โหมดทีม (ส่วนที่ 2 ฝั่ง client)** — เพิ่ม `team_skipped` S → ทีมที่คนวาดหลุดกลางตา `{ team }` (เดิมทีมนั้นไม่ได้รับอะไรเลย หน้าจอบอกผู้เล่นไม่ได้) |
+| 1 ต.ค. | Mew | `create_room` รับ `mode` `rounds` `drawTime` (ไม่บังคับ) ตรวจเหมือน `update_settings` · ให้เลือกโหมดตั้งแต่หน้าแรก |

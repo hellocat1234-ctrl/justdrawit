@@ -13,6 +13,7 @@ import WordChoiceModal from "../components/WordChoiceModal";
 import RoundSummaryModal from "../components/RoundSummaryModal";
 import GameOverModal from "../components/GameOverModal";
 import { TopIcons, InfoModal, ExitModal } from "../components/TopIcons";
+import { markTeamRulesSeen, teamRulesSeen } from "../prefs";
 import { play } from "../sound/sfx";
 import { clearBoard } from "../canvas/actions";
 import { PAINT_COLORS, SIZE_DEFAULT, TOOLS } from "../canvas/palette";
@@ -84,7 +85,12 @@ export default function Game({
   const [toolChoice, setToolChoice] = useState(TOOLS.PEN);
   const [color, setColor] = useState(PAINT_COLORS[0].hex); // เริ่มที่สีดำ (ตัวแรกในพาเลต)
   const [size, setSize] = useState(SIZE_DEFAULT);
-  const [showInfo, setShowInfo] = useState(false); // กล่องกติกา ℹ️
+  // กล่องกติกา ℹ️ — เริ่มเกมโหมดทีมครั้งแรก (ยังไม่เคยเห็นกติกาทีม) โชว์เองเลย
+  const [showInfo, setShowInfo] = useState(() => room.settings.mode === "team" && !teamRulesSeen());
+  const closeInfo = () => {
+    if (teamMode) markTeamRulesSeen();
+    setShowInfo(false);
+  };
   const [showExit, setShowExit] = useState(false); // กล่องยืนยันออก
   const canvasRef = useRef(null); // ใช้เรียกคำสั่งบนกระดาน (รับ action ของคนอื่น · สั่งล้างจอ)
 
@@ -176,8 +182,16 @@ export default function Game({
     <div className="screen screen--game">
       <header className="topbar">
         <div className="topbar__who">
-          <span className="topbar__label">{teamMode ? `คนวาดทีม ${myTeam ?? ""}` : "คนวาด"}</span>
-          <span className="topbar__name">{drawerName}</span>
+          {teamMode && myTeam ? (
+            // บอกตลอดว่าเราอยู่ทีมไหน ด้วยสีของทีม (และตัวอักษร ไม่พึ่งสีอย่างเดียว)
+            <span className={`team-me team-me--${myTeam}`}>คุณอยู่ทีม {myTeam}</span>
+          ) : (
+            <span className="topbar__label">คนวาด</span>
+          )}
+          <span className="topbar__name">
+            {teamMode ? "✏️ " : ""}
+            {drawerName}
+          </span>
         </div>
 
         {/* โหมดทีม: คะแนนทีม A vs B (ผลรวมสมาชิก จาก room.teamScores) ทีมเราขอบหนากว่า */}
@@ -336,13 +350,14 @@ export default function Game({
       {game.options && (
         <WordChoiceModal options={game.options} secondsLeft={chooseLeft} onChoose={chooseWord} />
       )}
-      {game.summary && <RoundSummaryModal summary={game.summary} players={players} myTeam={myTeam} />}
+      {game.summary && <RoundSummaryModal summary={game.summary} players={players} myTeam={myTeam} meId={meId} />}
       {game.ranking && (
         <GameOverModal
           ranking={game.ranking}
           teamRanking={teamMode ? game.teamRanking : null}
           winner={game.winner}
           myTeam={myTeam}
+          meId={meId}
           isHost={room.hostId === meId}
           onPlayAgain={startGame}
           onLeave={onLeave}
@@ -350,7 +365,7 @@ export default function Game({
       )}
 
       {/* กล่องจากแถบบน อยู่ท้ายสุดเพื่อให้ซ้อนทับ Modal อื่นได้ถ้าเปิดซ้อนกัน */}
-      {showInfo && <InfoModal onClose={() => setShowInfo(false)} />}
+      {showInfo && <InfoModal teamMode={teamMode} onClose={closeInfo} />}
       {showExit && <ExitModal onNo={() => setShowExit(false)} onYes={onLeave} />}
     </div>
   );

@@ -1,8 +1,10 @@
 // ตารางอันดับ ใช้ทั้งหน้าแรก (compact, 10 อันดับ) และหน้า Leaderboard (20 อันดับ)
 // รับ { status, top, retry } จาก useLeaderboard แล้วจัดการทั้งสามสถานะ: โหลด · error · ว่าง
+import YouTag from "./YouTag";
+
 const MEDALS = { 1: "🥇", 2: "🥈", 3: "🥉" };
 
-export default function RankTable({ board, limit = 20, compact = false, emptyText }) {
+export default function RankTable({ board, limit = 20, compact = false, emptyText, meName = "" }) {
   const rows = board.top.slice(0, limit);
 
   if (board.status === "error") {
@@ -44,12 +46,18 @@ export default function RankTable({ board, limit = 20, compact = false, emptyTex
       </thead>
       <tbody>
         {rows.map((row) => (
-          <tr key={row.rank} className={row.rank <= 3 ? `rank-row rank-row--${row.rank}` : "rank-row"}>
+          <tr
+            key={row.rank}
+            className={`${row.rank <= 3 ? `rank-row rank-row--${row.rank}` : "rank-row"}${meName && row.name === meName ? " rank-row--me" : ""}`}
+          >
             <td className="rank-row__rank">{MEDALS[row.rank] ?? row.rank}</td>
             {/* ชื่อแสดงผ่าน {} ของ React = ข้อความธรรมดาเสมอ
                 ชื่อแบบ <b>x</b> จะขึ้นเป็นตัวอักษรตามนั้น ไม่ถูกตีความเป็น HTML
                 (ห้ามเปลี่ยนไปใช้ dangerouslySetInnerHTML ที่นี่เด็ดขาด) */}
-            <td className="rank-row__name">{row.name}</td>
+            <td className="rank-row__name">
+              {row.name}
+              {meName && row.name === meName && <YouTag />}
+            </td>
             <td className="rank-row__level">{row.levelReached}</td>
             <td className="rank-row__score">{row.score}</td>
           </tr>

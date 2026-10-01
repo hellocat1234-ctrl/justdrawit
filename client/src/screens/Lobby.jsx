@@ -15,6 +15,10 @@ export default function Lobby({ connected, onEntered, onError, onOpenLeaderboard
   const [code, setCode] = useState("");
   const [avatar, setAvatar] = useState(0);
   const [busy, setBusy] = useState(false);
+  // ค่าที่เลือกตอนสร้างห้อง (server เช็คซ้ำ ค่าไม่ถูกจะใช้ค่าเริ่มต้น)
+  const [mode, setMode] = useState("classic"); // classic | team
+  const [rounds, setRounds] = useState(3);
+  const [drawTime, setDrawTime] = useState(60);
   // กล่อง Top 10 — Lobby ถูกสร้างใหม่ทุกครั้งที่กลับมาหน้าแรก จึงโหลดคะแนนใหม่ทุกครั้งเอง
   const [period, setPeriod] = useState("month"); // month | all
   const board = useLeaderboard(period === "month" ? monthKey() : "");
@@ -34,7 +38,7 @@ export default function Lobby({ connected, onEntered, onError, onOpenLeaderboard
     };
 
     const isCreate = tab === "create";
-    const payload = isCreate ? { name, avatar } : { code, name, avatar };
+    const payload = isCreate ? { name, avatar, mode, rounds, drawTime } : { code, name, avatar };
 
     socket.timeout(6000).emit(isCreate ? "create_room" : "join_room", payload, (err, res) => {
       if (err) return finish(() => onError("CONNECT_FAILED"));
@@ -67,6 +71,71 @@ export default function Lobby({ connected, onEntered, onError, onOpenLeaderboard
               JOIN GAME
             </button>
           </div>
+
+          {/* เลือกโหมดก่อนกด START (เฉพาะตอนสร้างห้อง) */}
+          {tab === "create" && (
+            <>
+              <span className="field__label" id="mode-label">
+                CHOOSE MODE
+              </span>
+              <div className="mode-cards" role="radiogroup" aria-labelledby="mode-label">
+                {[
+                  ["classic", "🎨", "แข่งเดี่ยว", "ทุกคนแข่งกันเอง ผลัดกันวาด"],
+                  ["team", "👥", "ทีม A vs B", "แบ่งสองทีม วาดคำเดียวกันพร้อมกัน ทีมไหนทายถูกก่อนได้โบนัส (ต้องมี 4 คนขึ้นไป)"],
+                ].map(([m, icon, title, desc]) => (
+                  <button
+                    key={m}
+                    type="button"
+                    role="radio"
+                    aria-checked={mode === m}
+                    className={mode === m ? "mode-card mode-card--active" : "mode-card"}
+                    onClick={() => setMode(m)}
+                  >
+                    <span className="mode-card__icon" aria-hidden="true">
+                      {icon}
+                    </span>
+                    <span className="mode-card__title">{title}</span>
+                    <span className="mode-card__desc">{desc}</span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="lobby__opts">
+                <div className="lobby__opt">
+                  <span className="field__label">จำนวนรอบ</span>
+                  <div className="segmented" role="group" aria-label="จำนวนรอบ">
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        className={rounds === n ? "seg seg--active" : "seg"}
+                        aria-pressed={rounds === n}
+                        onClick={() => setRounds(n)}
+                      >
+                        {n}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="lobby__opt">
+                  <span className="field__label">เวลาวาด (วินาที)</span>
+                  <div className="segmented" role="group" aria-label="เวลาวาดต่อตา">
+                    {[30, 45, 60, 90].map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        className={drawTime === n ? "seg seg--active" : "seg"}
+                        aria-pressed={drawTime === n}
+                        onClick={() => setDrawTime(n)}
+                      >
+                        {n}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
 
           <label className="field__label" htmlFor="player-name">
             CHOOSE YOUR NAME
@@ -158,6 +227,7 @@ export default function Lobby({ connected, onEntered, onError, onOpenLeaderboard
           <RankTable
             board={board}
             limit={10}
+            meName={name.trim()}
             compact
             emptyText={period === "month" ? "เดือนนี้ยังไม่มีใครติดอันดับ" : "ยังไม่มีใครติดอันดับเลย"}
           />

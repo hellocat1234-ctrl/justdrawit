@@ -2021,6 +2021,34 @@ async function main() {
     for (const P of [b1, a3, b2, a5, H2]) P.socket.disconnect();
   });
 
+  await runPart("28. create_room รับ mode rounds drawTime (เลือกตั้งแต่หน้าแรก)", async () => {
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const last = (P, name) => P.dump().filter((e) => e.name === name).at(-1)?.args[0];
+    const socks = [];
+    const make = async (data) => {
+      const P = track(await connect()); socks.push(P);
+      const r = await emitAck(P.socket, "create_room", data);
+      await wait(150);
+      return { P, r, st: last(P, "room_update") };
+    };
+    let { st } = await make({ name: "T1", avatar: 0, mode: "team", rounds: 2, drawTime: 45 });
+    check("สร้างห้องโหมดทีมพร้อมรอบ/เวลา: settings ตรงที่ส่ง", st.settings, { mode: "team", rounds: 2, drawTime: 45 });
+    check("โหมดทีม: หัวห้องเข้าทีม A และมี teamScores", [st.players[0].team, st.teamScores], ["A", { A: 0, B: 0 }]);
+    ({ st } = await make({ name: "T2", avatar: 0 }));
+    check("ไม่ส่งค่า → ค่าเริ่มต้นเดิม classic/3/60 และไม่มีทีม", [st.settings, st.players[0].team, st.teamScores], [{ mode: "classic", rounds: 3, drawTime: 60 }, null, undefined]);
+    ({ st } = await make({ name: "T3", avatar: 0, mode: "banana", rounds: 99, drawTime: "x" }));
+    check("ค่าแปลกๆ ถูกเมิน ใช้ค่าเริ่มต้น", st.settings, { mode: "classic", rounds: 3, drawTime: 60 });
+    ({ st } = await make({ name: "T4", avatar: 0, mode: "classic", rounds: 5, drawTime: 30 }));
+    check("classic เลือกรอบ/เวลาได้", st.settings, { mode: "classic", rounds: 5, drawTime: 30 });
+    // เข้าห้องโหมดทีมแล้วได้ทีมที่คนน้อยกว่าทันที
+    const { P: H, r } = await make({ name: "T5", avatar: 0, mode: "team" });
+    const J = track(await connect()); socks.push(J);
+    await emitAck(J.socket, "join_room", { code: r.code, name: "T6", avatar: 0 });
+    await wait(150);
+    check("คนที่เข้าห้องโหมดทีมที่สร้างจากหน้าแรก ได้ทีม B", last(H, "room_update").players.map((p) => p.team), ["A", "B"]);
+    for (const P of socks) P.socket.disconnect();
+  });
+
   // ปิดทุก socket เพื่อให้โปรเซสจบได้
   for (const rec of [A, B, C, ...others]) rec.socket.disconnect();
 }

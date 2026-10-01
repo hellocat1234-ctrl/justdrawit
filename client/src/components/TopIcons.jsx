@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import Modal from "./Modal";
+import TeamRules from "./TeamRules";
 import { useReduceMotion, useSoundMuted } from "../hooks/usePrefs";
 
 // รูปประตูพิกเซลของเราเอง (วาดจากสี่เหลี่ยมล้วน เหมือนมาสคอต) ใช้ในกล่องยืนยันออก
@@ -36,7 +37,7 @@ function useEscape(onClose) {
 }
 
 // ── กล่องกติกาสั้นๆ + ตัวเลือกเสียง/ลดภาพเคลื่อนไหว ──
-export function InfoModal({ onClose }) {
+export function InfoModal({ onClose, teamMode = false }) {
   const [muted, setMuted] = useSoundMuted();
   const [reduce, setReduce] = useReduceMotion();
   useEscape(onClose);
@@ -53,6 +54,13 @@ export function InfoModal({ onClose }) {
         <li>คนทายพิมพ์คำตอบในช่อง “คำตอบ” ทายถูกเร็วได้คะแนนเยอะ</li>
         <li>บางตามี Mini Challenge พิเศษ ดูป้ายสีม่วงเหนือกระดาน</li>
       </ul>
+
+      {teamMode && (
+        <>
+          <h3 className="modal__subtitle">โหมดทีม A vs B</h3>
+          <TeamRules />
+        </>
+      )}
 
       <div className="info-settings">
         <label className="check">

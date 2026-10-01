@@ -53,6 +53,25 @@ export function rulesSeen() {
   }
 }
 
+// กติกาโหมดทีม โชว์เองครั้งแรกที่เริ่มเกมโหมดทีม (แยกกุญแจจากกติกาทั่วไป)
+const TEAM_RULES_KEY = "jdi.teamRulesSeen";
+
+export function teamRulesSeen() {
+  try {
+    return localStorage.getItem(TEAM_RULES_KEY) === "1";
+  } catch {
+    return true;
+  }
+}
+
+export function markTeamRulesSeen() {
+  try {
+    localStorage.setItem(TEAM_RULES_KEY, "1");
+  } catch {
+    /* ไม่เป็นไร */
+  }
+}
+
 export function markRulesSeen() {
   try {
     localStorage.setItem(RULES_KEY, "1");
