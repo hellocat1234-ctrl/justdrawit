@@ -334,9 +334,18 @@ async function main() {
     check("รอบที่ 1 จาก 1", [rs.round, rs.totalRounds], [1, 1]);
     check("เวลาที่เหลือ = เวลาเต็ม 30 วิ", rs.time, 30);
     check("ไม่มีคำจริงหลุดมาใน round_start", "word" in rs, false);
-    check("คำใบ้ตรงกับกติกาใน events.md", rs.hint, expectedHint(word));
+    // คำใบ้ขึ้นช้า: เริ่มตายังไม่เห็นช่องคำใบ้ ต้องรอถึงเวลาเหลือหนึ่งในสาม หรือให้คนวาดกดขอ
+    check("คำใบ้ยังไม่เปิดตอนเริ่มตา (hint = null)", rs.hint, null);
+    check("hintAt = หนึ่งในสามของเวลาเต็ม ปัดลง (30 วิ → 10)", rs.hintAt, 10);
     check("คนวาดได้คำจริงทาง your_word", (await A.wait("your_word")).word, word);
     checkOk("คนทายไม่ได้ your_word", await B.tryWait("your_word", null, 400) === null);
+
+    // คนวาดกดขอเปิดก่อนเวลา — เป็นทางเดียวที่จะได้เห็นช่องคำใบ้ก่อนถึงกำหนด
+    clearAll(A, B, C);
+    A.socket.emit("request_hint");
+    const hr = await B.wait("hint_reveal", null, 3000);
+    check("คนวาดกดขอเปิดคำใบ้ก่อนเวลาได้", hr.by, "drawer");
+    check("ช่องคำใบ้ที่เปิด ตรงกับกติกาใน events.md", hr.hint, expectedHint(word));
 
     const tick = await A.wait("timer", null, 2500);
     checkOk("timer วิ่งและไม่เกินเวลาเต็ม", tick.timeLeft <= 30 && tick.timeLeft >= 1);
@@ -399,9 +408,12 @@ async function main() {
       const w = cw.options[2];
       t.drawer.socket.emit("word_chosen", { word: w });
       const rs = await A.wait("round_start", null, 3000);
-      check(`${label}: คำใบ้ตรงกับกติกา`, rs.hint, expectedHint(w));
+      check(`${label}: คำใบ้ยังไม่เปิดตอนเริ่มตา`, rs.hint, null);
       check(`${label}: ไม่มีคำจริงใน round_start`, "word" in rs, false);
       check(`${label}: your_word ตรงกับคำที่เลือก`, (await t.drawer.wait("your_word")).word, w);
+      t.drawer.socket.emit("request_hint");
+      check(`${label}: คนวาดขอแล้วช่องคำใบ้ตรงกับกติกา`,
+        (await A.wait("hint_reveal", null, 3000)).hint, expectedHint(w));
 
       clearAll(A, B, C);
       for (const g of t.guessers) g.socket.emit("guess", { text: w });
@@ -725,6 +737,124 @@ async function main() {
     D.socket.emit("clear_canvas");
     checkOk("ชนเพดานแล้วยังสั่งล้างจอได้", (await E.tryWait("clear_canvas", null, 2000)) !== null);
     checkOk("ชนเพดานแล้ว server ยังไม่ตาย", (await emitAck(F.socket, "create_room", { name: "ยังอยู่", avatar: 0 }))?.ok === true);
+  });
+
+  // ══════════════════════════════════════════════════════════════════
+  // ข้อ 15 — คำใบ้ขึ้นช้า
+  // แยกห้องใหม่สองห้อง ไม่ให้ปนกับห้องข้อ 9-14 ที่มีประวัติค้างอยู่
+  //   ห้อง A = เส้นทาง "คนวาดกดขอเปิดก่อนเวลา"
+  //   ห้อง B = เส้นทาง "เวลาเหลือหนึ่งในสาม แล้ว server เปิดเอง"
+  // เริ่มห้อง B ให้เวลาของมันเดินก่อน แล้วค่อยไปตรวจห้อง A ระหว่างนั้น
+  // จะได้ไม่ต้องนั่งรอ 20 วินาทีเปล่า ๆ (drawTime ต่ำสุดที่ตั้งได้คือ 30 → เปิดเองตอนเหลือ 10)
+  // ══════════════════════════════════════════════════════════════════
+  const G = track(await connect()); // ห้อง A: หัวห้อง = คนวาด
+  const H = track(await connect()); // ห้อง A: คนทาย
+  const I = track(await connect()); // ห้อง A: คนทายอีกคน
+  const P = track(await connect()); // ห้อง B: หัวห้อง = คนวาด
+  const Q = track(await connect()); // ห้อง B: คนทาย
+  others.push(G, H, I, P, Q);
+
+  await runPart("15. คำใบ้ขึ้นช้า — ขอเปิดก่อนเวลา · เปิดเองตามเวลา · คนเข้าหลังเปิด", async () => {
+    // ── ห้อง A: เส้นทางคนวาดกดขอ ──
+    const acode = (await emitAck(G.socket, "create_room", { name: "HintDrawer", avatar: 0 })).code;
+    await emitAck(H.socket, "join_room", { code: acode, name: "HintGuess1", avatar: 1 });
+    await emitAck(I.socket, "join_room", { code: acode, name: "HintGuess2", avatar: 2 });
+    clearAll(G, H, I);
+    G.socket.emit("update_settings", { rounds: 1, drawTime: 30 });
+    await G.wait("room_update", (r) => r.settings.drawTime === 30, 3000);
+
+    clearAll(G, H, I);
+    G.socket.emit("start_game");
+    const acw = await G.wait("choose_word", null, 6000);
+    const aWord = acw.options[0];
+    G.socket.emit("word_chosen", { word: aWord });
+
+    const ars = await H.wait("round_start", null, 3000);
+    check("คนทายไม่เห็นคำใบ้ตอนเริ่มตา (hint = null)", ars.hint, null);
+    check("hintAt = หนึ่งในสามของเวลาเต็ม ปัดลง (30 วิ → 10)", ars.hintAt, 10);
+    check("ยังไม่มีคำจริงหลุดมาใน round_start", "word" in ars, false);
+
+    // นับ hint_reveal ของห้อง A ไว้ใช้ตอนท้าย — ต้องได้ครั้งเดียวตลอดตา
+    // (คนวาดกดขอไปแล้ว ต่อให้เวลาหมดถึงกำหนด server ก็ต้องไม่เปิดซ้ำ)
+    let aReveals = 0;
+    H.socket.on("hint_reveal", () => { aReveals++; });
+
+    // ── ห้อง B: เส้นทางเวลาเปิดเอง — เริ่มตรงนี้ เพื่อให้เวลาของมันเดินระหว่างเทสห้อง A ──
+    const bcode = (await emitAck(P.socket, "create_room", { name: "TimerDrawer", avatar: 3 })).code;
+    await emitAck(Q.socket, "join_room", { code: bcode, name: "TimerGuess", avatar: 4 });
+    clearAll(P, Q);
+    P.socket.emit("update_settings", { rounds: 1, drawTime: 30 });
+    await P.wait("room_update", (r) => r.settings.drawTime === 30, 3000);
+
+    clearAll(P, Q);
+    P.socket.emit("start_game");
+    const bcw = await P.wait("choose_word", null, 6000);
+    const bWord = bcw.options[0];
+    P.socket.emit("word_chosen", { word: bWord });
+
+    const brs = await Q.wait("round_start", null, 3000);
+    check("ห้องเปิดเอง: ตอนเริ่มตายังไม่มีคำใบ้", brs.hint, null);
+    check("ห้องเปิดเอง: hintAt = 10", brs.hintAt, 10);
+
+    // จำเวลาล่าสุดที่ server ส่งมา ใช้ยืนยันว่าเปิดตอนเหลือ 10 วิจริง ไม่ใช่เปิดมั่ว
+    let lastTick = null;
+    Q.socket.on("timer", (t) => { lastTick = t.timeLeft; });
+
+    // คนที่เข้าห้องกลางตา "ก่อน" คำใบ้เปิด ต้องยังไม่ได้คำใบ้
+    const Early = track(await connect());
+    others.push(Early);
+    await emitAck(Early.socket, "join_room", { code: bcode, name: "EarlyBird", avatar: 5 });
+    check("คนเข้าห้องก่อนคำใบ้เปิด ได้ hint = null เหมือนคนอื่น",
+      (await Early.wait("round_start", null, 3000)).hint, null);
+
+    // ── ตรวจห้อง A ──
+    check("คนทายไม่ได้ hint_reveal ก่อนเวลา", (await H.quiet("hint_reveal", 1500)).length, 0);
+
+    clearAll(G, H, I);
+    H.socket.emit("request_hint");
+    check("คนที่ไม่ใช่คนวาดขอคำใบ้ ไม่มีอะไรเกิดขึ้น", (await H.quiet("hint_reveal", 800)).length, 0);
+    check("คำขอของคนที่ไม่ใช่คนวาด ไม่ถึงคนอื่นด้วย", (await G.quiet("hint_reveal", 1)).length, 0);
+
+    clearAll(G, H, I);
+    G.socket.emit("request_hint");
+    const hr = await H.wait("hint_reveal", null, 3000);
+    check("คนวาดกดขอแล้ว คำใบ้เปิดทันที", hr.by, "drawer");
+    check("ช่องคำใบ้ที่ได้ ตรงกับกติกาใน events.md", hr.hint, expectedHint(aWord));
+    checkOk("คนวาดเองก็ได้ hint_reveal ด้วย (ปุ่มจะได้ปิด)", (await G.tryWait("hint_reveal", null, 3000)) !== null);
+    checkOk("คนทายอีกคนก็ได้เหมือนกัน", (await I.tryWait("hint_reveal", null, 3000)) !== null);
+
+    clearAll(G, H, I);
+    G.socket.emit("request_hint");
+    check("ขอคำใบ้ครั้งที่สอง ไม่มีอะไรเกิดขึ้น", (await H.quiet("hint_reveal", 800)).length, 0);
+
+    // ── รอห้อง B เปิดคำใบ้เอง (ราว 20 วิหลังเริ่มตา เพราะ drawTime = 30) ──
+    const bhr = await Q.wait("hint_reveal", null, 26000);
+    check("เวลาเหลือหนึ่งในสามแล้ว server เปิดคำใบ้เอง", bhr.by, "timer");
+    check("ช่องคำใบ้ที่เปิดเอง ตรงกับกติกา", bhr.hint, expectedHint(bWord));
+    check("ตอนเปิดเอง เวลาเหลือ 10 วิพอดี (ตรงกับ hintAt)", lastTick, 10);
+    checkOk("คนที่เข้าห้องก่อนเปิด ก็ได้ hint_reveal ด้วย",
+      (await Early.tryWait("hint_reveal", (h) => h.by === "timer", 3000)) !== null);
+
+    // ทีนี้ห้อง A ก็เลยกำหนดที่ควรเปิดเองไปแล้วเหมือนกัน (เริ่มก่อนห้อง B)
+    // ถ้า server เปิดซ้ำ ทั้งที่นับเป็นครั้งเดียวต่อตา ตัวเลขนี้จะเป็น 2
+    check("ทั้งตาของห้อง A ส่ง hint_reveal ครั้งเดียวจริง (คนวาดขอไปแล้ว เวลาหมดไม่เปิดซ้ำ)", aReveals, 1);
+    check("ห้อง A ไม่มี hint_reveal ที่สองตามมา", (await H.quiet("hint_reveal", 1)).length, 0);
+
+    // ── คนเข้าห้องกลางตา "หลัง" คำใบ้เปิด ต้องได้ช่องคำใบ้ไปเลย ──
+    const LateHint = track(await connect());
+    others.push(LateHint);
+    await emitAck(LateHint.socket, "join_room", { code: bcode, name: "LateHint", avatar: 5 });
+    const lrs = await LateHint.wait("round_start", null, 3000);
+    check("คนเข้าหลังเปิดแล้ว ได้ช่องคำใบ้จริงใน round_start (ไม่ใช่ null)",
+      lrs.hint, expectedHint(bWord));
+    check("คนเข้าหลังเปิดแล้ว ยังไม่มีคำจริงหลุดมา", "word" in lrs, false);
+    check("คนเข้าหลังเปิดแล้ว ได้ hintAt มาด้วย", lrs.hintAt, 10);
+    check("คนเข้าหลังเปิดแล้ว ไม่ได้ hint_reveal ซ้ำ", (await LateHint.quiet("hint_reveal", 600)).length, 0);
+
+    // คำขอของคนเข้าทีหลัง (ไม่ใช่คนวาด) ต้องไม่มีผลกับห้อง B เหมือนกัน
+    clearAll(P, Q, Early);
+    LateHint.socket.emit("request_hint");
+    check("คนเข้าทีหลังขอคำใบ้ ไม่มีอะไรเกิดขึ้น", (await Q.quiet("hint_reveal", 800)).length, 0);
   });
 
   // ปิดทุก socket เพื่อให้โปรเซสจบได้

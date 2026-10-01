@@ -29,6 +29,10 @@ function emptyGame() {
     // client ทำนายล่วงหน้าได้แค่ตอนวาดเพิ่ม (ดู sendAction) แล้วรอ server ยืนยันด้วย canvas_history
     canUndo: false,
     canRedo: false,
+    // คำใบ้ขึ้นช้า — null จนกว่า server จะเปิด (ดู hint_reveal) ห้ามเดาเองในเครื่อง
+    // ถ้า client เผลอสร้างคำใบ้เอง คนทายจะได้เปรียบโดยไม่รู้ตัว
+    hint: null,
+    hintAt: null, // เปิดเองเมื่อเวลาเหลือเท่านี้ (จาก round_start) ใช้โชว์ข้อความรอ
   };
 }
 
@@ -102,14 +106,30 @@ export function useGame() {
         roundKey: g.roundKey + 1,
         canUndo: false, // ตาใหม่ = กระดานว่าง server ล้างประวัติแล้ว
         canRedo: false,
+        // ตาใหม่ = คำใบ้ยังไม่เปิด จึงเป็น null ตามปกติ
+        // ยกเว้นกรณีที่เราเข้าห้องกลางตาหลังเขาเปิดไปแล้ว server จะส่งชุดช่องจริงมาให้เลย
+        hint: data.hint ?? null,
+        hintAt: data.hintAt ?? null,
       }));
     };
+
+    // คำใบ้เปิดแล้ว — server ส่งครั้งเดียวต่อตา ไม่ว่าใครเปิด (คนวาดกดขอ หรือเวลาเหลือหนึ่งในสาม)
+    // ข้อความระบบแยกตามคนเปิด เพื่อให้กล่อง "ในห้อง" เล่าเรื่องได้ครบ
+    const onHintReveal = (data) =>
+      setGame((g) => ({
+        ...g,
+        hint: data?.hint ?? null,
+        messages: [
+          ...g.messages,
+          { system: true, text: data?.by === "drawer" ? "คนวาดเปิดคำใบ้แล้ว" : "คำใบ้เปิดแล้ว" },
+        ],
+      }));
 
     const onYourWord = (data) => patch({ word: data.word });
     const onTimer = (data) => patch({ timeLeft: data.timeLeft });
 
     // จบตา: ซ่อนคำใบ้ ทิ้งตัวเลือก เก็บสรุปไว้โชว์เป็น modal
-    const onRoundEnd = (data) => patch({ summary: data, round: null, word: null, options: null });
+    const onRoundEnd = (data) => patch({ summary: data, round: null, word: null, options: null, hint: null });
 
     // จบเกม: เก็บอันดับไว้โชว์ ส่วนประวัติแชทคงไว้ให้อ่านย้อนหลังได้ระหว่างดูอันดับ
     const onGameEnd = (data) =>
@@ -183,6 +203,7 @@ export function useGame() {
     socket.on("choose_word", onChooseWord);
     socket.on("round_start", onRoundStart);
     socket.on("your_word", onYourWord);
+    socket.on("hint_reveal", onHintReveal);
     socket.on("timer", onTimer);
     socket.on("round_end", onRoundEnd);
     socket.on("game_end", onGameEnd);
@@ -197,6 +218,7 @@ export function useGame() {
       socket.off("choose_word", onChooseWord);
       socket.off("round_start", onRoundStart);
       socket.off("your_word", onYourWord);
+      socket.off("hint_reveal", onHintReveal);
       socket.off("timer", onTimer);
       socket.off("round_end", onRoundEnd);
       socket.off("game_end", onGameEnd);
@@ -235,6 +257,10 @@ export function useGame() {
   const askUndo = useCallback(() => socket.emit("undo"), []);
   const askRedo = useCallback(() => socket.emit("redo"), []);
 
+  // ขอเปิดคำใบ้ก่อนเวลา (คนวาดเท่านั้น) — เหมือน askUndo: แค่ "ขอ" server เป็นคนตัดสิน
+  // ไม่ต้องปิดปุ่มเองในเครื่อง ปุ่มจะปิดเองเมื่อได้ hint_reveal กลับมา (game.hint มีค่า)
+  const askHint = useCallback(() => socket.emit("request_hint"), []);
+
   // ให้หน้า Game ผูก ref ของกระดานเข้ามา เพื่อรับ action ของคนอื่นไปวาด
   // และระบายของที่พักไว้ตอนกระดานยังไม่เกิดออกไปตามลำดับที่มาถึง
   const bindCanvas = useCallback((api) => {
@@ -251,6 +277,7 @@ export function useGame() {
     sendAction,
     askUndo,
     askRedo,
+    askHint,
     bindCanvas,
     chooseWord: (word) => socket.emit("word_chosen", { word }),
     sendGuess: (text) => socket.emit("guess", { text }),

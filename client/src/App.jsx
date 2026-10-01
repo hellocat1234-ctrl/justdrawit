@@ -30,6 +30,7 @@ export default function App() {
     sendAction,
     askUndo,
     askRedo,
+    askHint,
     bindCanvas,
   } = useGame();
 
@@ -117,6 +118,7 @@ export default function App() {
             sendAction={sendAction}
             askUndo={askUndo}
             askRedo={askRedo}
+            askHint={askHint}
             bindCanvas={bindCanvas}
             onLeave={handleLeave}
             // Toast ตัวกลางอยู่ที่ App หน้าเกมจึงขอยืมใช้ (เช่นตอนกดคัดลอกรหัสห้อง)

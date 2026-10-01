@@ -30,6 +30,7 @@ export default function Game({
   sendAction,
   askUndo,
   askRedo,
+  askHint,
   bindCanvas,
   onLeave,
   onToast,
@@ -112,11 +113,37 @@ export default function Game({
           ) : game.options ? (
             <span className="topbar__idle">กำลังเลือกคำ...</span>
           ) : game.round ? (
-            <HintSlots hint={game.round.hint} />
+            // คำใบ้ขึ้นช้า: ยังไม่เปิดก็ยังไม่โชว์ช่อง บอกก่อนว่าอีกกี่วิจะได้เห็น
+            // (game.hint มาจาก server เท่านั้น — client ไม่เดาช่องเองเด็ดขาด)
+            game.hint ? (
+              <HintSlots hint={game.hint} />
+            ) : (
+              <span className="topbar__idle">
+                คำใบ้จะขึ้นเมื่อเหลือ {game.hintAt ?? "?"} วิ
+              </span>
+            )
           ) : (
             <span className="topbar__idle">—</span>
           )}
         </div>
+
+        {/* ปุ่มเปิดคำใบ้ก่อนเวลา — เห็นเฉพาะคนวาดตอนกำลังวาด และกดได้ครั้งเดียวต่อตา
+            ยังไม่เปิด = กดได้ · เปิดแล้ว (game.hint มีค่า) = ปิดปุ่ม ค้างไว้ให้เห็นว่ามีปุ่มนี้อยู่ */}
+        {isDrawer && drawing && (
+          <button
+            type="button"
+            className="hint-btn"
+            onClick={askHint}
+            disabled={game.hint !== null}
+            title={
+              game.hint !== null
+                ? "ตานี้เปิดคำใบ้ไปแล้ว"
+                : "ให้ทุกคนเห็นช่องคำใบ้ก่อนเวลา (ได้ครั้งเดียวต่อตา)"
+            }
+          >
+            {game.hint !== null ? "💡 เปิดคำใบ้แล้ว" : "💡 ให้คำใบ้"}
+          </button>
+        )}
 
         <div className="topbar__meta">
           {/* รหัสห้องอยู่ข้างเลขรอบ ทุกคนในห้องเห็นและกดคัดลอกได้หมด */}

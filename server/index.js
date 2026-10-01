@@ -107,6 +107,15 @@ function pickWords(n) {
 
 
 // ---------- คำใบ้ ----------
+// คำใบ้ไม่โผล่ตั้งแต่ต้นตาอีกแล้ว มันจะเปิดเมื่อ "เวลาเหลือหนึ่งในสามของเวลาเต็ม" (ปัดลง)
+//   30 วิ → เหลือ 10 · 45 วิ → เหลือ 15 · 60 วิ → เหลือ 20 · 90 วิ → เหลือ 30
+// คนวาดกดขอเปิดก่อนเวลาได้หนึ่งครั้งต่อตา (request_hint)
+//
+// กติกาที่ห้ามละเมิด: **ห้ามส่งช่องคำใบ้ออกไปก่อนถึงเวลาทางใดทางหนึ่งเด็ดขาด**
+// ไม่ว่าจะใน round_start ของคนเข้าห้องกลางตา หรือที่ไหน — คนทายเปิด DevTools ดูได้
+// เพราะฉะนั้น roundInfo() จึงส่ง hint: null จนกว่าจะเปิดจริงเท่านั้น
+const HINT_AT_DIVISOR = 3;
+
 function makeHint(word) {
   const slots = [];
   for (const ch of word) {
@@ -121,6 +130,23 @@ function makeHint(word) {
     }
   }
   return slots;
+}
+
+// วินาทีที่เหลือตอนคำใบ้จะเปิดเอง — คิดจากเวลาต่อตาที่ตั้งไว้ในห้องนั้น
+// อ่านค่าจาก settings ทุกครั้ง (ไม่แช่ไว้ตั้งแต่เริ่มตา) จึงไม่มีทางไม่ตรงกัน
+function hintAt(room) {
+  return Math.floor(room.settings.drawTime / HINT_AT_DIVISOR);
+}
+
+// เปิดคำใบ้ให้ทั้งห้อง — **ประตูเดียว** ของการเปิดคำใบ้ในตาหนึ่ง
+// ทั้งทางที่คนวาดกดขอ (request_hint) และทางที่เวลาหมด (tick ของ startTimer) ต้องผ่านฟังก์ชันนี้
+// จึงรับประกันได้ว่า hint_reveal ออกไป "ครั้งเดียวต่อตา" จริง ไม่ใช่แค่พยายามให้เป็น
+// คืน true ถ้าเปิดจริง · false ถ้าเปิดไปแล้วหรือยังไม่มีคำ (ไม่ส่งอะไรออกไปเลย)
+function revealHint(room, by) {
+  if (room.hintOpen || !room.word) return false;
+  room.hintOpen = true;
+  io.to(room.code).emit("hint_reveal", { hint: makeHint(room.word), by });
+  return true;
 }
 
 
@@ -332,6 +358,9 @@ function startTimer(room, seconds, onEnd) {
   room.timer = setInterval(() => {
     room.timeLeft--;
     io.to(room.code).emit("timer", { timeLeft: room.timeLeft });
+    // ถึงเวลาที่คำใบ้ควรเปิดเองแล้ว (เหลือหนึ่งในสามของเวลาเต็ม) — เปิดให้ทั้งห้อง
+    // ถ้าคนวาดกดขอไปก่อนหน้านี้แล้ว revealHint จะไม่ทำอะไร (มี hintOpen กันอยู่)
+    if (room.timeLeft <= hintAt(room)) revealHint(room, "timer");
     if (room.timeLeft <= 0) {
       stopTimer(room);
       onEnd();
@@ -367,6 +396,8 @@ function startDrawing(room, word) {
   console.log("คำตานี้:", word);
   room.guessedIds = new Set();
   room.roundGains = {};
+  // ตาใหม่ = คำใบ้ยังไม่เปิด (ต้องรีเซ็ตก่อนส่ง round_start เสมอ ไม่งั้นตาถัดไปจะได้คำใบ้ฟรี)
+  room.hintOpen = false;
   resetCanvas(room); // ขึ้นตาใหม่ = กระดานว่าง ประวัติตาที่แล้วทิ้งทั้งหมด
 
   room.timeLeft = room.settings.drawTime;
@@ -381,7 +412,10 @@ function roundInfo(room) {
     round: room.round,
     totalRounds: room.settings.rounds,
     drawerId: room.drawerId,
-    hint: makeHint(room.word),
+    // คำใบ้เป็น null จนกว่าจะเปิด (คนวาดกดขอ หรือเวลาเหลือหนึ่งในสาม)
+    // คนที่เข้าห้องกลางตาหลังเปิดแล้วจะได้ชุดช่องจริงไปเลย ไม่ใช่ null
+    hint: room.hintOpen && room.word ? makeHint(room.word) : null,
+    hintAt: hintAt(room), // เปิดเองเมื่อเวลาเหลือเท่านี้ — client ใช้โชว์ "คำใบ้จะขึ้นเมื่อเหลือ X วิ"
     time: room.timeLeft,
     challenge: { type: "none" },
     // ส่งแค่ "id" ของคนที่ทายถูกแล้ว ไม่มีคำตอบหรืออะไรที่บอกคำปนมาด้วย
@@ -690,6 +724,16 @@ io.on("connection", (socket) => {
     const room = drawRoom(socket);
     if (!room || !redoCanvas(room)) return;
     io.to(room.code).emit("canvas_history", canvasPayload(room));
+  });
+
+  // ── คำใบ้ (คนวาดขอเปิดก่อนเวลา) ──
+  // drawRoom() เช็คให้ครบสามอย่างในตัวมันเองอยู่แล้ว: อยู่ในห้อง · กำลังวาด · เป็นคนวาด
+  // ไม่ผ่านข้อใดข้อหนึ่ง = ทิ้งเงียบ ๆ เหมือน handler การวาดตัวอื่น (ไม่ตอบ error กลับ)
+  // เปิดซ้ำครั้งที่สองก็เงียบ เพราะ revealHint มี hintOpen กันไว้แล้ว
+  socket.on("request_hint", () => {
+    const room = drawRoom(socket);
+    if (!room) return;
+    revealHint(room, "drawer");
   });
 
   socket.on("leave_room", () => leaveRoom(socket));

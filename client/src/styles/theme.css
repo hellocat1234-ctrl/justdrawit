@@ -584,6 +584,39 @@ input {
   white-space: nowrap;
 }
 
+/* ปุ่ม "💡 ให้คำใบ้" ของคนวาด — อยู่ระหว่างพื้นที่คำ/คำใบ้ กับกลุ่มรหัสห้อง
+   สูง 44px ตามกฎ DESIGN.md "ปุ่มสูงอย่างน้อย 44px ใช้ทุกจอ ไม่ใช่แค่จอมือถือ"
+   ซึ่งยังเตี้ยกว่า min-height 46px ของ .topbar__word
+   แถบบนจึงไม่สูงขึ้นเลย → ที่กันไว้ 360px ของกระดาน (DESIGN.md) ยังถูกต้อง */
+.hint-btn {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 14px;
+  border: var(--border);
+  box-shadow: var(--shadow-xs);
+  background: var(--yellow);
+  color: var(--ink);
+  font-family: var(--font-head);
+  font-weight: 500;
+  font-size: 15px;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.hint-btn:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: 0 0 0 var(--ink);
+}
+
+/* เปิดคำใบ้ไปแล้ว — ปุ่มยังอยู่ให้เห็นว่ามี แต่กดซ้ำไม่ได้ (server ไม่รับอยู่แล้ว) */
+.hint-btn:disabled {
+  background: var(--white);
+  color: var(--muted);
+  cursor: default;
+}
+
 /* ---- ตัวจับเวลา เม็ดยาสีแดง ตัวเลขพิกเซล ---- */
 
 @keyframes timer-blink {
