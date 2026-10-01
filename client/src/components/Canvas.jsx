@@ -53,6 +53,40 @@ const clamp01 = (v) => Math.min(1, Math.max(0, v));
 // empty = สิ่งที่โชว์กลางกระดานตอนยังไม่มีเส้น (มาสคอต) · หายเองเมื่อมีเส้นแรก และกลับมาถ้าล้างจอ
 const Canvas = forwardRef(function Canvas({ canDraw, tool, color, size, onAction, empty = null }, ref) {
   const [hasInk, setHasInk] = useState(false);
+  // ── มาสคอตกลางกระดาน (prop empty) ──
+  // ขึ้นตอนเริ่มตา/ช่วงเลือกคำเท่านั้น หายเมื่อมีเส้นแรก หรือครบ 3 วิ อย่างใดอย่างหนึ่งก่อน
+  // หายแล้วไม่กลับมาอีกตลอดตานั้น (แม้ล้างจอ/ย้อนจนว่าง) จนกว่า resetBoard (ขึ้นตาใหม่) จะเริ่มรอบใหม่
+  // sceneN นับตาใหม่ · goneFor = เลขตาที่มาสคอตหายไปแล้ว · fading = กำลังจางออก
+  const [sceneN, setSceneN] = useState(0);
+  const [goneFor, setGoneFor] = useState(-1);
+  const [fading, setFading] = useState(false);
+  const lastEmptyRef = useRef(null);
+  const mascotOn = Boolean(empty) && !hasInk && goneFor !== sceneN;
+  if (empty) lastEmptyRef.current = empty;
+  const wasOnRef = useRef(false);
+
+  useEffect(() => {
+    if (!mascotOn) return undefined;
+    const t = setTimeout(() => setGoneFor(sceneN), 3000);
+    return () => clearTimeout(t);
+  }, [mascotOn, sceneN]);
+
+  // มีเส้นแรก = ถือว่าหายไปแล้วสำหรับตานี้ (ไม่กลับมาถึงล้างจอ)
+  useEffect(() => {
+    if (hasInk) setGoneFor(sceneN);
+  }, [hasInk, sceneN]);
+
+  // จากเปิด → ปิด: จางออก 0.5 วิแล้วค่อยถอดทิ้ง · ถ้าผู้ใช้ตั้งลดภาพเคลื่อนไหวไว้ ถอดทันที
+  useEffect(() => {
+    const wasOn = wasOnRef.current;
+    wasOnRef.current = mascotOn;
+    if (wasOn && !mascotOn && !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+      setFading(true);
+      const t = setTimeout(() => setFading(false), 500);
+      return () => clearTimeout(t);
+    }
+    return undefined;
+  }, [mascotOn]);
   // มีหมึกบนกระดานไหม: action ล่าสุดไม่ใช่การล้างจอ (ถ้าลิสต์ว่างก็ไม่มี)
   const syncInk = () => {
     const list = actionsRef.current;
@@ -220,6 +254,7 @@ const Canvas = forwardRef(function Canvas({ canDraw, tool, color, size, onAction
     pendingRef.current = [];
     painterRef.current?.replay([]);
     syncInk();
+    setSceneN((n) => n + 1); // ตาใหม่ = มาสคอตมีสิทธิ์ขึ้นอีกหนึ่งรอบ
   }
 
   // ── โหมดดีบักชั่วคราว: ดึงตัวเลขออกมาแสดงเป็นรอบๆ ทุก 250ms ──
@@ -584,7 +619,9 @@ const Canvas = forwardRef(function Canvas({ canDraw, tool, color, size, onAction
         onPointerLeave={handleLeave}
         onLostPointerCapture={handleLostCapture}
       />
-      {!hasInk && empty && <div className="board__empty">{empty}</div>}
+      {(mascotOn || fading) && (
+        <div className={`board__empty${mascotOn ? "" : " board__empty--out"}`}>{empty || lastEmptyRef.current}</div>
+      )}
       {dbgText && <pre className="board__debug">{dbgText}</pre>}
     </div>
   );

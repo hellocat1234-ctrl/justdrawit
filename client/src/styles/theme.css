@@ -2070,6 +2070,16 @@ select[class] {
   pointer-events: none;
 }
 
+/* จางออกแทนหายวับ (ถ้าลดภาพเคลื่อนไหวอยู่ กฎ reduced-motion ปิด transition และ Canvas ถอดทิ้งทันที) */
+.board__empty {
+  opacity: 1;
+  transition: opacity 0.5s ease-out;
+}
+
+.board__empty--out {
+  opacity: 0;
+}
+
 .board__empty .mascot-note {
   width: min(46%, 220px);
 }
