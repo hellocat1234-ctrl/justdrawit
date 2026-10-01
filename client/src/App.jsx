@@ -5,13 +5,14 @@ import { useGame } from "./hooks/useGame";
 import Lobby from "./screens/Lobby";
 import WaitingRoom from "./screens/WaitingRoom";
 import Game from "./screens/Game";
+import Leaderboard from "./screens/Leaderboard";
 import Toast from "./components/Toast";
 
 // App เป็นที่เดียวที่ผูก socket ไว้ หน้าจออื่นรับข้อมูลเป็น props
 // ทำแบบนี้เพราะ socket เป็นของกลาง ถ้าต่างคนต่างผูก จะมี listener ซ้ำและลืมถอดออกง่าย
 export default function App() {
   const [connected, setConnected] = useState(socket.connected);
-  const [screen, setScreen] = useState("lobby"); // lobby | waiting | game
+  const [screen, setScreen] = useState("lobby"); // lobby | waiting | game | leaderboard
   const [room, setRoom] = useState(null); // RoomState ก้อนล่าสุดจาก server
   const [me, setMe] = useState(null); // { playerId, name, avatar } ของเครื่องนี้
   const [toast, setToast] = useState(null);
@@ -92,8 +93,12 @@ export default function App() {
           onEntered={handleEntered}
           // หน้า Lobby ส่ง "รหัส error" มา ที่นี่แปลงเป็นข้อความไทยก่อนโชว์
           onError={(code) => showToast(errorText(code))}
+          onOpenLeaderboard={() => setScreen("leaderboard")}
         />
       )}
+
+      {/* Leaderboard ไม่ได้ใช้ socket เลย ขอข้อมูลผ่าน HTTP เอง */}
+      {screen === "leaderboard" && <Leaderboard onBack={() => setScreen("lobby")} />}
 
       {/* room ยังมาไม่ถึงก็มีให้เห็นว่ากำลังทำอะไรอยู่ ไม่ใช่จอเปล่า */}
       {screen === "waiting" &&

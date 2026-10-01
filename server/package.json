@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "node tests/smoke.js"
+    "test": "node tests/smoke.js",
+    "seed": "node scripts/seed-scores.js"
   },
   "keywords": [],
   "author": "",

@@ -5,7 +5,7 @@ import Logo from "../components/Logo";
 
 // หน้าแรก: แท็บ CREATE / JOIN · เลือกอวตาร · ใส่ชื่อ · (แท็บ JOIN มีช่องรหัสห้อง)
 // ฝั่งนี้แค่ช่วยให้ใช้ง่าย ของจริง server เป็นคนตรวจซ้ำเสมอ (server-authoritative)
-export default function Lobby({ connected, onEntered, onError }) {
+export default function Lobby({ connected, onEntered, onError, onOpenLeaderboard }) {
   const [tab, setTab] = useState("create"); // create | join
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
@@ -133,6 +133,13 @@ export default function Lobby({ connected, onEntered, onError }) {
           </p>
         </aside>
       </div>
+
+      {/* ลิงก์ล่างหน้าแรกตาม DESIGN.md (🤖 Solo จะมาในข้อ 7) */}
+      <nav className="lobby-links">
+        <button type="button" className="btn" onClick={onOpenLeaderboard}>
+          🏆 Leaderboard
+        </button>
+      </nav>
     </div>
   );
 }

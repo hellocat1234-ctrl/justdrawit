@@ -2,12 +2,30 @@ const express = require("express");
 const http = require("http");
 const fs = require("fs");
 const { Server } = require("socket.io");
+const { cleanName } = require("./clean");
+const leaderboard = require("./leaderboard");
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
 
 app.use(express.static(__dirname + "/public"));
+
+// ---------- Leaderboard (HTTP ธรรมดา ไม่ใช่ Socket.IO เพราะขอดูครั้งเดียว ไม่ต้องสด) ----------
+// ไม่ใส่ month = ตลอดกาล · ใส่แล้วต้องเป็น YYYY-MM ไม่งั้นตอบ 400
+// (ถ้าส่ง month มาสองครั้ง จะได้เป็น array ซึ่งก็ไม่ผ่าน isValidMonth → 400 เหมือนกัน)
+app.get("/api/leaderboard", (req, res) => {
+  const month = req.query.month;
+  if (month !== undefined && !leaderboard.isValidMonth(month)) {
+    return res.status(400).json({ error: "INVALID_MONTH" });
+  }
+  try {
+    res.json(leaderboard.getLeaderboard(month ?? null));
+  } catch (err) {
+    console.warn("ดึง leaderboard ไม่สำเร็จ:", err.message);
+    res.status(500).json({ error: "SERVER_ERROR" });
+  }
+});
 
 // ---------- ที่เก็บข้อมูลห้อง ----------
 const rooms = new Map(); // key = รหัสห้อง, value = ข้อมูลห้อง
@@ -20,10 +38,6 @@ function makeRoomCode() {
     code = String(Math.floor(10000 + Math.random() * 90000));
   } while (rooms.has(code));
   return code;
-}
-
-function cleanName(name) {
-  return String(name ?? "").trim().slice(0, 20);
 }
 
 // เลขอวตารต้องเป็นจำนวนเต็ม 0-5 ตาม events.md ค่าอื่นที่ไม่ถูกต้องใช้ 0 แทน (ไม่ต้องแจ้ง error)

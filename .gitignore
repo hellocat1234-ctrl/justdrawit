@@ -72,7 +72,8 @@ web_modules/
 
 # ข้อมูลของโปรเจกต์นี้
 # คะแนนจริงของ Leaderboard ไม่ต้อง commit (ส่วน server/data/words.json ต้อง commit)
-server/data/scores.json
+# รวมไฟล์สำรอง/ชั่วคราวที่ leaderboard.js กับ seed สร้าง (scores.json.broken-* .backup-* .tmp)
+server/data/scores.json*
 
 # parcel-bundler cache (https://parceljs.org/)
 .cache

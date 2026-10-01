@@ -13,6 +13,13 @@ const fs = require("fs");
 const { spawn } = require("child_process");
 
 const SERVER_DIR = path.join(__dirname, "..");
+
+// ข้อ 19-20 (Leaderboard) ใช้ไฟล์คะแนนชั่วคราว ไม่แตะ server/data/scores.json ของจริง
+// ต้องตั้งก่อน require("../leaderboard") และส่งต่อให้ server ตอน spawn ด้วย ทั้งสองฝั่งจะได้ใช้ไฟล์เดียวกัน
+const os = require("os");
+const SCORES_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "jdi-scores-"));
+const SCORES_FILE = path.join(SCORES_DIR, "scores.json");
+process.env.SCORES_FILE = SCORES_FILE;
 const URL = "http://localhost:3000";
 
 // ใช้ client ของ socket.io ที่มีอยู่ใน node_modules แล้วรันบน Node ได้เลย
@@ -172,7 +179,11 @@ async function startServer() {
     process.exit(1);
   }
 
-  child = spawn(process.execPath, ["index.js"], { cwd: SERVER_DIR, stdio: ["ignore", "pipe", "pipe"] });
+  child = spawn(process.execPath, ["index.js"], {
+    cwd: SERVER_DIR,
+    stdio: ["ignore", "pipe", "pipe"],
+    env: { ...process.env, SCORES_FILE },
+  });
   const collect = (buf) => serverLog.push(buf.toString().trimEnd());
   child.stdout.on("data", collect);
   child.stderr.on("data", collect);
@@ -188,6 +199,13 @@ async function startServer() {
 function stopServer() {
   if (child && !child.killed) child.kill();
   child = null;
+  fs.rmSync(SCORES_DIR, { recursive: true, force: true }); // ลบไฟล์คะแนนชั่วคราวของข้อ 19-20
+}
+
+// ยิง GET /api/leaderboard แล้วคืน { status, body }
+async function getBoard(query = "") {
+  const res = await fetch(`${URL}/api/leaderboard${query}`);
+  return { status: res.status, body: await res.json().catch(() => null) };
 }
 
 // ================= เทส =================
@@ -1170,6 +1188,90 @@ async function main() {
     clearAll(drawer, guesser);
     drawer.socket.emit("stroke_start", { x: 0.6, y: 0.6, color: LINE, size: 5, tool: "pen" });
     check("ล้างจอแล้วก็ยังวาดต่อไม่ได้", (await guesser.quiet("stroke_start", 600)).length, 0);
+  });
+
+  await runPart("19. Leaderboard API — รูปแบบ · เรียง · กรองเดือน · month ผิด · ไฟล์หาย/เสีย", async () => {
+    // ไฟล์ยังไม่มี → ได้รายการว่าง ไม่ล่ม
+    fs.rmSync(SCORES_FILE, { force: true });
+    let r = await getBoard();
+    check("ไฟล์ยังไม่มี → 200 และรายการว่าง", [r.status, r.body], [200, { month: null, top: [] }]);
+
+    // 25 แถวเดือน 2026-09 (เกิน 20 เพื่อเทสการตัด) + 3 แถวเดือนอื่น + แถวหน้าตาเพี้ยน 2 แถว
+    const rows = [];
+    for (let i = 0; i < 25; i++) {
+      rows.push({ id: i + 1, name: `P${i}`, score: (i * 37) % 500, levelReached: 1 + (i % 9), playedAt: `2026-09-${String(1 + i).padStart(2, "0")} 20:00` });
+    }
+    rows.push({ id: 26, name: "Tar", score: 9999, levelReached: 9, playedAt: "2026-10-02 10:00" });
+    rows.push({ id: 27, name: "เสมอด่านน้อย", score: 800, levelReached: 3, playedAt: "2026-08-01 10:00" });
+    rows.push({ id: 28, name: "เสมอด่านมาก", score: 800, levelReached: 5, playedAt: "2026-08-02 10:00" });
+    rows.push({ id: 29, name: 123, score: "x" }); // แถวเสีย ต้องถูกทิ้ง
+    rows.push(null);
+    fs.writeFileSync(SCORES_FILE, JSON.stringify(rows));
+
+    r = await getBoard();
+    check("ตลอดกาล → 200 และ month เป็น null", [r.status, r.body?.month], [200, null]);
+    check("ตลอดกาล ส่งแค่ 20 อันดับ", r.body.top.length, 20);
+    check("แต่ละแถวมีแค่ rank name score levelReached",
+      r.body.top.every((t) => JSON.stringify(Object.keys(t)) === '["rank","name","score","levelReached"]'), true);
+    check("rank เรียง 1..20", r.body.top.map((t) => t.rank), Array.from({ length: 20 }, (_, i) => i + 1));
+    checkOk("คะแนนเรียงจากมากไปน้อย", r.body.top.every((t, i, a) => i === 0 || a[i - 1].score >= t.score));
+    check("อันดับ 1 คือคะแนนสูงสุด", r.body.top[0].name, "Tar");
+    check("คะแนนเท่ากัน ด่านไกลกว่าได้อันดับดีกว่า", r.body.top.slice(1, 3).map((t) => t.name), ["เสมอด่านมาก", "เสมอด่านน้อย"]);
+    checkOk("แถวที่หน้าตาเพี้ยนไม่โผล่", r.body.top.every((t) => typeof t.name === "string"));
+
+    r = await getBoard("?month=2026-09");
+    check("เดือน 2026-09 → month ตรงกับที่ขอ", [r.status, r.body?.month], [200, "2026-09"]);
+    check("เดือน 2026-09 ตัดเหลือ 20 จาก 25", r.body.top.length, 20);
+    checkOk("เดือน 2026-09 ไม่มีคนของเดือนอื่น", r.body.top.every((t) => /^P\d+$/.test(t.name)));
+    r = await getBoard("?month=2026-08");
+    check("เดือน 2026-08 ได้สองคนที่เล่นเดือนนั้น", r.body.top.map((t) => [t.rank, t.name]), [[1, "เสมอด่านมาก"], [2, "เสมอด่านน้อย"]]);
+    r = await getBoard("?month=2025-01");
+    check("เดือนที่ไม่มีใครเล่น → รายการว่าง", [r.status, r.body], [200, { month: "2025-01", top: [] }]);
+
+    for (const bad of ["2026-13", "2026-00", "2026-9", "26-09", "2026-09-01", "abc", "", "2026-09&month=2026-08", "%3Cscript%3E"]) {
+      r = await getBoard(`?month=${bad}`);
+      check(`month=${bad || "(ว่าง)"} → 400`, [r.status, r.body], [400, { error: "INVALID_MONTH" }]);
+    }
+
+    // ไฟล์เสียระหว่างที่ server เปิดอยู่ → ไม่ล่ม ได้รายการว่าง
+    fs.writeFileSync(SCORES_FILE, "{ นี่ไม่ใช่ JSON");
+    r = await getBoard();
+    check("ไฟล์ JSON เสีย → 200 และรายการว่าง", [r.status, r.body], [200, { month: null, top: [] }]);
+    fs.writeFileSync(SCORES_FILE, JSON.stringify({ not: "array" }));
+    r = await getBoard();
+    check("ไฟล์เป็น JSON แต่ไม่ใช่ array → รายการว่าง", r.body?.top, []);
+    checkOk("server ยังทำงานอยู่หลังเจอไฟล์เสีย", await serverIsUp());
+  });
+
+  await runPart("20. saveScore — บันทึกปลอดภัย · ตัดชื่อ · ไฟล์เสียแล้วเริ่มใหม่", async () => {
+    // เรียกฟังก์ชันตรงๆ (แบบที่ข้อ 7 จะเรียก) แล้วดูผลผ่าน API ของ server ที่อ่านไฟล์เดียวกัน
+    const { saveScore } = require("../leaderboard");
+
+    fs.rmSync(SCORES_FILE, { force: true });
+    const first = saveScore({ name: "  Mew  ", score: 1320, levelReached: 6 });
+    check("ไฟล์ยังไม่มี → บันทึกได้ id 1 และชื่อถูกตัดช่องว่าง",
+      first && [first.id, first.name, first.score, first.levelReached], [1, "Mew", 1320, 6]);
+    checkOk("playedAt เป็นรูปแบบ YYYY-MM-DD HH:mm", /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(first?.playedAt ?? ""));
+
+    const long = saveScore({ name: "ชื่อยาวมากเกินยี่สิบตัวอักษรแน่นอน", score: 50.9, levelReached: -3 });
+    check("ชื่อยาวถูกตัดเหลือ 20 ตัว · คะแนนปัดลง · ด่านติดลบเป็น 0",
+      long && [[...long.name].length, long.score, long.levelReached], [20, 50, 0]);
+    check("ชื่อว่างไม่บันทึก", saveScore({ name: "   ", score: 10, levelReached: 1 }), null);
+    check("ไม่ส่งอะไรมาเลยก็ไม่ล่ม", saveScore(), null);
+    check("ชื่อที่หน้าตาเป็น HTML เก็บเป็นข้อความเดิม ไม่แปลงอะไร",
+      saveScore({ name: "<b>x</b>", score: 1, levelReached: 1 })?.name, "<b>x</b>");
+
+    const month = first.playedAt.slice(0, 7);
+    const r = await getBoard(`?month=${month}`);
+    check("API เห็นคะแนนที่เพิ่งบันทึก เรียงถูก", r.body?.top.map((t) => t.name), ["Mew", "ชื่อยาวมากเกินยี่สิบตัวอักษรแน่นอน".slice(0, 20), "<b>x</b>"]);
+    check("ไม่มีไฟล์ชั่วคราวค้าง (.tmp)", fs.readdirSync(SCORES_DIR).filter((f) => f.endsWith(".tmp")), []);
+
+    // ไฟล์เสีย → เก็บสำรองไว้ แล้วเริ่มรายการใหม่
+    fs.writeFileSync(SCORES_FILE, "[{ เสีย");
+    const after = saveScore({ name: "Joy", score: 700, levelReached: 4 });
+    check("ไฟล์เสีย → บันทึกได้ เริ่มนับ id ใหม่", after && [after.id, after.name], [1, "Joy"]);
+    check("ไฟล์ใหม่อ่านได้และมีแถวเดียว", JSON.parse(fs.readFileSync(SCORES_FILE, "utf8")).length, 1);
+    checkOk("ไฟล์เสียถูกเก็บสำรองไว้ ไม่หายไปเฉยๆ", fs.readdirSync(SCORES_DIR).some((f) => f.includes(".broken-")));
   });
 
   // ปิดทุก socket เพื่อให้โปรเซสจบได้
