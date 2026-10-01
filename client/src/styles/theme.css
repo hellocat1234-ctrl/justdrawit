@@ -818,6 +818,10 @@ input {
 }
 
 .challenge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
   padding: 10px 14px;
   border: var(--border);
   box-shadow: var(--shadow-sm);
@@ -826,6 +830,17 @@ input {
   font-family: var(--font-head);
   font-weight: 600;
   text-align: center;
+}
+
+/* ตัวอย่างสีที่ colour_fix ล็อกไว้ (ข้อ 5)
+   สูง 18px ซึ่งเตี้ยกว่าความสูงบรรทัดของข้อความในป้าย จึงไม่ดันป้ายให้สูงขึ้น
+   (ความสูงป้ายถูกนับไว้ใน 360px ที่กันให้กระดานแล้ว — ดูหมายเหตุที่ .board) */
+.challenge__swatch {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--white);
+  border-radius: 999px;
+  box-shadow: var(--shadow-xs);
 }
 
 /* ---- กระดานวาด ---- */
@@ -921,6 +936,12 @@ input {
   pointer-events: none;
 }
 
+/* กลุ่มที่กติกาล็อกไว้ทั้งกลุ่ม (colour_fix ล็อกสี) — จางลง แต่ยังใช้ตัว disabled จริงคุมการกด
+   ไม่ใช้ pointer-events: none แบบ .toolbar--locked เพราะที่นี่เฉพาะ "บางกลุ่ม" ยังกดได้ (ปากกา ยางลบ ขนาด) */
+.toolbar__group--off {
+  opacity: 0.45;
+}
+
 /* กลุ่มสไลเดอร์ (สีเอง · ขนาดแปรง) — ป้ายอยู่บรรทัดบน สไลเดอร์อยู่บรรทัดล่าง
    เพราะคอลัมน์ขวาแคบ วางเรียงแนวนอนแล้วสไลเดอร์จะสั้นจนลากไม่ถนัด
    บทเรียนจากรอบก่อน: กลุ่มพวกนี้เคยดันล้นออกนอกกรอบเพราะ flex item หดต่ำกว่าเนื้อหาไม่ได้
@@ -990,6 +1011,18 @@ input {
   transform: scale(1.15);
   outline: 3px solid var(--ink);
   outline-offset: 2px;
+}
+
+/* จุดสีที่กดไม่ได้ — colour_fix ล็อกทั้งกลุ่มไว้ที่สีเดียว (Mini Challenge ข้อ 5)
+   สีที่ล็อกอยู่ต้องยังเด่นเต็มที่ ไม่งั้นผู้เล่นมองไม่ออกว่าตานี้ต้องใช้สีอะไร
+   จึงเขียนกฎคู่กันไว้ชัด ๆ แทนที่จะพึ่งลำดับของกฎในไฟล์ (บทเรียนจากบั๊ก CSS ชนกันข้ามหน้า) */
+.swatch:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.swatch:disabled.swatch--on {
+  opacity: 1;
 }
 
 /* ── แถบสีรุ้งสำหรับเลือกสีเอง ──

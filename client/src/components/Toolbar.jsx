@@ -37,12 +37,21 @@ export default function Toolbar({
   canUndo = false,
   canRedo = false,
   locked = false,
+  // ── Mini Challenge (ข้อ 5) — ค่าที่มีผลจริงถูกคิดมาแล้วจาก Game ──
+  // lockedColor: สีเดียวที่ใช้ได้ในตานี้ (colour_fix) ไม่มีก็เป็น null
+  // hideBucket : dont_lift_pen ซ่อนปุ่มถังสี ไม่ใช่แค่ปิด (กติกาคือ "ห้ามยกปากกา" การเทสีคือการวาด)
+  // historyLocked: dont_lift_pen ห้ามย้อน/ทำซ้ำ — ใช้แค่เปลี่ยนข้อความ tooltip ให้อธิบายได้
+  lockedColor = null,
+  hideBucket = false,
+  historyLocked = false,
 }) {
   // สีที่เลือกเองจากแถบสีรุ้ง — เก็บเป็น "องศาสี" (0–360) แล้วแปลงเป็น hex ตอนใช้
   // เก็บเป็น hue ไม่ใช่ hex เพราะแถบสีรุ้งต้องรู้ว่าจะวางหัวเลื่อนไว้ตรงไหน
   const [hue, setHue] = useState(HUE_DEFAULT);
   const custom = hslToHex(hue, 1, 0.5);
   const customPicked = color.toLowerCase() === custom.toLowerCase();
+  // colour_fix: กลุ่มเลือกสีใช้ไม่ได้ทั้งกลุ่ม (สีล็อกจาก server แล้ว ไม่ใช่สีที่ผู้ใช้เลือก)
+  const colourLocked = Boolean(lockedColor);
 
   // ลากแถบสีรุ้งแล้วได้สีนั้นทันที ไม่ต้องกดยืนยันอีกที (โจทย์อยากให้เลือกง่าย)
   function handleHue(e) {
@@ -66,7 +75,7 @@ export default function Toolbar({
           type="button"
           className="tool tool--action"
           aria-label="ย้อนกลับ"
-          title="ย้อนกลับ (⌘Z)"
+          title={historyLocked ? "กติกา ห้ามยกปากกา: ย้อนกลับไม่ได้" : "ย้อนกลับ (⌘Z)"}
           disabled={locked || !canUndo}
           onClick={onUndo}
         >
@@ -76,7 +85,7 @@ export default function Toolbar({
           type="button"
           className="tool tool--action"
           aria-label="ทำซ้ำ"
-          title="ทำซ้ำ (⌘⇧Z)"
+          title={historyLocked ? "กติกา ห้ามยกปากกา: ทำซ้ำไม่ได้" : "ทำซ้ำ (⌘⇧Z)"}
           disabled={locked || !canRedo}
           onClick={onRedo}
         >
@@ -104,23 +113,36 @@ export default function Toolbar({
         >
           🧽
         </button>
-        <button
-          type="button"
-          className={`tool${tool === TOOLS.BUCKET ? " tool--on" : ""}`}
-          aria-label="ถังสี"
-          aria-pressed={tool === TOOLS.BUCKET}
-          onClick={() => onTool(TOOLS.BUCKET)}
-        >
-          🪣
-        </button>
+        {/* ถังสี — dont_lift_pen ซ่อนไปเลย เพราะกติกาคือ "ห้ามยกปากกา"
+            การเทสีทั้งพื้นที่ในคลิกเดียวไม่ใช่การวาดเส้นต่อเนื่อง และ server ก็ทิ้ง fill ทุกครั้งอยู่แล้ว */}
+        {!hideBucket && (
+          <button
+            type="button"
+            className={`tool${tool === TOOLS.BUCKET ? " tool--on" : ""}`}
+            aria-label="ถังสี"
+            aria-pressed={tool === TOOLS.BUCKET}
+            onClick={() => onTool(TOOLS.BUCKET)}
+          >
+            🪣
+          </button>
+        )}
         {/* ล้างจอทำทันที ไม่ใช่โหมด จึงไม่ได้ค้างสถานะกดไว้แบบสามปุ่มบน */}
         <button type="button" className="tool tool--danger" aria-label="ล้างจอ" onClick={onClear}>
           🗑️
         </button>
       </div>
 
-      {/* ── สีสำเร็จรูป 8 สี ── */}
-      <div className="toolbar__group toolbar__group--colors" role="group" aria-label="สี">
+      {/* ── สีสำเร็จรูป 8 สี ──
+          colour_fix: ทั้งกลุ่มกดไม่ได้ (สีถูกล็อกไว้แล้ว) แต่ยังโชว์ให้เห็นว่ามีสีอะไรบ้าง
+          สีที่ล็อกอยู่จะติด swatch--on เอง เพราะ Game ส่ง drawColor ลงมาเป็นสีที่ล็อกแล้ว */}
+      {/* ไม่ใส่ toolbar__group--off ที่กลุ่มนี้ เพราะสีที่ล็อกอยู่ต้องเด่นเต็มที่
+          (จางทั้งกลุ่มแล้วจะมองไม่ออกว่าตานี้ต้องใช้สีอะไร) — ใช้ .swatch:disabled จัดการรายจุดแทน */}
+      <div
+        className="toolbar__group toolbar__group--colors"
+        role="group"
+        aria-label={colourLocked ? "สี (กติกาล็อกไว้ที่สีเดียว)" : "สี"}
+        title={colourLocked ? "กติกา Colour Fix: ตานี้ใช้ได้สีเดียว" : undefined}
+      >
         {PAINT_COLORS.map((c) => (
           <button
             key={c.hex}
@@ -129,6 +151,7 @@ export default function Toolbar({
             style={{ background: c.hex }}
             aria-label={`สี${c.name}`}
             aria-pressed={color === c.hex}
+            disabled={colourLocked}
             onClick={() => onColor(c.hex)}
           />
         ))}
@@ -137,7 +160,7 @@ export default function Toolbar({
       {/* ── เลือกสีเองด้วยแถบสีรุ้ง ──
           เดิมใช้วงล้อสีของเบราว์เซอร์ (input[type=color]) ซึ่งเปิดเป็นหน้าต่างใหญ่ ต้องกดหลายที
           แถบนี้กดหรือลากตรงไหนก็ได้สีตรงนั้นทันที จึงเลือกสีผสมเองได้ง่ายกว่ามาก */}
-      <div className="toolbar__group toolbar__group--hue">
+      <div className={`toolbar__group toolbar__group--hue${colourLocked ? " toolbar__group--off" : ""}`}>
         <span className="toolbar__label">สีเอง</span>
         <input
           type="range"
@@ -147,6 +170,7 @@ export default function Toolbar({
           max={HUE_MAX}
           value={hue}
           aria-label="เลือกสีเองจากแถบสีรุ้ง"
+          disabled={colourLocked}
           onChange={handleHue}
         />
         {/* ตัวอย่างสีที่เลือกเอง — กดเพื่อกลับมาใช้สีนี้ หลังเผลอไปกดสีอื่น */}
@@ -156,6 +180,7 @@ export default function Toolbar({
           style={{ background: custom }}
           aria-label="ใช้สีที่เลือกเอง"
           aria-pressed={customPicked}
+          disabled={colourLocked}
           onClick={() => onColor(custom)}
         />
       </div>

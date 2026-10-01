@@ -33,6 +33,9 @@ function emptyGame() {
     // ถ้า client เผลอสร้างคำใบ้เอง คนทายจะได้เปรียบโดยไม่รู้ตัว
     hint: null,
     hintAt: null, // เปิดเองเมื่อเวลาเหลือเท่านี้ (จาก round_start) ใช้โชว์ข้อความรอ
+    // dont_lift_pen — true เมื่อ server บอกว่า "คนวาดยกปากกาแล้ว" (event pen_locked)
+    // client ไม่เดาเองจาก "วาดไปกี่เส้น" เพราะคนวาดอาจกดค้างไม่ยอมปล่อยก็ได้
+    penLocked: false,
   };
 }
 
@@ -110,8 +113,20 @@ export function useGame() {
         // ยกเว้นกรณีที่เราเข้าห้องกลางตาหลังเขาเปิดไปแล้ว server จะส่งชุดช่องจริงมาให้เลย
         hint: data.hint ?? null,
         hintAt: data.hintAt ?? null,
+        // ตาใหม่ = ปากกายังไม่ถูกล็อก (กติกา dont_lift_pen เป็นของรายตา ไม่ลามไปตาถัดไป)
+        penLocked: false,
       }));
     };
+
+    // dont_lift_pen: คนวาดยกปากกาแล้ว — server ส่งครั้งเดียวต่อตา (events.md pen_locked)
+    // เอาไว้ปิดเครื่องมือวาดของเรา เป็นแค่การช่วยให้ใช้ง่าย ของจริง server บังคับอยู่แล้ว
+    // ข้อความระบบใส่กล่อง "ในห้อง" เพื่อให้ทุกคน (รวมคนที่ไม่ได้วาด) เข้าใจว่าทำไมภาพหยุด
+    const onPenLocked = () =>
+      setGame((g) => ({
+        ...g,
+        penLocked: true,
+        messages: [...g.messages, { system: true, text: "คนวาดยกปากกาแล้ว วาดต่อไม่ได้อีก" }],
+      }));
 
     // คำใบ้เปิดแล้ว — server ส่งครั้งเดียวต่อตา ไม่ว่าใครเปิด (คนวาดกดขอ หรือเวลาเหลือหนึ่งในสาม)
     // ข้อความระบบแยกตามคนเปิด เพื่อให้กล่อง "ในห้อง" เล่าเรื่องได้ครบ
@@ -204,6 +219,7 @@ export function useGame() {
     socket.on("round_start", onRoundStart);
     socket.on("your_word", onYourWord);
     socket.on("hint_reveal", onHintReveal);
+    socket.on("pen_locked", onPenLocked);
     socket.on("timer", onTimer);
     socket.on("round_end", onRoundEnd);
     socket.on("game_end", onGameEnd);
@@ -219,6 +235,7 @@ export function useGame() {
       socket.off("round_start", onRoundStart);
       socket.off("your_word", onYourWord);
       socket.off("hint_reveal", onHintReveal);
+      socket.off("pen_locked", onPenLocked);
       socket.off("timer", onTimer);
       socket.off("round_end", onRoundEnd);
       socket.off("game_end", onGameEnd);

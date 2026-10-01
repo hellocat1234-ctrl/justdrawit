@@ -150,6 +150,73 @@ function revealHint(room, by) {
 }
 
 
+// ---------- Mini Challenge (ข้อ 5) ----------
+// สุ่มใหม่ทุกครั้งที่ขึ้นตาใหม่ แล้วติดไปกับ round_start ของตานั้น (events.md หัวข้อ 5)
+//   none 40% · colour_fix 30% · dont_lift_pen 30%
+// shapes_only ถูกตัดออกจากเกมแล้ว (ดู CLAUDE.md) จึงไม่มีการสุ่มขึ้นมาเลย
+//
+// ทุกกติกาตัดสินที่ server เท่านั้น client แค่ปิดปุ่มให้ใช้ง่าย ไม่ใช่ตัวกันโกง
+// และเหมือนการวาดทุกอย่าง: ไม่ผ่านกติกา = ทิ้งเงียบ ๆ ไม่ตอบ error กลับไป
+// (ถ้าตอบ error กลับ เท่ากับบอกคนที่กำลังลองโกงว่าเราดักตรงไหนอยู่)
+const CHALLENGE_NONE = 40;
+const CHALLENGE_COLOUR_FIX = 30; // ที่เหลือ 30 = dont_lift_pen
+
+// 8 สีหลักของพาเลต — ต้องตรงกับ PAINT_COLORS ใน client/src/canvas/palette.js
+// คนละโปรเซส import กันไม่ได้จึงประกาศซ้ำ เหมือน SIZE_MIN/SIZE_MAX ข้างบน
+const CHALLENGE_COLORS = ["#000000", "#ffffff", "#e8553f", "#ef8a2b", "#ffc81e", "#22a559", "#1e6fe8", "#7b5ce0"];
+
+// สีของกระดาน (Canvas.jsx ล้างจอด้วยสีนี้) — ใช้เป็นเงื่อนไขตัดสีออกจากกองสุ่ม
+const BOARD_COLOR = "#ffffff";
+
+// กองที่ colour_fix ใช้จริง = 8 สีหลัก "ตัดสีขาวออก"
+// เพราะล็อกให้วาดสีขาวบนกระดานสีขาว = วาดอะไรก็มองไม่เห็นทั้งตา ผู้เล่นทำภารกิจไม่ได้เลย
+// (เจอของจริงตอนเทสเบราว์เซอร์: ออกตาสีขาวแล้วกระดานว่างเปล่า แม้ผู้เล่นลากเส้นไปแล้วจริง ๆ)
+// เหลือ 7 สี ทุกสียัง "เป็นสีที่ตาเห็นได้" ทั้งหมด
+const COLOUR_FIX_COLORS = CHALLENGE_COLORS.filter((c) => c !== BOARD_COLOR);
+
+function pickChallenge() {
+  const roll = Math.random() * 100;
+  if (roll < CHALLENGE_NONE) return { type: "none" };
+  if (roll < CHALLENGE_NONE + CHALLENGE_COLOUR_FIX) {
+    return { type: "colour_fix", color: COLOUR_FIX_COLORS[Math.floor(Math.random() * COLOUR_FIX_COLORS.length)] };
+  }
+  return { type: "dont_lift_pen" };
+}
+
+// เทียบสีแบบไม่สนตัวพิมพ์เล็กใหญ่ เพราะ COLOR_RE ยอมรับทั้ง #E8553F และ #e8553f
+// ถ้าเทียบตรง ๆ สีเดียวกันแท้ ๆ จะกลายเป็นคนละสีไปได้
+const sameColor = (a, b) => a.toLowerCase() === b.toLowerCase();
+
+// ยางลบไม่ได้ส่งมาเป็น event แยก มันมาเป็นเส้นปกติที่มี tool: "eraser"
+// (ดู Canvas.jsx ตอนประกอบ beginStroke) จึงต้องดักที่ช่อง tool ตรงนี้
+// **ยางลบต้องผ่านทุกกติกาเสมอ** ไม่งั้นผู้เล่นจะลบรอยตัวเองไม่ได้เลยทั้งตา
+const isEraser = (tool) => tool === "eraser";
+
+// กติกาของเส้น (stroke_start) ของตานี้ — คืน true ถ้าผ่าน
+//
+// ที่ยกเว้นยางลบ **เฉพาะ colour_fix** เพราะที่นั่นกติกาเป็นเรื่อง "สี" ล้วน ๆ
+// ส่วน dont_lift_pen กติกาเป็นเรื่อง "จังหวะเวลา" — ยางลบก็คือการวาดทับลงบนผืนเดิม
+// หลังยกปากกาแล้วจึงต้องถูกทิ้งเหมือนเส้นปากกาทุกประการ
+function challengeAllowsStroke(room, color, tool) {
+  const ch = room.challenge;
+  if (!ch || ch.type === "none") return true;
+  if (ch.type === "colour_fix") return isEraser(tool) || sameColor(color, ch.color);
+  if (ch.type === "dont_lift_pen") return !room.penUsed; // ยกปากกาไปแล้ว = วาดต่อไม่ได้
+  return true;
+}
+
+// กติกาของถังสี — dont_lift_pen "ทิ้ง fill ทุกครั้ง" (events.md หัวข้อ 5)
+// เข้มตั้งแต่ก่อนยกปากกาด้วย ไม่ใช่แค่หลังยก: การเทสีท่วมพื้นที่ในคลิกเดียวขัดกับ
+// "เส้นเดียวต่อเนื่อง" ตั้งแต่ต้นอยู่แล้ว และ client ก็ซ่อนปุ่มถังสีให้ตั้งแต่แรก
+function challengeAllowsFill(room, color) {
+  const ch = room.challenge;
+  if (!ch || ch.type === "none") return true;
+  if (ch.type === "colour_fix") return sameColor(color, ch.color);
+  if (ch.type === "dont_lift_pen") return false;
+  return true;
+}
+
+
 function normalize(text) {
   return String(text ?? "").toLowerCase().replace(/\s+/g, "");
 }
@@ -398,6 +465,10 @@ function startDrawing(room, word) {
   room.roundGains = {};
   // ตาใหม่ = คำใบ้ยังไม่เปิด (ต้องรีเซ็ตก่อนส่ง round_start เสมอ ไม่งั้นตาถัดไปจะได้คำใบ้ฟรี)
   room.hintOpen = false;
+  // ตาใหม่ = สุ่ม Mini Challenge ใหม่ และปลดล็อกปากกากลับเป็นปกติ
+  // (ต้องตั้งก่อน emit round_start เสมอ เพราะค่านี้ติดไปกับ round_start ของตานี้เลย)
+  room.challenge = pickChallenge();
+  room.penUsed = false;
   resetCanvas(room); // ขึ้นตาใหม่ = กระดานว่าง ประวัติตาที่แล้วทิ้งทั้งหมด
 
   room.timeLeft = room.settings.drawTime;
@@ -417,7 +488,9 @@ function roundInfo(room) {
     hint: room.hintOpen && room.word ? makeHint(room.word) : null,
     hintAt: hintAt(room), // เปิดเองเมื่อเวลาเหลือเท่านี้ — client ใช้โชว์ "คำใบ้จะขึ้นเมื่อเหลือ X วิ"
     time: room.timeLeft,
-    challenge: { type: "none" },
+    // Mini Challenge ของตานี้ (ข้อ 5) — ติดไปกับ round_start ด้วย
+    // คนที่เข้าห้องกลางตาจึงเห็นป้ายเหมือนคนที่อยู่ในห้องตั้งแต่แรก โดยไม่ต้องมีโค้ดพิเศษ
+    challenge: room.challenge ?? { type: "none" },
     // ส่งแค่ "id" ของคนที่ทายถูกแล้ว ไม่มีคำตอบหรืออะไรที่บอกคำปนมาด้วย
     // มีไว้ให้คนที่เข้าห้องกลางตาเห็นติ๊กถูกของคนที่ทายไปก่อนหน้า (งานค้างจากข้อ 2)
     guessedIds: [...room.guessedIds],
@@ -657,6 +730,9 @@ io.on("connection", (socket) => {
     if (!isColor(color)) return;
     if (!isSize(size)) return;
     if (!VALID_TOOLS.includes(tool)) return;
+    // กติกา Mini Challenge — ไม่ผ่านก็จบตรงนี้เหมือนข้อมูลผิดรูปแบบ (ทิ้งเงียบ ๆ)
+    // ต้องเช็ค "ก่อน" เปิดเส้น ไม่งั้น stroke_points ที่ตามมาจะไหลผ่านเพราะ strokeOpen เป็นจริง
+    if (!challengeAllowsStroke(room, color, tool)) return;
 
     const payload = { x, y, color, size, tool };
     room.strokeOpen = true;
@@ -687,6 +763,14 @@ io.on("connection", (socket) => {
     room.lastPoint = null;
     storeAction(room, "stroke_end", {});
     socket.to(room.code).emit("stroke_end", {});
+
+    // dont_lift_pen: เส้นแรกจบแล้ว = "ยกปากกา" — วาดต่อไม่ได้อีกทั้งตา
+    // ประกาศให้ทั้งห้องรู้ (events.md pen_locked) เพื่อให้ทุกจอขึ้นข้อความพร้อมกัน ไม่ใช่ให้ client เดา
+    // penUsed เป็นของ "ตานี้" จึงถูกล้างตอน startDrawing เท่านั้น
+    if (room.challenge?.type === "dont_lift_pen" && !room.penUsed) {
+      room.penUsed = true;
+      io.to(room.code).emit("pen_locked", {});
+    }
   });
 
   socket.on("fill", (data) => {
@@ -695,6 +779,7 @@ io.on("connection", (socket) => {
 
     const { x, y, color } = data;
     if (!isUnit(x) || !isUnit(y) || !isColor(color)) return;
+    if (!challengeAllowsFill(room, color)) return;
 
     const payload = { x, y, color };
     storeAction(room, "fill", payload);
@@ -714,15 +799,22 @@ io.on("connection", (socket) => {
   // ── ย้อนกลับ / ทำซ้ำ ──
   // client แค่ "ขอ" — server เป็นคนตัดสินว่าย้อนได้ไหม แล้วส่งภาพปัจจุบันทั้งชุดกลับให้ทั้งห้อง
   // (io.to ไม่ใช่ socket.to เพราะคนวาดต้องได้ด้วย จอตัวเองจะได้ย้อนตาม)
+  //
+  // dont_lift_pen ปฏิเสธทั้งคู่ **ที่ server** ไม่ใช่แค่ซ่อนปุ่ม
+  // เพราะหัวใจของกติกาคือ "ห้ามยกปากกา" แต่การย้อนเส้นที่ลากผิดทิ้งแล้วลากใหม่ = ยกปากกาโดยไม่ถูกจับ
+  // ปิดไว้ทั้งตา (ไม่ใช่เฉพาะหลังยก) เรียบง่ายและไม่มีช่องให้พลาด
+  // ส่วน clear_canvas ยังอนุญาต เพราะการล้างจอไม่ได้ให้อะไรกลับมาเลย — ยังวาดต่อไม่ได้อยู่ดี
+  const historyLocked = (room) => room.challenge?.type === "dont_lift_pen";
+
   socket.on("undo", () => {
     const room = drawRoom(socket);
-    if (!room || !undoCanvas(room)) return;
+    if (!room || historyLocked(room) || !undoCanvas(room)) return;
     io.to(room.code).emit("canvas_history", canvasPayload(room));
   });
 
   socket.on("redo", () => {
     const room = drawRoom(socket);
-    if (!room || !redoCanvas(room)) return;
+    if (!room || historyLocked(room) || !redoCanvas(room)) return;
     io.to(room.code).emit("canvas_history", canvasPayload(room));
   });
 

@@ -36,6 +36,9 @@ function checkOk(label, condition) {
 }
 
 async function runPart(label, fn) {
+  // จับเวลารายข้อไว้เสมอ ข้อไหนกินเวลาเกิน 5 วิจะขึ้นหมายเหตุ
+  // (มีไว้จับว่าอะไรทำให้ชุดเทสทั้งชุดเข้าใกล้เพดาน 90 วิของ watchdog โดยไม่ต้องเดา)
+  const started = Date.now();
   try {
     await fn();
   } catch (e) {
@@ -43,6 +46,8 @@ async function runPart(label, fn) {
     problems.push(label);
     console.log(`❌ ${label} — พังกลางทาง: ${e.message}`);
   }
+  const sec = (Date.now() - started) / 1000;
+  if (sec >= 5) console.log(`   ⏱ ${label.slice(0, 40)} ใช้เวลา ${sec.toFixed(1)} วิ`);
 }
 
 // ---------- ตัวช่วยคุยกับ server ----------
@@ -121,6 +126,13 @@ function expectedHint(word) {
   }
   return slots;
 }
+
+// 8 สีหลักที่ colour_fix สุ่มจาก (events.md หัวข้อ 5) — ต้องตรงกับ CHALLENGE_COLORS ใน index.js
+// เขียนซ้ำโดยตั้งใจ แบบเดียวกับ expectedHint เพื่อจับได้ถ้ามีคนแก้ชุดสีแล้วลืมแก้เอกสาร
+const MAIN_COLORS = ["#000000", "#ffffff", "#e8553f", "#ef8a2b", "#ffc81e", "#22a559", "#1e6fe8", "#7b5ce0"];
+
+// ชื่อ event ทั้งหมดที่เกี่ยวกับการวาด — ใช้เช็คว่า "ต้องไม่มีอะไรหลุดถึงคนอื่นเลย"
+const DRAW_EVENT_NAMES = ["stroke_start", "stroke_points", "stroke_end", "fill"];
 
 // อ่านคลังคำจากไฟล์จริง มาเทียบกับที่ server รายงาน
 function readWordFile() {
@@ -458,35 +470,86 @@ async function main() {
   });
 
   // ══════════════════════════════════════════════════════════════════
+  // ตัวช่วยของข้อ 5 — เปิดห้องจริงหนึ่งห้อง แล้วเริ่มเกมจนถึงตาที่กำลังวาด
+  //
+  // ใช้ทั้งตอน "หาห้องที่ต้องการ" และตอน "สร้างห้องตัวอย่าง"
+  // **ไม่มีการสั่งให้ server ออก challenge ที่ต้องการ** — challenge เป็นการสุ่มจริง
+  // วิธีเดียวที่จะได้ชนิดที่ต้องการคือสร้างห้องใหม่ไปเรื่อย ๆ (ดู CHALLENGE_TRIES)
+  // ══════════════════════════════════════════════════════════════════
+  async function openTurn(prefix, extraGuessers = 1) {
+    const recs = [track(await connect())];
+    for (let i = 0; i < extraGuessers; i++) recs.push(track(await connect()));
+    const [drawer, ...guessers] = recs;
+
+    const code = (await emitAck(drawer.socket, "create_room", { name: `${prefix}Draw`, avatar: 0 })).code;
+    for (const [i, g] of guessers.entries()) {
+      await emitAck(g.socket, "join_room", { code, name: `${prefix}G${i + 1}`, avatar: i + 1 });
+    }
+
+    // drawTime 90 (ค่าสูงสุด) = ตาเดียวอยู่นานพอให้ตรวจหลายอย่างโดยไม่ถูกจับเวลาแทรก
+    drawer.socket.emit("update_settings", { rounds: 1, drawTime: 90 });
+    await drawer.tryWait("room_update", (r) => r.settings?.drawTime === 90, 3000);
+
+    clearAll(...recs);
+    drawer.socket.emit("start_game");
+    const cw = await drawer.wait("choose_word", null, 3000);
+    const word = cw.options[0];
+    drawer.socket.emit("word_chosen", { word });
+
+    const rs = await drawer.wait("round_start", null, 3000);
+    const rsGuess = await guessers[0].wait("round_start", null, 3000);
+    return {
+      drawer,
+      guessers,
+      guesser: guessers[0],
+      recs,
+      code,
+      word,
+      rs,
+      rsGuess,
+      challenge: rs.challenge,
+      // ปิดห้องนี้ทิ้ง (ใช้ตอนหาห้องแล้วไม่ได้ชนิดที่ต้องการ)
+      close() {
+        for (const r of recs) r.socket.disconnect();
+      },
+    };
+  }
+
+  // ══════════════════════════════════════════════════════════════════
   // ข้อ 4 — การวาด ย้อนกลับ ทำซ้ำ และการกันโกง
   // แยกห้องใหม่ต่างหาก เพื่อไม่ให้ปนกับห้องของข้อ 1-6 ที่จบเกมไปแล้ว
+  //
+  // ห้องนี้ใช้ทั้งข้อ 9-14 ซึ่งวาดหลายรูปแบบ (เทสี ย้อนกลับ ทำซ้ำ หลายเส้น)
+  // แต่ challenge ถูก "สุ่มจริง" ทุกตา ถ้าตานี้ออก colour_fix สีที่เทสใช้จะถูกทิ้ง
+  // และถ้าออก dont_lift_pen จะวาดได้เส้นเดียวทั้งตา → เทสชุดนี้จะผ่านบ้างไม่ผ่านบ้างตามดวง
+  // จึงต้อง "หาห้องที่ตานี้ออก none" ก่อน โดยสร้างห้องจริงแล้วเริ่มเกมจริง ไม่ได้แอบสั่งให้ออก none
+  // ดวง: p(none) = 0.4 → เฉลี่ย 2-3 ห้อง · โอกาสไม่เจอใน 30 ห้อง = 0.6^30 ≈ 2e-7
   // ══════════════════════════════════════════════════════════════════
-  const D = track(await connect()); // หัวห้อง = คนวาด
-  const E = track(await connect()); // คนทาย
-  const F = track(await connect()); // คนทายอีกคน ไว้ดูว่าทุกคนเห็นเหมือนกัน
-  others.push(D, E, F);
-
+  let D = null; // หัวห้อง = คนวาด
+  let E = null; // คนทาย
+  let F = null; // คนทายอีกคน ไว้ดูว่าทุกคนเห็นเหมือนกัน
   let dcode = null;
   let dword = null;
+  let dchallenge = null;
+
+  for (let attempt = 1; attempt <= 30 && !D; attempt++) {
+    const room = await openTurn("T", 2);
+    if (room.challenge?.type === "none") {
+      [D, E, F] = room.recs;
+      dcode = room.code;
+      dword = room.word;
+      dchallenge = room.challenge;
+    } else {
+      room.close();
+      await new Promise((r) => setTimeout(r, 50)); // ให้ server เก็บห้องที่ทิ้งไปแล้วก่อน
+    }
+  }
+  if (D) others.push(D, E, F);
 
   await runPart("9. การวาด — ส่งต่อให้คนอื่น และทิ้งข้อมูลที่ไม่ใช่ของคนวาด", async () => {
-    dcode = (await emitAck(D.socket, "create_room", { name: "Drawer", avatar: 0 })).code;
-    await emitAck(E.socket, "join_room", { code: dcode, name: "Guess1", avatar: 1 });
-    await emitAck(F.socket, "join_room", { code: dcode, name: "Guess2", avatar: 2 });
-
-    clearAll(D, E, F);
-    D.socket.emit("update_settings", { rounds: 1, drawTime: 90 });
-    // รอตัวที่มีค่าใหม่จริง ไม่ใช่ room_update ตัวแรกที่เจอ
-    // (room_update ของตอน E/F เข้าห้องอาจมาถึงหลัง clearAll พอดี แล้วกลายเป็นตัวแรกในลิสต์)
-    check("ตั้งเวลาวาด 90 วิ สำหรับเทสข้อนี้",
-      (await D.wait("room_update", (r) => r.settings.drawTime === 90, 3000)).settings.drawTime, 90);
-
-    clearAll(D, E, F);
-    D.socket.emit("start_game");
-    const cw = await D.wait("choose_word", null, 6000);
-    dword = cw.options[0];
-    D.socket.emit("word_chosen", { word: dword });
-    await D.wait("round_start", null, 3000);
+    checkOk("หาห้องที่ตานี้ออก Mini Challenge เป็น none เจอภายใน 30 ห้อง (เตรียมไว้ให้ข้อ 9-14)",
+      D !== null);
+    check("ตานี้ไม่มี Mini Challenge กวนการวาด", dchallenge?.type, "none");
 
     // ── เส้นหนึ่งเส้นเดินทางครบสามตอน ──
     clearAll(D, E, F);
@@ -857,16 +920,271 @@ async function main() {
     check("คนเข้าทีหลังขอคำใบ้ ไม่มีอะไรเกิดขึ้น", (await Q.quiet("hint_reveal", 800)).length, 0);
   });
 
+  // ══════════════════════════════════════════════════════════════════
+  // ข้อ 5 — Mini Challenge
+  //
+  // challenge สุ่มจริงทุกตา จึงทดสอบด้วยการสร้างห้องจริงไปเรื่อย ๆ แล้วดูว่า server ออกอะไร
+  // **ไม่ mock Math.random และไม่แอบสั่งให้ออกชนิดที่ต้องการ** เพราะทั้งสองทาง
+  // จะทำให้เทสไม่ได้ทดสอบเส้นทางโค้ดจริงที่ผู้เล่นเจอ
+  // เก็บห้องแรกของชนิดที่ต้องใช้ไว้ทดสอบกติกาในข้อ 17 และ 18
+  // ══════════════════════════════════════════════════════════════════
+  const CHALLENGE_TRIES = 30;
+  // สุ่ม colour_fix ให้ได้มากพอจะจับได้ถ้า "สีขาว" หลุดกลับเข้ากอง (ข้อ 16.1)
+  // colour_fix ออกราว 30% ⇒ ต้องสร้างราว 3-4 ห้องต่อ 1 ตาสี
+  const COLOUR_FIX_WANTED = 25;
+  const COLOUR_FIX_MAX_ROOMS = 150;
+  const seenTypes = [];
+  const seenChallengeColors = []; // ทุกสีที่ colour_fix ล็อกไว้ (เฉพาะสี ไม่ซ้ำคำ)
+  const roomOfType = {};
+
+  await runPart("16. Mini Challenge — ชนิดที่สุ่มออกมา (โครงสร้าง ไม่ใช่สัดส่วน)", async () => {
+    for (let i = 0; i < CHALLENGE_TRIES; i++) {
+      const room = await openTurn(`R${i}`);
+      seenTypes.push(room.challenge?.type);
+      if (room.challenge?.type === "colour_fix") {
+        seenChallengeColors.push(String(room.challenge.color).toLowerCase());
+      }
+      // เก็บห้องแรกของชนิดที่ต้องใช้อีกสองข้อไว้ · ห้องที่เกินความจำเป็นปิดทิ้งทันที
+      if (roomOfType[room.challenge?.type]) {
+        room.close();
+      } else {
+        roomOfType[room.challenge?.type] = room;
+        others.push(...room.recs); // ปิดตอนจบเหมือน socket ตัวอื่น
+      }
+    }
+
+    // ── สุ่มเพิ่มจนเห็น colour_fix มากพอจะเชื่อเรื่อง "สีที่ล็อก" ได้ ──
+    // ถ้ายังมีสีขาวในกอง โอกาสที่จะรอดจาก 25 ตา = (7/8)^25 ≈ 3.5% ⇒ เทสนี้จะล้มเกือบทุกครั้ง
+    // (ทางที่แน่นอนกว่านี้ทำไม่ได้ เพราะ server สุ่มเองในโปรเซสแยก — เทสคุยได้ทาง socket เท่านั้น)
+    let extra = CHALLENGE_TRIES;
+    while (seenChallengeColors.length < COLOUR_FIX_WANTED && extra < COLOUR_FIX_MAX_ROOMS) {
+      const room = await openTurn(`X${extra}`);
+      extra++;
+      if (room.challenge?.type === "colour_fix") seenChallengeColors.push(String(room.challenge.color).toLowerCase());
+      if (roomOfType[room.challenge?.type]) room.close();
+      else {
+        roomOfType[room.challenge?.type] = room;
+        others.push(...room.recs);
+      }
+    }
+
+    checkOk(`สร้างห้องจริงได้ครบ ${CHALLENGE_TRIES} ตัวอย่าง`, seenTypes.length === CHALLENGE_TRIES);
+    checkOk("ทุกค่าที่ออกมาเป็นหนึ่งในสามชนิดที่กำหนด",
+      seenTypes.every((t) => ["none", "colour_fix", "dont_lift_pen"].includes(t)));
+    checkOk("ไม่มี shapes_only ออกมาเลย (ตัดออกจากเกมแล้ว)",
+      seenTypes.every((t) => t !== "shapes_only"));
+    // ถ้าเขียนโค้ดให้ออกแต่ none อย่างเดียว หรือให้ชนิดใดชนิดหนึ่งไม่ออกเลย ข้อนี้จะจับได้
+    checkOk(`ทั้งสามชนิดออกจริงใน ${CHALLENGE_TRIES} ห้อง`,
+      new Set(seenTypes).size === 3);
+    // ตรวจความถี่แบบหลวม ๆ (ไม่ใช่การทดสอบสัดส่วนจริง ๆ เพราะต้องสุ่มหลายร้อยห้องจึงจะแยก 40/30/30
+    // ออกจาก 35/35/30 ได้ ซึ่งจะทำให้เทสล้มมั่วเป็นครั้งคราว) — จับได้เฉพาะกรณีสุดโต่ง
+    // เช่น none ออก 0 ครั้ง หรือออกเกือบทุกห้อง ซึ่งแปลว่าเขียนสัดส่วนผิดชัด ๆ
+    const noneCount = seenTypes.filter((t) => t === "none").length;
+    checkOk(`ชนิด none ไม่ได้ออกน้อยหรือมากผิดปกติ (${noneCount}/${CHALLENGE_TRIES} จากที่ควรราราว 12)`,
+      noneCount >= 3 && noneCount <= 25);
+
+    const cf = roomOfType.colour_fix;
+    checkOk("มีห้องที่ออก colour_fix ให้ทดสอบกติกาต่อ", !!cf);
+    if (cf) {
+      checkOk(`colour_fix ส่ง color มาเป็น hex 6 หลัก (${cf.challenge.color})`,
+        /^#[0-9a-fA-F]{6}$/.test(cf.challenge.color));
+      checkOk(`สีที่ล็อกอยู่ใน 8 สีหลักของพาเลต (${cf.challenge.color})`,
+        MAIN_COLORS.includes(String(cf.challenge.color).toLowerCase()));
+    }
+
+    // ── 16.1 colour_fix ห้ามล็อก "สีขาว" ซึ่งเป็นสีของกระดาน ──
+    // ล็อกสีขาว = วาดแล้วมองไม่เห็นอะไรเลยทั้งตา ผู้เล่นทำภารกิจไม่ได้ (เจอตอนเทสเบราว์เซอร์จริง)
+    checkOk(`เก็บตัวอย่างสีที่ colour_fix ล็อกได้มากพอ (${seenChallengeColors.length} ตา)`,
+      seenChallengeColors.length >= COLOUR_FIX_WANTED);
+    check(`ไม่มีตาที่ล็อกสีขาวเลย (${seenChallengeColors.join(" ")})`,
+      seenChallengeColors.includes("#ffffff"), false);
+    checkOk("ทุกสีที่ล็อกอยู่ใน 8 สีหลักของพาเลต",
+      seenChallengeColors.every((c) => MAIN_COLORS.includes(c)));
+
+    const dl = roomOfType.dont_lift_pen;
+    checkOk("มีห้องที่ออก dont_lift_pen ให้ทดสอบกติกาต่อ", !!dl);
+    if (dl) {
+      check("dont_lift_pen ไม่มีช่อง color ติดมา", "color" in dl.challenge, false);
+    }
+    check("none ไม่มีช่อง color ติดมา", "color" in (roomOfType.none?.challenge ?? {}), false);
+  });
+
+  await runPart("17. Mini Challenge — colour_fix ล็อกสีเดียว และยางลบต้องผ่านเสมอ", async () => {
+    const room = roomOfType.colour_fix;
+    const { drawer, guesser } = room;
+    const locked = room.challenge.color;
+    const wrong = MAIN_COLORS.find((c) => c !== locked.toLowerCase());
+
+    check("challenge ที่คนทายได้ เหมือนกับที่คนวาดได้เป๊ะ", room.rsGuess.challenge, room.challenge);
+    checkOk("สีที่ใช้ทดสอบว่า 'ผิดกติกา' ต่างจากสีที่ล็อกจริง", wrong !== locked.toLowerCase());
+
+    // ── 1) โกง: วาดด้วยสีที่ไม่ใช่สีที่ล็อก ต้องไม่ถึงใครเลยทั้งสามตอน ──
+    clearAll(drawer, guesser);
+    drawer.socket.emit("stroke_start", { x: 0.1, y: 0.1, color: wrong, size: 5, tool: "pen" });
+    drawer.socket.emit("stroke_points", { points: [{ x: 0.2, y: 0.2 }] });
+    drawer.socket.emit("stroke_end");
+    const leaked = await Promise.all(DRAW_EVENT_NAMES.map((n) => guesser.quiet(n, 700)));
+    check("เส้นที่ใช้สีผิดกติกา ไม่มีตอนใดหลุดถึงคนอื่นเลย",
+      leaked.map((l) => l.length), [0, 0, 0, 0]);
+
+    // ── 2) เส้นที่ใช้สีที่ล็อก ต้องผ่านครบสามตอน ──
+    clearAll(drawer, guesser);
+    drawer.socket.emit("stroke_start", { x: 0.3, y: 0.3, color: locked, size: 5, tool: "pen" });
+    check("เส้นที่ใช้สีที่ล็อก ผ่านปกติ",
+      (await guesser.wait("stroke_start", null, 2000)).color, locked);
+    drawer.socket.emit("stroke_points", { points: [{ x: 0.35, y: 0.35 }] });
+    checkOk("จุดของเส้นที่ผ่านกติกา ส่งต่อถึงคนอื่น",
+      (await guesser.tryWait("stroke_points", null, 2000)) !== null);
+    drawer.socket.emit("stroke_end");
+    checkOk("ปิดเส้นที่ผ่านกติกา ส่งต่อถึงคนอื่น",
+      (await guesser.tryWait("stroke_end", null, 2000)) !== null);
+
+    // ── 3) สีเดียวกันแต่พิมพ์ใหญ่ ต้องผ่านด้วย (COLOR_RE ยอมรับทั้ง #e8553f และ #E8553F) ──
+    clearAll(drawer, guesser);
+    drawer.socket.emit("stroke_start", { x: 0.5, y: 0.1, color: locked.toUpperCase(), size: 5, tool: "pen" });
+    check("สีเดียวกันแต่พิมพ์ใหญ่ ก็ยังผ่าน (เทียบสีแบบไม่สนตัวพิมพ์)",
+      (await guesser.wait("stroke_start", null, 2000)).color, locked.toUpperCase());
+    drawer.socket.emit("stroke_end");
+    await guesser.tryWait("stroke_end", null, 2000);
+
+    // ── 4) ยางลบต้องผ่านเสมอ แม้ส่งสีที่ไม่ตรงกติกามาด้วย ──
+    // นี่คือเหตุผลที่ต้องยกเว้น: ยางลบมาเป็นเส้นปกติที่มี tool: "eraser"
+    // ถ้าเช็คสีด้วย ผู้เล่นจะลบรอยตัวเองไม่ได้เลยทั้งตา
+    // (ของจริง client ส่งสีที่ล็อกมาอยู่แล้ว แต่คนที่แก้ client ก็ยังต้องลบรอยตัวเองได้)
+    clearAll(drawer, guesser);
+    drawer.socket.emit("stroke_start", { x: 0.7, y: 0.7, color: wrong, size: 5, tool: "eraser" });
+    const er = await guesser.wait("stroke_start", null, 2000);
+    check("เส้นยางลบสีไม่ตรงกติกา ยังผ่านได้ (ต้องลบรอยตัวเองได้)",
+      [er.color, er.tool], [wrong, "eraser"]);
+    drawer.socket.emit("stroke_end");
+    await guesser.tryWait("stroke_end", null, 2000);
+
+    // ── 5) ถังสี ──
+    clearAll(drawer, guesser);
+    drawer.socket.emit("fill", { x: 0.9, y: 0.9, color: wrong });
+    check("เทสีด้วยสีผิดกติกา ถูกทิ้ง", (await guesser.quiet("fill", 400)).length, 0);
+    clearAll(drawer, guesser);
+    drawer.socket.emit("fill", { x: 0.9, y: 0.9, color: locked });
+    check("เทสีด้วยสีที่ล็อก ผ่าน", (await guesser.wait("fill", null, 2000)).color, locked);
+
+    // ── 6) คนที่เข้าห้องกลางตาต้องเห็น challenge เดียวกัน และประวัติมีแต่ของที่ผ่านกติกา ──
+    const Late = track(await connect());
+    others.push(Late);
+    await emitAck(Late.socket, "join_room", { code: room.code, name: "CFLate", avatar: 3 });
+    const lrs = await Late.wait("round_start", null, 3000);
+    check("คนเข้าห้องกลางตาเห็น challenge เดียวกันเป๊ะ (รวมสีที่ล็อก)", lrs.challenge, room.challenge);
+    const lhist = await Late.wait("canvas_history", null, 3000);
+    const starts = lhist.items.filter((it) => it.type === "stroke_start");
+    // 3 เส้นที่ผ่าน: สีตรง · สีเดียวกันแต่พิมพ์ใหญ่ · ยางลบสีไม่ตรง (เส้นสีผิดถูกทิ้งไปตั้งแต่ต้น)
+    check("ประวัติที่คนเข้าทีหลังได้ มีเฉพาะเส้นที่ผ่านกติกา", starts.length, 3);
+    checkOk("ไม่มีเส้นสีผิดกติกาติดไปในประวัติเลย",
+      starts.every((it) => it.tool === "eraser" || String(it.color).toLowerCase() === locked.toLowerCase()));
+    check("ไม่มีคำจริงหลุดมากับ round_start ของคนเข้าทีหลัง", "word" in lrs, false);
+
+    // ── 7) colour_fix ไม่ได้ห้ามย้อนกลับ (กติกานั้นเป็นของ dont_lift_pen เท่านั้น) ──
+    clearAll(drawer, guesser);
+    drawer.socket.emit("undo");
+    const h = await guesser.wait("canvas_history", null, 2000);
+    check("colour_fix ยังย้อนกลับได้ตามปกติ", h.canRedo, true);
+    drawer.socket.emit("redo");
+    await guesser.tryWait("canvas_history", (x) => x.canRedo === false, 2000);
+  });
+
+  await runPart("18. Mini Challenge — dont_lift_pen ห้ามยกปากกา ห้ามย้อน ทิ้งถังสี", async () => {
+    const room = roomOfType.dont_lift_pen;
+    const { drawer, guesser } = room;
+    const LINE = "#e8553f";
+
+    // ── 1) ถังสีถูกทิ้งตั้งแต่ยังไม่วาดอะไรเลย (events.md: "ทิ้ง fill ทุกครั้ง") ──
+    clearAll(drawer, guesser);
+    drawer.socket.emit("fill", { x: 0.5, y: 0.5, color: "#000000" });
+    check("dont_lift_pen ทิ้งถังสีทุกครั้ง แม้ยังไม่วาดอะไร", (await guesser.quiet("fill", 400)).length, 0);
+
+    // ── 2) ยังไม่วาดอะไร กดย้อน/ทำซ้ำก็ต้องเงียบ ──
+    clearAll(drawer, guesser);
+    drawer.socket.emit("undo");
+    drawer.socket.emit("redo");
+    check("ยังไม่มีอะไรให้ย้อน กดย้อน/ทำซ้ำก็เงียบ",
+      (await guesser.quiet("canvas_history", 400)).length, 0);
+
+    // ── 3) เส้นแรกผ่านครบสามตอน แล้วปิดท้ายด้วย pen_locked ──
+    clearAll(drawer, guesser);
+    drawer.socket.emit("stroke_start", { x: 0.1, y: 0.1, color: LINE, size: 5, tool: "pen" });
+    check("เส้นแรกก่อนยกปากกา ผ่านปกติ",
+      (await guesser.wait("stroke_start", null, 2000)).color, LINE);
+    drawer.socket.emit("stroke_points", { points: [{ x: 0.2, y: 0.2 }] });
+    checkOk("จุดของเส้นแรก ส่งต่อถึงคนอื่น",
+      (await guesser.tryWait("stroke_points", null, 2000)) !== null);
+    drawer.socket.emit("stroke_end");
+    checkOk("ปิดเส้นแรก ส่งต่อถึงคนอื่น",
+      (await guesser.tryWait("stroke_end", null, 2000)) !== null);
+    checkOk("ยกปากกาแล้ว server ส่ง pen_locked ให้คนอื่น",
+      (await guesser.tryWait("pen_locked", null, 2000)) !== null);
+    checkOk("คนวาดเองก็ได้ pen_locked (ไว้ปิดเครื่องมือของตัวเอง)",
+      (await drawer.tryWait("pen_locked", null, 2000)) !== null);
+
+    // ── 4) โกง: ยกปากกาแล้ววาดต่อ ──
+    clearAll(drawer, guesser);
+    drawer.socket.emit("stroke_start", { x: 0.3, y: 0.3, color: LINE, size: 5, tool: "pen" });
+    drawer.socket.emit("stroke_points", { points: [{ x: 0.4, y: 0.4 }] });
+    drawer.socket.emit("stroke_end");
+    const leaked = await Promise.all(DRAW_EVENT_NAMES.map((n) => guesser.quiet(n, 700)));
+    check("วาดต่อหลังยกปากกา ไม่มีตอนใดหลุดถึงคนอื่นเลย",
+      leaked.map((l) => l.length), [0, 0, 0, 0]);
+    check("pen_locked ส่งครั้งเดียวต่อตา ไม่ส่งซ้ำ", (await guesser.quiet("pen_locked", 300)).length, 0);
+
+    // ── 5) โกง: ยางลบก็วาดต่อไม่ได้ (กติกาเป็นเรื่องจังหวะเวลา ไม่ใช่เรื่องเครื่องมือ) ──
+    clearAll(drawer, guesser);
+    drawer.socket.emit("stroke_start", { x: 0.5, y: 0.5, color: "#ffffff", size: 8, tool: "eraser" });
+    drawer.socket.emit("stroke_end");
+    check("ยางลบหลังยกปากกา ก็ถูกทิ้งเหมือนกัน", (await guesser.quiet("stroke_start", 400)).length, 0);
+
+    // ── 6) โกง: ย้อนเส้นที่ลากผิดทิ้งแล้วลากใหม่ = หัวใจของกติกานี้ ──
+    clearAll(drawer, guesser);
+    drawer.socket.emit("undo");
+    check("dont_lift_pen ย้อนกลับไม่ได้ (คนอื่นไม่เห็นอะไร)",
+      (await guesser.quiet("canvas_history", 400)).length, 0);
+    clearAll(drawer, guesser);
+    drawer.socket.emit("redo");
+    check("dont_lift_pen ทำซ้ำก็ไม่ได้", (await guesser.quiet("canvas_history", 400)).length, 0);
+    checkOk("คนวาดเองก็ไม่ได้ canvas_history เหมือนกัน",
+      (await drawer.quiet("canvas_history", 300)).length === 0);
+
+    // ── 7) คนเข้าห้องกลางตา เห็น challenge เดียวกัน และประวัติมีแค่เส้นแรก ──
+    // (คนที่เข้าหลังยกปากกาแล้วจะไม่เห็นข้อความ "คนวาดยกปากกาแล้ว" ในกล่องในห้อง
+    //  เพราะ pen_locked ส่งครั้งเดียวต่อตา — ไม่มีผลกับการเล่น เขาไม่ได้เป็นคนวาดตานี้)
+    const Late = track(await connect());
+    others.push(Late);
+    await emitAck(Late.socket, "join_room", { code: room.code, name: "DLLate", avatar: 5 });
+    const lrs = await Late.wait("round_start", null, 3000);
+    check("คนเข้าห้องกลางตาเห็น dont_lift_pen เหมือนกัน", lrs.challenge, { type: "dont_lift_pen" });
+    const lhist = await Late.wait("canvas_history", null, 3000);
+    check("ประวัติที่คนเข้าทีหลังได้ มีแค่เส้นแรกที่ผ่านกติกา",
+      lhist.items.filter((it) => it.type === "stroke_start").length, 1);
+
+    // ── 8) ล้างจอยังทำได้ (ตั้งใจ) — เพราะล้างแล้วก็ยังวาดต่อไม่ได้ จึงไม่เป็นช่องโกง ──
+    clearAll(drawer, guesser);
+    drawer.socket.emit("clear_canvas");
+    checkOk("ล้างจอยังทำได้หลังยกปากกา",
+      (await guesser.tryWait("clear_canvas", null, 2000)) !== null);
+    clearAll(drawer, guesser);
+    drawer.socket.emit("stroke_start", { x: 0.6, y: 0.6, color: LINE, size: 5, tool: "pen" });
+    check("ล้างจอแล้วก็ยังวาดต่อไม่ได้", (await guesser.quiet("stroke_start", 600)).length, 0);
+  });
+
   // ปิดทุก socket เพื่อให้โปรเซสจบได้
   for (const rec of [A, B, C, ...others]) rec.socket.disconnect();
 }
 
-// กันเทสค้าง: ถ้าเกิน 90 วิให้หยุด (ไม่หน่วงไม่ให้โปรเซสปิดตัว)
+// กันเทสค้าง: ถ้าเกิน 150 วิให้หยุด (ไม่หน่วงไม่ให้โปรเซสปิดตัว)
+// เดิมตั้งไว้ 90 วิ ตอนที่ชุดเทสทั้งชุดใช้ราว 35 วิ — ข้อ 5 เพิ่มการสร้างห้องจริง 30 ห้อง
+// กับการรอ "ต้องไม่มีอะไรมา" อีกหลายจุด รวมแล้วราว 50 วิ จึงขยับเพดานขึ้นให้ยังเหลือที่เผื่อเท่าของเดิม
+// (ข้อ 6 กับข้อ 15 กินเวลา 9 + 21 วิอยู่แล้ว เพราะเป็นการรอตัวจับเวลาจริงของเกม ลดไม่ได้)
 const watchdog = setTimeout(() => {
-  console.log("\n❌ เทสค้างเกิน 90 วินาที — ยกเลิก");
+  console.log("\n❌ เทสค้างเกิน 150 วินาที — ยกเลิก");
   stopServer();
   process.exit(1);
-}, 90000);
+}, 150000);
 watchdog.unref();
 
 main()

@@ -40,15 +40,32 @@ export default function Game({
   const drawing = Boolean(game.round); // กำลังวาดอยู่ (round_start มาแล้ว ยังไม่ round_end)
   const drawerName = players.find((p) => p.id === game.drawerId)?.name ?? "—";
 
+  // ── Mini Challenge ของตานี้ (ข้อ 5) ──
+  // มาจาก server เท่านั้น (game.round.challenge ติดมากับ round_start) client ไม่สุ่มเอง
+  const challenge = game.round?.challenge ?? null;
+  const colourFix = challenge?.type === "colour_fix" ? challenge.color : null;
+  const noLift = challenge?.type === "dont_lift_pen";
+  // dont_lift_pen ห้ามย้อน/ทำซ้ำ **ที่หน้าจอด้วย** ไม่ใช่แค่ที่ server
+  // (server ก็ปฏิเสธอยู่แล้ว ตรงนี้ทำเพื่อไม่ให้ผู้เล่นเสียเวลากดปุ่มที่ไม่ทำอะไร)
+  const historyLocked = noLift;
+
   // วาดได้เฉพาะคนวาด และเฉพาะช่วงกำลังวาด (โจทย์ข้อ 6)
   // ช่วงเลือกคำ game.round ยังเป็น null จึงวาดไม่ได้ ซึ่งถูกต้อง — ยังไม่รู้คำด้วยซ้ำ
-  const canDraw = isDrawer && drawing;
+  // ยกปากกาแล้ว (penLocked) ก็วาดต่อไม่ได้อีกทั้งตา
+  const canDraw = isDrawer && drawing && !game.penLocked;
 
   // เครื่องมือที่เลือกอยู่ — เป็นสถานะของหน้าจอ ไม่เกี่ยวกับ server
-  const [tool, setTool] = useState(TOOLS.PEN);
+  const [toolChoice, setToolChoice] = useState(TOOLS.PEN);
   const [color, setColor] = useState(PAINT_COLORS[0].hex); // เริ่มที่สีดำ (ตัวแรกในพาเลต)
   const [size, setSize] = useState(SIZE_DEFAULT);
   const canvasRef = useRef(null); // ใช้เรียกคำสั่งบนกระดาน (รับ action ของคนอื่น · สั่งล้างจอ)
+
+  // ค่าที่ "มีผลจริง" ของตานี้ — คิดออกมาจากที่เดียว ไม่ต้องมี effect คอยแก้ state
+  // (ถ้าใช้ effect ค่อยบังคับ state จะมีวาบหนึ่งที่ยังใช้ค่าที่ผิดกติกาอยู่)
+  //   colour_fix → ใช้สีที่ล็อกไว้ ไม่สนใจสีที่ผู้ใช้เลือก (สีที่เลือกไว้ยังอยู่ครบ กลับมาใช้ได้ตาถัดไป)
+  //   dont_lift_pen → ถังสีหายไป ถ้าเลือกถังสีค้างไว้ก็ถอยไปใช้ปากกา
+  const drawColor = colourFix ?? color;
+  const tool = noLift && toolChoice === TOOLS.BUCKET ? TOOLS.PEN : toolChoice;
 
   // ── ผูกกระดานเข้ากับ useGame ──
   // useGame เป็นคนรับ event การวาดจาก socket แต่มันไม่ถือ ref ของกระดาน (กระดานอยู่ลึกกว่านี้)
@@ -63,7 +80,8 @@ export default function Game({
   // ⌘Z ย้อน · ⌘⇧Z ทำซ้ำ (Mac) — รับ Ctrl ด้วยเพราะ Windows/Linux ใช้ Ctrl
   // เปิดใช้เฉพาะตอนเราวาดได้จริง ไม่งั้นคนทายกด ⌘Z แล้วกระดานคนอื่นจะย้อนตามไปด้วย
   useEffect(() => {
-    if (!canDraw) return undefined;
+    // dont_lift_pen ปิดคีย์ลัดด้วย ไม่ใช่แค่ปุ่ม (กฎเดียวกับปุ่ม: ห้ามย้อน = ห้ามทุกทาง)
+    if (!canDraw || historyLocked) return undefined;
 
     function onKey(e) {
       if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== "z") return;
@@ -77,7 +95,7 @@ export default function Game({
 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [canDraw, askUndo, askRedo]);
+  }, [canDraw, historyLocked, askUndo, askRedo]);
 
   // ── กดรหัสห้องเพื่อคัดลอก (ทุกคนเห็น ไม่ใช่แค่หัวห้อง) ──
   // ใช้กติกาเดียวกับหน้าห้องรอ: เบราว์เซอร์ที่ยังไม่ให้สิทธิ์คัดลอก (เช่นเปิดผ่าน http บนวงแลน
@@ -177,7 +195,7 @@ export default function Game({
             ref={canvasRef}
             canDraw={canDraw}
             tool={tool}
-            color={color}
+            color={drawColor}
             size={size}
             // ทุกอย่างที่วาดบนกระดานของเราออกทางนี้ทางเดียว → useGame ยิงต่อให้ server
             // แล้ว server เป็นคนส่งให้คนอื่น (ไม่ส่งกลับมาหาเรา จึงไม่มีภาพซ้อน)
@@ -203,16 +221,21 @@ export default function Game({
         <aside className="game__tools">
           <Toolbar
             tool={tool}
-            color={color}
+            color={drawColor}
             size={size}
-            onTool={setTool}
+            onTool={setToolChoice}
             onColor={setColor}
             onSize={setSize}
             onClear={handleClear}
             onUndo={askUndo}
             onRedo={askRedo}
-            canUndo={game.canUndo}
-            canRedo={game.canRedo}
+            // ล็อกไว้ที่ 0 ระหว่าง dont_lift_pen ไม่ใช่ปล่อยตาม server
+            // (canUndo ที่ค้างจาก canvas_history ตัวสุดท้ายจะยังเป็น true อยู่ ทั้งที่กดไปก็ไม่เกิดอะไร)
+            canUndo={game.canUndo && !historyLocked}
+            canRedo={game.canRedo && !historyLocked}
+            historyLocked={historyLocked}
+            lockedColor={colourFix}
+            hideBucket={noLift}
             locked={!canDraw}
           />
         </aside>
