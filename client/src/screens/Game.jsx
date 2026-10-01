@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import HintSlots from "../components/HintSlots";
 import Timer from "../components/Timer";
 import Scoreboard from "../components/Scoreboard";
@@ -19,7 +19,20 @@ import { PAINT_COLORS, SIZE_DEFAULT, TOOLS } from "../canvas/palette";
  * หน้านี้ไม่ผูก socket เอง รับสถานะสำเร็จรูปมาจาก useGame ที่ App เรียก
  * เพราะหน้านี้เกิดตอนได้ game_started เท่านั้น event ที่มาก่อนหน้าจะหลุด
  */
-export default function Game({ room, meId, game, chooseLeft, chooseWord, sendGuess, startGame, onLeave }) {
+export default function Game({
+  room,
+  meId,
+  game,
+  chooseLeft,
+  chooseWord,
+  sendGuess,
+  startGame,
+  sendAction,
+  askUndo,
+  askRedo,
+  bindCanvas,
+  onLeave,
+}) {
   const players = room.players;
   const isDrawer = game.drawerId === meId;
   const drawing = Boolean(game.round); // กำลังวาดอยู่ (round_start มาแล้ว ยังไม่ round_end)
@@ -33,10 +46,40 @@ export default function Game({ room, meId, game, chooseLeft, chooseWord, sendGue
   const [tool, setTool] = useState(TOOLS.PEN);
   const [color, setColor] = useState(PAINT_COLORS[0].hex); // เริ่มที่สีดำ (ตัวแรกในพาเลต)
   const [size, setSize] = useState(SIZE_DEFAULT);
-  const canvasRef = useRef(null); // ใช้เรียกคำสั่งบนกระดาน (ข้อ 4 จะใช้ตอนรับ action ของคนอื่น)
+  const canvasRef = useRef(null); // ใช้เรียกคำสั่งบนกระดาน (รับ action ของคนอื่น · สั่งล้างจอ)
+
+  // ── ผูกกระดานเข้ากับ useGame ──
+  // useGame เป็นคนรับ event การวาดจาก socket แต่มันไม่ถือ ref ของกระดาน (กระดานอยู่ลึกกว่านี้)
+  // หน้านี้จึงเป็นคนส่ง ref ให้ — effect ของลูก (useImperativeHandle ใน Canvas) ทำงานก่อน effect ของแม่
+  // จึงรับประกันได้ว่า canvasRef.current มีค่าแล้วตอน effect นี้ทำงาน
+  useEffect(() => {
+    bindCanvas(canvasRef.current);
+    return () => bindCanvas(null);
+  }, [bindCanvas]);
+
+  // ── คีย์ลัดย้อนกลับ/ทำซ้ำ (ข้อ 4) ──
+  // ⌘Z ย้อน · ⌘⇧Z ทำซ้ำ (Mac) — รับ Ctrl ด้วยเพราะ Windows/Linux ใช้ Ctrl
+  // เปิดใช้เฉพาะตอนเราวาดได้จริง ไม่งั้นคนทายกด ⌘Z แล้วกระดานคนอื่นจะย้อนตามไปด้วย
+  useEffect(() => {
+    if (!canDraw) return undefined;
+
+    function onKey(e) {
+      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== "z") return;
+      // ถ้าโฟกัสอยู่ในช่องพิมพ์ ปล่อยให้เป็นการย้อนข้อความตามปกติของเบราว์เซอร์
+      const t = e.target;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      e.preventDefault();
+      if (e.shiftKey) askRedo();
+      else askUndo();
+    }
+
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [canDraw, askUndo, askRedo]);
 
   // ปุ่มล้างจอ — ส่ง action clear_canvas เข้ากระดานทางช่องทางกลางช่องเดียวกับที่วาด
-  // (ไม่ได้เรียก painter ตรงๆ เพราะต้องให้มันเก็บลงลิสต์และส่งออกให้คนอื่นด้วย)
+  // (ไม่ได้เรียก painter ตรงๆ เพราะต้องให้มันเก็บลงลิสต์และส่งออกให้คนอื่นด้วย
+  //  และต้องให้ server เก็บเป็นการกระทำหนึ่งอัน เพื่อให้กดย้อนกลับได้)
   function handleClear() {
     canvasRef.current?.dispatch(clearBoard());
   }
@@ -88,8 +131,9 @@ export default function Game({ room, meId, game, chooseLeft, chooseWord, sendGue
             tool={tool}
             color={color}
             size={size}
-            resetKey={game.roundKey}
-            // ข้อ 4 ต่อ socket ตรงนี้: onAction={(a) => socket.emit(a.type, payload(a))}
+            // ทุกอย่างที่วาดบนกระดานของเราออกทางนี้ทางเดียว → useGame ยิงต่อให้ server
+            // แล้ว server เป็นคนส่งให้คนอื่น (ไม่ส่งกลับมาหาเรา จึงไม่มีภาพซ้อน)
+            onAction={sendAction}
           />
 
           {/* ใต้กระดาน สองกล่องข้างกัน: คำที่คนทาย กับ เรื่องที่เกิดในห้อง */}
@@ -117,6 +161,10 @@ export default function Game({ room, meId, game, chooseLeft, chooseWord, sendGue
             onColor={setColor}
             onSize={setSize}
             onClear={handleClear}
+            onUndo={askUndo}
+            onRedo={askRedo}
+            canUndo={game.canUndo}
+            canRedo={game.canRedo}
             locked={!canDraw}
           />
         </aside>

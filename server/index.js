@@ -128,6 +128,198 @@ function normalize(text) {
   return String(text ?? "").toLowerCase().replace(/\s+/g, "");
 }
 
+// ══════════════════════════════════════════════════════════════════════
+// การวาด (ข้อ 4) — รับจากคนวาด ส่งต่อให้คนอื่น เก็บไว้ให้คนเข้าห้องกลางตา และย้อนกลับได้
+//
+// หลักการเดียวกับทั้งไฟล์: server เป็นคนตัดสิน
+//   - รับเฉพาะจาก "คนวาด" ของห้องนั้น และเฉพาะ "ช่วงวาด" เท่านั้น
+//   - ข้อมูลผิดรูปแบบทิ้งเงียบ ๆ ไม่ตอบ error กลับ (คนโกงไม่ควรรู้ว่าเรากำลังเช็คอะไรอยู่)
+//   - ส่งต่อด้วย socket.to(code) = ทุกคนในห้องยกเว้นคนวาด (เขาเห็นภาพของตัวเองอยู่แล้ว)
+//
+// ประวัติถูกเก็บเป็น "การกระทำ" (op) ไม่ใช่ event รายอัน
+//   หนึ่งเส้น = stroke_start + stroke_points หลายอัน + stroke_end = 1 การกระทำ
+//   หนึ่งครั้งเทสี = 1 การกระทำ · ล้างจอ 1 ครั้ง = 1 การกระทำ
+// การแบ่งแบบนี้ทำให้ "ย้อนกลับหนึ่งครั้ง" = ถอยหนึ่งเส้น ไม่ใช่ถอยทีละจุด
+// (ผู้ใช้กดย้อนครั้งเดียวต้องได้ผลอย่างที่ตาเห็น ไม่ใช่ต้องกด 40 ครั้ง)
+//
+// สองช่องที่ดูคล้ายกันแต่คนละเรื่อง อย่าสับสน
+//   room.strokeOpen    = "ตอนนี้มีเส้นค้างอยู่ไหม"     → เรื่องของสัญญา ใช้ตัดสินว่าข้อความนี้ถูกต้องไหม
+//   room.currentStroke = "เส้นนั้นถูกเก็บลงประวัติหรือยัง" → เรื่องของที่เก็บ (เป็น null ได้ทั้งที่ strokeOpen เป็น true)
+// แยกกันเพราะตอนชนเพดาน เราหยุด "เก็บ" แต่ยัง "ส่งต่อ" ให้ทุกคนตามปกติ
+// ถ้าใช้ช่องเดียว ชนเพดานเมื่อไหร่จุดที่เหลือของเส้นนั้นจะถูกทิ้งไปด้วย ทั้งที่ควรส่งถึงเพื่อนร่วมห้อง
+// ══════════════════════════════════════════════════════════════════════
+
+// เพดานค่าต่าง ๆ ของการวาด
+// SIZE_MIN/SIZE_MAX ต้องตรงกับ client/src/canvas/palette.js แต่คนละโปรเซสกัน
+// จึง import หากันไม่ได้ ต้องประกาศซ้ำ — ถ้าวันหนึ่งแก้ ต้องแก้ทั้งสองที่
+const SIZE_MIN = 2;
+const SIZE_MAX = 40;
+const VALID_TOOLS = ["pen", "eraser"];
+const COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+
+const MAX_POINTS_PER_MSG = 500; // จุดสูงสุดในหนึ่งข้อความ stroke_points
+const MAX_CANVAS_EVENTS = 4000; // action สูงสุดที่เก็บไว้ต่อตา
+const MAX_CANVAS_POINTS = 30000; // จุดรวมสูงสุดที่เก็บไว้ต่อตา
+// เพดานสองตัวนี้ตั้งเผื่อไว้ราว 5-7 เท่าของที่ใช้จริงในตาหนึ่ง
+// (ตาละ 60 วิ ส่งทุก 40ms = ไม่เกิน 1500 ข้อความ และกรองจุดซ้ำแล้วเหลือราว 3000-6000 จุด)
+// มีไว้กันหน่วยความจำบวมเท่านั้น ไม่ได้ตั้งใจให้ชนในการเล่นปกติ
+
+const isUnit = (v) => typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 1;
+const isColor = (v) => typeof v === "string" && COLOR_RE.test(v);
+const isSize = (v) => typeof v === "number" && Number.isFinite(v) && v >= SIZE_MIN && v <= SIZE_MAX;
+
+// คืนห้อง ถ้าคนนี้เป็น "คนวาด" ของห้องที่กำลังวาดอยู่ตอนนี้ ไม่งั้นคืน null
+// รวมการเช็คสิทธิ์และช่วงเวลาไว้ที่เดียว ทุก handler ของการวาดเรียกฟังก์ชันนี้
+function drawRoom(socket) {
+  const room = rooms.get(socket.data.roomCode);
+  if (!room || room.phase !== "drawing" || room.drawerId !== socket.id) return null;
+  return room;
+}
+
+// ตรวจก้อนจุดของ stroke_points — คืนลิสต์ที่สะอาดแล้ว หรือ null ถ้าข้อมูลผิด
+function cleanPoints(data) {
+  if (!data || typeof data !== "object") return null;
+  const list = data.points;
+  if (!Array.isArray(list) || list.length === 0) return null;
+  if (list.length > MAX_POINTS_PER_MSG) return null;
+
+  const out = [];
+  for (const p of list) {
+    if (!p || typeof p !== "object") return null;
+    if (!isUnit(p.x) || !isUnit(p.y)) return null;
+    out.push({ x: p.x, y: p.y });
+  }
+  return out;
+}
+
+// กรอง "จุดซ้ำตำแหน่งเดิม" ทิ้ง
+//
+// ทำไมต้องมีทั้งที่ฝั่ง client กรองไปแล้ว: client กรองที่เกณฑ์ 1 พิกเซล ซึ่งต้องรู้ขนาดจอบนเครื่องนั้น
+// server ไม่มีจอ จึงเทียบแบบนั้นไม่ได้ แต่จุดที่ "ซ้ำเป๊ะ" กรองได้ทุกจอ และเป็นตัวที่ทำให้เส้นเหลี่ยมจริง
+// (ดูคำอธิบายเต็มใน client/src/components/Canvas.jsx) — ฝั่งรับจึงได้เส้นเรียบเหมือนฝั่งวาดแน่นอน
+function dedupePoints(room, points) {
+  const out = [];
+  let last = room.lastPoint;
+  for (const p of points) {
+    if (last && p.x === last.x && p.y === last.y) continue;
+    out.push(p);
+    last = p;
+  }
+  room.lastPoint = last;
+  return out;
+}
+
+// นับจำนวนจุดในหนึ่งการกระทำ — จุดคือสิ่งที่กินหน่วยความจำมากที่สุดในประวัติ
+function countPoints(op) {
+  let n = 0;
+  for (const ev of op.events) if (ev.type === "stroke_points") n += ev.points.length;
+  return n;
+}
+
+// ชนเพดานแล้ว — หยุดเก็บประวัติต่อในตานี้ (เตือนครั้งเดียวต่อห้อง)
+// ยัง "ส่งต่อ" ให้ทุกคนตามปกติ เกมจึงไม่สะดุด สิ่งที่เสียไปคือคนที่เข้าห้องกลางตาหลังจุดนี้จะเห็นภาพไม่ครบ
+function freezeCanvas(room) {
+  if (room.canvasFrozen) return;
+  room.canvasFrozen = true;
+
+  // ปิดเส้นที่ค้างอยู่ให้เรียบร้อยก่อนทิ้ง ไม่งั้นประวัติจะจบด้วยเส้นที่ไม่มี stroke_end
+  // ตอนวาดซ้ำจากประวัติ ปลายเส้นจะไม่ถูกปิดให้ (ดู endStroke ใน painter.js)
+  // เส้นนี้ยังถูก "ส่งต่อ" ให้ทุกคนตามปกติ — ที่หยุดคือการเก็บลงประวัติเท่านั้น
+  const last = room.currentStroke?.events[room.currentStroke.events.length - 1];
+  if (room.currentStroke && last.type !== "stroke_end") {
+    room.currentStroke.events.push({ type: "stroke_end" });
+    room.canvasEvents++;
+  }
+  room.currentStroke = null; // ไม่มีเส้นไหนถูกเก็บอีกแล้วในตานี้
+
+  console.warn(
+    `⚠️  ห้อง ${room.code}: ประวัติการวาดตานี้ชนเพดาน (${MAX_CANVAS_EVENTS} action / ${MAX_CANVAS_POINTS} จุด) — หยุดเก็บเพิ่ม`
+  );
+}
+
+// เก็บ action ลงประวัติเป็นส่วนหนึ่งของการกระทำ (คืน true ถ้าเก็บได้จริง)
+function storeAction(room, type, payload) {
+  if (room.canvasFrozen) return false;
+
+  // จุดที่ตามมา ต่อเข้ากับเส้นที่ค้างอยู่ ไม่นับเป็นการกระทำใหม่
+  if (type === "stroke_points") {
+    if (!room.currentStroke) return false;
+    const cost = payload.points.length;
+    if (room.canvasEvents + 1 > MAX_CANVAS_EVENTS || room.canvasPoints + cost > MAX_CANVAS_POINTS) {
+      freezeCanvas(room);
+      return false;
+    }
+    room.currentStroke.events.push({ type, points: payload.points });
+    room.canvasEvents++;
+    room.canvasPoints += cost;
+    return true;
+  }
+
+  if (type === "stroke_end") {
+    if (!room.currentStroke) return false;
+    room.currentStroke.events.push({ type });
+    room.canvasEvents++;
+    room.currentStroke = null;
+    return true;
+  }
+
+  // stroke_start / fill / clear_canvas — ขึ้นต้นการกระทำใหม่หนึ่งอัน
+  const op = { events: [{ type, ...payload }] };
+  if (room.canvasEvents + op.events.length > MAX_CANVAS_EVENTS) {
+    freezeCanvas(room);
+    return false;
+  }
+  room.canvasOps.push(op);
+  room.canvasEvents += op.events.length;
+  room.canvasPoints += countPoints(op);
+  room.redoOps = []; // วาดใหม่หลังย้อน = กองทำซ้ำหายทั้งกอง เหมือนโปรแกรมวาดรูปทั่วไป
+  if (type === "stroke_start") room.currentStroke = op;
+  return true;
+}
+
+// ย้อนหนึ่งการกระทำ — คืน true ถ้าย้อนจริง
+function undoCanvas(room) {
+  // ยังลากเส้นค้างอยู่ ย้อนไม่ได้ เพราะลำดับจะเพี้ยน (ให้ปล่อยมือก่อนแล้วกดใหม่)
+  if (room.strokeOpen || room.canvasOps.length === 0) return false;
+  const op = room.canvasOps.pop();
+  room.canvasEvents -= op.events.length;
+  room.canvasPoints -= countPoints(op);
+  room.redoOps.push(op);
+  return true;
+}
+
+function redoCanvas(room) {
+  if (room.strokeOpen || room.redoOps.length === 0) return false;
+  const op = room.redoOps.pop();
+  room.canvasOps.push(op);
+  room.canvasEvents += op.events.length;
+  room.canvasPoints += countPoints(op);
+  return true;
+}
+
+// "ภาพปัจจุบันทั้งชุด" + สถานะปุ่มย้อน/ทำซ้ำ
+//
+// ทำไมส่งทั้งชุดไม่ส่งแค่ส่วนต่าง: ย้อน/ทำซ้ำเป็นเรื่องที่เกิดไม่บ่อย (คนกดปุ่ม)
+// แต่ต้อง "ถูกเป๊ะ" ทุกจอ การส่งภาพทั้งชุดทำให้ทุกคนได้ผลเหมือนกันโดยไม่มีทางเพี้ยน
+// และคนที่เข้าห้องกลางตาทีหลังก็ได้ภาพหลังย้อนแล้วทันทีโดยไม่ต้องมีโค้ดพิเศษอะไรเลย
+function canvasPayload(room) {
+  const items = [];
+  for (const op of room.canvasOps) items.push(...op.events);
+  return { items, canUndo: room.canvasOps.length > 0, canRedo: room.redoOps.length > 0 };
+}
+
+// ล้างประวัติทั้งก้อน — เรียกตอนขึ้นตาใหม่ (events.md หัวข้อ 4)
+function resetCanvas(room) {
+  room.canvasOps = [];
+  room.redoOps = [];
+  room.currentStroke = null;
+  room.strokeOpen = false;
+  room.lastPoint = null;
+  room.canvasEvents = 0;
+  room.canvasPoints = 0;
+  room.canvasFrozen = false;
+}
+
 // ---------- ตัวจับเวลา ----------
 function stopTimer(room) {
   clearInterval(room.timer);
@@ -175,6 +367,7 @@ function startDrawing(room, word) {
   console.log("คำตานี้:", word);
   room.guessedIds = new Set();
   room.roundGains = {};
+  resetCanvas(room); // ขึ้นตาใหม่ = กระดานว่าง ประวัติตาที่แล้วทิ้งทั้งหมด
 
   room.timeLeft = room.settings.drawTime;
   io.to(room.code).emit("round_start", roundInfo(room));
@@ -191,12 +384,19 @@ function roundInfo(room) {
     hint: makeHint(room.word),
     time: room.timeLeft,
     challenge: { type: "none" },
+    // ส่งแค่ "id" ของคนที่ทายถูกแล้ว ไม่มีคำตอบหรืออะไรที่บอกคำปนมาด้วย
+    // มีไว้ให้คนที่เข้าห้องกลางตาเห็นติ๊กถูกของคนที่ทายไปก่อนหน้า (งานค้างจากข้อ 2)
+    guessedIds: [...room.guessedIds],
   };
 }
 
 function endRound(room) {
   stopTimer(room);
   room.phase = "between";
+  // ตัดจบเส้นที่ค้างอยู่ (คนวาดอาจปล่อยมือไม่ทันตอนหมดเวลา)
+  // ปิดแบบไม่เก็บ stroke_end เพิ่ม เพราะประวัติจะถูกล้างทั้งก้อนตอนขึ้นตาใหม่อยู่แล้ว
+  room.strokeOpen = false;
+  room.currentStroke = null;
   const results = Object.entries(room.roundGains).map(([playerId, gained]) => ({ playerId, gained }));
   io.to(room.code).emit("round_end", { word: room.word, results });
   room.word = null;
@@ -305,7 +505,12 @@ io.on("connection", (socket) => {
     if (room.status === "playing") {
       room.turnOrder.push(socket.id);
       socket.emit("game_started", { mode: room.settings.mode, totalRounds: room.settings.rounds });
-      if (room.phase === "drawing") socket.emit("round_start", roundInfo(room));
+      if (room.phase === "drawing") {
+        socket.emit("round_start", roundInfo(room));
+        // ภาพที่วาดไปแล้วก่อนเข้า — ส่ง "หลัง" round_start เพื่อให้จอใหม่ล้างกระดานเสร็จก่อน
+        // ไม่งั้นภาพที่เพิ่งได้มาจะถูกล้างทิ้งทันที
+        socket.emit("canvas_history", canvasPayload(room));
+      }
     }
   });
 
@@ -399,6 +604,92 @@ io.on("connection", (socket) => {
 
     // ทายผิด ทุกคนเห็นได้
     io.to(room.code).emit("chat_message", msg);
+  });
+
+  // ══════════════════════════════════════════════════════════════════
+  // การวาด (ข้อ 4) — ทุกตัวหน้าตาเหมือนกัน: ตรวจสิทธิ์ → ตรวจข้อมูล → เก็บ → ส่งต่อ
+  //
+  // ข้อมูลผิด "ทิ้งเงียบ ๆ" ไม่ตอบ game_error กลับไป
+  // เพราะการบอกว่าข้อมูลไหนผิด เท่ากับบอกใบ้คนที่กำลังลองโกงว่าเราดักตรงไหนอยู่
+  // และไม่ว่าอะไรจะถูกส่งมา server ต้องไม่ล่ม — ตรวจให้ครบก่อนใช้ทุกครั้ง
+  // ══════════════════════════════════════════════════════════════════
+
+  socket.on("stroke_start", (data) => {
+    const room = drawRoom(socket);
+    if (!room || !data || typeof data !== "object") return;
+
+    const { x, y, color, size, tool } = data;
+    if (!isUnit(x) || !isUnit(y)) return;
+    if (!isColor(color)) return;
+    if (!isSize(size)) return;
+    if (!VALID_TOOLS.includes(tool)) return;
+
+    const payload = { x, y, color, size, tool };
+    room.strokeOpen = true;
+    room.lastPoint = { x, y }; // จุดตั้งต้นของเส้นนี้ ใช้กรองจุดซ้ำในข้อความถัดไป
+    storeAction(room, "stroke_start", payload);
+    socket.to(room.code).emit("stroke_start", payload);
+  });
+
+  socket.on("stroke_points", (data) => {
+    const room = drawRoom(socket);
+    if (!room || !room.strokeOpen) return; // ไม่มีเส้นค้างอยู่ = ข้อมูลแปลกปลอม
+
+    const points = cleanPoints(data);
+    if (!points) return;
+
+    const fresh = dedupePoints(room, points);
+    if (fresh.length === 0) return; // จุดซ้ำทั้งหมด ไม่มีอะไรต้องส่ง
+
+    storeAction(room, "stroke_points", { points: fresh });
+    socket.to(room.code).emit("stroke_points", { points: fresh });
+  });
+
+  socket.on("stroke_end", () => {
+    const room = drawRoom(socket);
+    if (!room || !room.strokeOpen) return;
+
+    room.strokeOpen = false;
+    room.lastPoint = null;
+    storeAction(room, "stroke_end", {});
+    socket.to(room.code).emit("stroke_end", {});
+  });
+
+  socket.on("fill", (data) => {
+    const room = drawRoom(socket);
+    if (!room || !data || typeof data !== "object") return;
+
+    const { x, y, color } = data;
+    if (!isUnit(x) || !isUnit(y) || !isColor(color)) return;
+
+    const payload = { x, y, color };
+    storeAction(room, "fill", payload);
+    socket.to(room.code).emit("fill", payload);
+  });
+
+  // clear_canvas ไม่ได้ล้าง "ประวัติ" ทิ้ง แต่ถูกเก็บเป็นอีกหนึ่งการกระทำ
+  // จึงกดย้อนกลับเพื่อเอากลับมาได้ (เหมือนโปรแกรมวาดรูปทั่วไป)
+  socket.on("clear_canvas", () => {
+    const room = drawRoom(socket);
+    if (!room) return;
+
+    storeAction(room, "clear_canvas", {});
+    socket.to(room.code).emit("clear_canvas", {});
+  });
+
+  // ── ย้อนกลับ / ทำซ้ำ ──
+  // client แค่ "ขอ" — server เป็นคนตัดสินว่าย้อนได้ไหม แล้วส่งภาพปัจจุบันทั้งชุดกลับให้ทั้งห้อง
+  // (io.to ไม่ใช่ socket.to เพราะคนวาดต้องได้ด้วย จอตัวเองจะได้ย้อนตาม)
+  socket.on("undo", () => {
+    const room = drawRoom(socket);
+    if (!room || !undoCanvas(room)) return;
+    io.to(room.code).emit("canvas_history", canvasPayload(room));
+  });
+
+  socket.on("redo", () => {
+    const room = drawRoom(socket);
+    if (!room || !redoCanvas(room)) return;
+    io.to(room.code).emit("canvas_history", canvasPayload(room));
   });
 
   socket.on("leave_room", () => leaveRoom(socket));

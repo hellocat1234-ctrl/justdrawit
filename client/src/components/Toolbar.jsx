@@ -24,7 +24,20 @@ import {
  * คนที่ไม่ใช่คนวาดยังเห็นแถบนี้ แต่จางและกดไม่ได้ (locked)
  * เหตุผล: ถ้าซ่อนไปเลย กระดานจะเปลี่ยนความกว้างทุกครั้งที่สลับคนวาด ภาพที่วาดไว้จะกระโดด
  */
-export default function Toolbar({ tool, color, size, onTool, onColor, onSize, onClear, locked = false }) {
+export default function Toolbar({
+  tool,
+  color,
+  size,
+  onTool,
+  onColor,
+  onSize,
+  onClear,
+  onUndo,
+  onRedo,
+  canUndo = false,
+  canRedo = false,
+  locked = false,
+}) {
   // สีที่เลือกเองจากแถบสีรุ้ง — เก็บเป็น "องศาสี" (0–360) แล้วแปลงเป็น hex ตอนใช้
   // เก็บเป็น hue ไม่ใช่ hex เพราะแถบสีรุ้งต้องรู้ว่าจะวางหัวเลื่อนไว้ตรงไหน
   const [hue, setHue] = useState(HUE_DEFAULT);
@@ -135,12 +148,31 @@ export default function Toolbar({ tool, color, size, onTool, onColor, onSize, on
         <span className="toolbar__size-value">{size}</span>
       </div>
 
-      {/* ── ที่จองไว้ให้ปุ่มย้อนกลับ/ทำซ้ำ (ข้อ 4) ──
-          จองที่ตั้งแต่ตอนนี้เพื่อให้ความสูงของคอลัมน์นิ่ง
-          พอข้อ 4 ใส่ปุ่มจริง กระดานจะได้ไม่เปลี่ยนขนาดจนภาพที่วาดไว้กระโดด */}
-      <div className="toolbar__slot" aria-hidden="true">
-        <span className="toolbar__slot-text">↶ ↷ ย้อนกลับ · ทำซ้ำ</span>
-        <span className="toolbar__slot-note">ข้อ 4</span>
+      {/* ── ปุ่มย้อนกลับ / ทำซ้ำ (ข้อ 4) ──
+          ทั้งคู่เป็นปุ่ม "สั่ง" ไม่ใช่โหมด จึงไม่ค้างสถานะกดไว้แบบปุ่มเครื่องมือ
+          กดไม่ได้เมื่อไม่มีอะไรให้ย้อน/ทำซ้ำ (server เป็นคนบอกว่าเหลืออะไรบ้าง)
+          ดูคีย์ลัด ⌘Z / ⌘⇧Z ได้ที่ screens/Game.jsx */}
+      <div className="toolbar__group toolbar__group--history" role="group" aria-label="ย้อนกลับและทำซ้ำ">
+        <button
+          type="button"
+          className="tool"
+          aria-label="ย้อนกลับ"
+          title="ย้อนกลับ (⌘Z)"
+          disabled={locked || !canUndo}
+          onClick={onUndo}
+        >
+          ↶
+        </button>
+        <button
+          type="button"
+          className="tool"
+          aria-label="ทำซ้ำ"
+          title="ทำซ้ำ (⌘⇧Z)"
+          disabled={locked || !canRedo}
+          onClick={onRedo}
+        >
+          ↷
+        </button>
       </div>
     </div>
   );

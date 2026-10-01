@@ -445,6 +445,288 @@ async function main() {
     checkOk(`มีคำที่ไม่อยู่ในชุดสำรอง 10 คำ (ได้ ${outside.length} คำ)`, outside.length > 0);
   });
 
+  // ══════════════════════════════════════════════════════════════════
+  // ข้อ 4 — การวาด ย้อนกลับ ทำซ้ำ และการกันโกง
+  // แยกห้องใหม่ต่างหาก เพื่อไม่ให้ปนกับห้องของข้อ 1-6 ที่จบเกมไปแล้ว
+  // ══════════════════════════════════════════════════════════════════
+  const D = track(await connect()); // หัวห้อง = คนวาด
+  const E = track(await connect()); // คนทาย
+  const F = track(await connect()); // คนทายอีกคน ไว้ดูว่าทุกคนเห็นเหมือนกัน
+  others.push(D, E, F);
+
+  let dcode = null;
+  let dword = null;
+
+  await runPart("9. การวาด — ส่งต่อให้คนอื่น และทิ้งข้อมูลที่ไม่ใช่ของคนวาด", async () => {
+    dcode = (await emitAck(D.socket, "create_room", { name: "Drawer", avatar: 0 })).code;
+    await emitAck(E.socket, "join_room", { code: dcode, name: "Guess1", avatar: 1 });
+    await emitAck(F.socket, "join_room", { code: dcode, name: "Guess2", avatar: 2 });
+
+    clearAll(D, E, F);
+    D.socket.emit("update_settings", { rounds: 1, drawTime: 90 });
+    // รอตัวที่มีค่าใหม่จริง ไม่ใช่ room_update ตัวแรกที่เจอ
+    // (room_update ของตอน E/F เข้าห้องอาจมาถึงหลัง clearAll พอดี แล้วกลายเป็นตัวแรกในลิสต์)
+    check("ตั้งเวลาวาด 90 วิ สำหรับเทสข้อนี้",
+      (await D.wait("room_update", (r) => r.settings.drawTime === 90, 3000)).settings.drawTime, 90);
+
+    clearAll(D, E, F);
+    D.socket.emit("start_game");
+    const cw = await D.wait("choose_word", null, 6000);
+    dword = cw.options[0];
+    D.socket.emit("word_chosen", { word: dword });
+    await D.wait("round_start", null, 3000);
+
+    // ── เส้นหนึ่งเส้นเดินทางครบสามตอน ──
+    clearAll(D, E, F);
+    D.socket.emit("stroke_start", { x: 0.1, y: 0.1, color: "#000000", size: 5, tool: "pen" });
+    const s1 = await E.wait("stroke_start", null, 2000);
+    check("stroke_start ถึงคนอื่นครบทุกช่อง",
+      [s1.x, s1.y, s1.color, s1.size, s1.tool], [0.1, 0.1, "#000000", 5, "pen"]);
+    check("คนวาดไม่ได้รับ action ของตัวเองกลับมา", (await D.quiet("stroke_start", 500)).length, 0);
+
+    clearAll(D, E, F);
+    D.socket.emit("stroke_points", { points: [{ x: 0.2, y: 0.2 }, { x: 0.3, y: 0.3 }] });
+    check("stroke_points ส่งถึงคนอื่นตามลำดับ",
+      (await E.wait("stroke_points", null, 2000)).points, [{ x: 0.2, y: 0.2 }, { x: 0.3, y: 0.3 }]);
+
+    // จุดที่ซ้ำกับจุดก่อนหน้าสนิท ต้องถูกกรองออก (เป็นตัวการของ "เส้นเหลี่ยม")
+    clearAll(D, E, F);
+    D.socket.emit("stroke_points", { points: [{ x: 0.3, y: 0.3 }, { x: 0.4, y: 0.4 }] });
+    check("จุดซ้ำตำแหน่งเดิมถูกกรองทิ้ง เหลือแต่จุดใหม่",
+      (await E.wait("stroke_points", (p) => p.points.some((q) => q.x === 0.4), 2000)).points,
+      [{ x: 0.4, y: 0.4 }]);
+
+    clearAll(D, E, F);
+    D.socket.emit("stroke_points", { points: [{ x: 0.4, y: 0.4 }, { x: 0.4, y: 0.4 }] });
+    check("ข้อความที่เป็นจุดซ้ำล้วน ไม่ถูกส่งต่อ", (await E.quiet("stroke_points", 600)).length, 0);
+
+    clearAll(D, E, F);
+    D.socket.emit("stroke_end");
+    checkOk("stroke_end ถึงคนอื่น", (await E.tryWait("stroke_end", null, 2000)) !== null);
+
+    // ── ข้อมูลที่ไม่มีเส้นรองรับ ต้องถูกทิ้ง ──
+    clearAll(D, E, F);
+    D.socket.emit("stroke_points", { points: [{ x: 0.5, y: 0.5 }] });
+    D.socket.emit("stroke_end");
+    check("จุดที่ไม่มีเส้นค้างอยู่ ถูกทิ้ง", (await E.quiet("stroke_points", 600)).length, 0);
+    check("stroke_end ที่ไม่มีเส้นค้างอยู่ ถูกทิ้ง", (await E.quiet("stroke_end", 1)).length, 0);
+
+    // ── เทสี และล้างจอ ──
+    clearAll(D, E, F);
+    D.socket.emit("fill", { x: 0.8, y: 0.8, color: "#22a559" });
+    check("fill ถึงคนอื่น", await E.wait("fill", null, 2000), { x: 0.8, y: 0.8, color: "#22a559" });
+
+    clearAll(D, E, F);
+    D.socket.emit("clear_canvas");
+    checkOk("clear_canvas ถึงคนอื่น", (await E.tryWait("clear_canvas", null, 2000)) !== null);
+    checkOk("clear_canvas ถึงทุกคนในห้องพร้อมกัน", (await F.tryWait("clear_canvas", null, 500)) !== null);
+  });
+
+  await runPart("10. กันโกง — คนที่ไม่ใช่คนวาดส่งการวาดมา", async () => {
+    // E กับ F เป็นคนทาย ไม่มีสิทธิ์วาด ส่งมาทุกแบบที่วาดได้
+    clearAll(D, E, F);
+    E.socket.emit("stroke_start", { x: 0.1, y: 0.1, color: "#000000", size: 5, tool: "pen" });
+    E.socket.emit("stroke_points", { points: [{ x: 0.2, y: 0.2 }] });
+    E.socket.emit("stroke_end");
+    E.socket.emit("fill", { x: 0.5, y: 0.5, color: "#ff0000" });
+    E.socket.emit("clear_canvas");
+    E.socket.emit("undo");
+    E.socket.emit("redo");
+    F.socket.emit("stroke_start", { x: 0.9, y: 0.9, color: "#000000", size: 5, tool: "pen" });
+
+    // รอให้ของที่หลุดมาถึงก่อน (ถ้ามี) แล้วค่อยนับ
+    await D.quiet("stroke_start", 800);
+    const names = ["stroke_start", "stroke_points", "stroke_end", "fill", "clear_canvas"];
+    let leaked = 0;
+    for (const rec of [D, E, F]) {
+      for (const n of names) leaked += (await rec.quiet(n, 1)).length;
+    }
+    check("การวาดจากคนที่ไม่ใช่คนวาด ไม่ถึงใครเลย", leaked, 0);
+    checkOk("คนที่ไม่ใช่คนวาดกดย้อนกลับ ไม่มีอะไรเกิดขึ้น",
+      (await D.tryWait("canvas_history", null, 600)) === null);
+
+    // หลังพยายามโกงแล้ว คนวาดจริงต้องวาดได้ตามปกติ (server ยังไม่พัง)
+    clearAll(D, E, F);
+    D.socket.emit("stroke_start", { x: 0.3, y: 0.3, color: "#1e6fe8", size: 6, tool: "pen" });
+    check("หลังพยายามโกง คนวาดจริงยังวาดได้",
+      (await E.wait("stroke_start", null, 2000)).color, "#1e6fe8");
+    D.socket.emit("stroke_end");
+  });
+
+  await runPart("11. ข้อมูลเพี้ยน — server ต้องไม่ล่มและต้องทิ้งเงียบ ๆ", async () => {
+    const BAD_START = [
+      { x: "0.5", y: 0.5, color: "#000000", size: 5, tool: "pen" }, // x เป็นข้อความ
+      { x: -0.5, y: 0.5, color: "#000000", size: 5, tool: "pen" }, // ติดลบ
+      { x: 0.5, y: 1.5, color: "#000000", size: 5, tool: "pen" }, // เกิน 1
+      { x: null, y: 0.5, color: "#000000", size: 5, tool: "pen" }, // null (NaN ส่งผ่าน socket.io จะกลายเป็น null)
+      { x: 0.5, y: 0.5, color: "red", size: 5, tool: "pen" }, // สีผิดรูปแบบ
+      { x: 0.5, y: 0.5, color: "#12345", size: 5, tool: "pen" }, // hex ไม่ครบ 6 หลัก
+      { x: 0.5, y: 0.5, color: "#000000", size: 9999, tool: "pen" }, // ขนาดเกินช่วง
+      { x: 0.5, y: 0.5, color: "#000000", size: 0, tool: "pen" }, // ขนาดต่ำเกิน
+      { x: 0.5, y: 0.5, color: "#000000", size: 5, tool: "eraser2" }, // tool ไม่รู้จัก
+      { x: 0.5, y: 0.5, color: "#000000", size: 5 }, // ไม่มี tool
+      { x: {}, y: [] }, // ชนิดผิดทั้งคู่
+      null,
+      "ข้อความ",
+      42,
+      [],
+    ];
+
+    clearAll(D, E, F);
+    for (const bad of BAD_START) D.socket.emit("stroke_start", bad);
+    check("stroke_start ที่ข้อมูลเพี้ยน ไม่มีสักตัวที่ถูกส่งต่อ",
+      (await E.quiet("stroke_start", 800)).length, 0);
+
+    // เปิดเส้นที่ถูกต้องไว้หนึ่งเส้น แล้วยิงจุดเพี้ยนใส่ (ต้องผ่านด่านแรกไปถึงด่านตรวจจุด)
+    clearAll(D, E, F);
+    D.socket.emit("stroke_start", { x: 0.5, y: 0.5, color: "#000000", size: 5, tool: "pen" });
+    await E.wait("stroke_start", null, 2000);
+    const BAD_POINTS = [
+      { points: "ไม่ใช่ลิสต์" },
+      { points: [] },
+      { points: [{ x: 0.5 }] }, // ไม่มี y
+      { points: [{ x: 0.5, y: 2 }] }, // y เกิน 1
+      { points: [{ x: "0.5", y: 0.5 }] }, // x เป็นข้อความ
+      { points: [{ x: 0.6, y: 0.6 }, null] }, // มีจุดที่ไม่ใช่ object ปนมา
+      { points: Array.from({ length: 501 }, () => ({ x: 0.1, y: 0.1 })) }, // เกินเพดานจุดต่อข้อความ
+      null,
+      7,
+    ];
+    for (const bad of BAD_POINTS) D.socket.emit("stroke_points", bad);
+    check("stroke_points ที่ข้อมูลเพี้ยน ไม่มีสักตัวที่ถูกส่งต่อ",
+      (await E.quiet("stroke_points", 800)).length, 0);
+
+    for (const bad of [{ x: 0.5, y: 0.5, color: "blue" }, { x: 2, y: 0.5, color: "#000000" }, null, "x", 9]) {
+      D.socket.emit("fill", bad);
+    }
+    check("fill ที่ข้อมูลเพี้ยน ไม่มีสักตัวที่ถูกส่งต่อ", (await E.quiet("fill", 800)).length, 0);
+
+    // หลังยิงของเพี้ยนไปทั้งชุด server ต้องยังทำงานปกติ
+    clearAll(D, E, F);
+    D.socket.emit("stroke_points", { points: [{ x: 0.7, y: 0.7 }] });
+    check("หลังยิงข้อมูลเพี้ยนทั้งชุด server ยังทำงานปกติ",
+      (await E.wait("stroke_points", null, 2000)).points, [{ x: 0.7, y: 0.7 }]);
+    D.socket.emit("stroke_end");
+  });
+
+  await runPart("12. คนเข้าห้องกลางตา — ได้ภาพที่วาดไปแล้ว และติ๊กถูกของคนที่ทายถูก", async () => {
+    // ให้ E ทายถูกก่อน เพื่อดูว่าคนที่เข้าทีหลังเห็น ✅ ของ E ไหม
+    clearAll(D, E, F);
+    E.socket.emit("guess", { text: dword });
+    await E.wait("correct_guess", null, 3000);
+
+    // วาดให้มีของในประวัติชัด ๆ หนึ่งชุด: ล้างจอ -> เส้น -> เทสี
+    D.socket.emit("clear_canvas");
+    await E.wait("clear_canvas", null, 2000);
+    D.socket.emit("stroke_start", { x: 0.2, y: 0.2, color: "#ef8a2b", size: 8, tool: "pen" });
+    D.socket.emit("stroke_points", { points: [{ x: 0.25, y: 0.25 }] });
+    D.socket.emit("stroke_end");
+    D.socket.emit("fill", { x: 0.6, y: 0.6, color: "#7b5ce0" });
+    await E.wait("fill", null, 2000);
+
+    const Late = track(await connect());
+    others.push(Late);
+    await emitAck(Late.socket, "join_room", { code: dcode, name: "Late", avatar: 4 });
+
+    const rs = await Late.wait("round_start", null, 3000);
+    checkOk("คนเข้าห้องกลางตาได้ round_start", !!rs);
+    check("round_start บอกคนวาดถูกคน", rs.drawerId, D.socket.id);
+    checkOk("round_start ส่ง guessedIds มาให้ (คนที่ทายถูกไปแล้ว)",
+      Array.isArray(rs.guessedIds) && rs.guessedIds.includes(E.socket.id));
+    checkOk("guessedIds ส่งแค่ id ไม่มีคำตอบปนมา",
+      rs.guessedIds.every((v) => typeof v === "string"));
+    check("ไม่มีคำจริงหลุดมาใน round_start ของคนเข้าทีหลัง", "word" in rs, false);
+
+    const hist = await Late.wait("canvas_history", null, 3000);
+    check("ประวัติที่ได้ เรียงตามลำดับที่วาดจริง",
+      hist.items.slice(-5).map((it) => it.type),
+      ["clear_canvas", "stroke_start", "stroke_points", "stroke_end", "fill"]);
+    check("ประวัติเก็บสีของเส้นไว้ครบ", hist.items[hist.items.length - 4].color, "#ef8a2b");
+    check("ประวัติบอกว่ายังย้อนกลับได้", hist.canUndo, true);
+    check("ประวัติบอกว่ายังไม่มีอะไรให้ทำซ้ำ", hist.canRedo, false);
+
+    // roomState ต้องไม่มีข้อมูลภาพวาดปนออกไป (กติกาใน CLAUDE.md)
+    const room = await Late.wait("room_update", null, 3000);
+    check("room_update ส่งเฉพาะช่องที่กำหนด ไม่มีข้อมูลภาพวาดติดมา",
+      Object.keys(room).sort(), ["code", "hostId", "players", "settings", "status"]);
+  });
+
+  await runPart("13. ย้อนกลับ / ทำซ้ำ", async () => {
+    // ตอนนี้การกระทำสุดท้ายคือ fill — ย้อนหนึ่งครั้ง fill ต้องหายไปทั้งอัน
+    clearAll(D, E, F);
+    D.socket.emit("undo");
+    const h1 = await E.wait("canvas_history", null, 3000);
+    check("ย้อนแล้วการกระทำสุดท้ายหายไปทั้งอัน (fill หายจากท้ายลิสต์)",
+      h1.items[h1.items.length - 1].type, "stroke_end");
+    check("ย้อนแล้วมีอะไรให้ทำซ้ำ", h1.canRedo, true);
+    checkOk("คนวาดเองก็ได้ canvas_history ด้วย (จอตัวเองต้องย้อนตาม)",
+      (await D.tryWait("canvas_history", null, 3000)) !== null);
+
+    clearAll(D, E, F);
+    D.socket.emit("redo");
+    const h2 = await E.wait("canvas_history", null, 3000);
+    check("ทำซ้ำแล้ว fill กลับมา", h2.items[h2.items.length - 1].type, "fill");
+    check("ทำซ้ำจนหมดแล้วไม่มีอะไรให้ทำซ้ำอีก", h2.canRedo, false);
+    check("ทำซ้ำจนหมดแล้วยังย้อนได้อยู่", h2.canUndo, true);
+
+    // ย้อนแล้ววาดใหม่ = กองทำซ้ำหายทั้งกอง เหมือนโปรแกรมวาดรูปทั่วไป
+    D.socket.emit("undo");
+    await E.wait("canvas_history", (h) => h.canRedo === true, 3000);
+    clearAll(D, E, F);
+    D.socket.emit("stroke_start", { x: 0.9, y: 0.1, color: "#e8553f", size: 3, tool: "pen" });
+    D.socket.emit("stroke_points", { points: [{ x: 0.95, y: 0.15 }] });
+    D.socket.emit("stroke_end");
+    await E.wait("stroke_end", null, 2000);
+
+    // วิธีดูว่ากองทำซ้ำถูกล้างจริง: กดทำซ้ำแล้วต้องเงียบ
+    // ถ้ากองยังมี fill เดิมค้างอยู่ มันจะคืน fill กลับมาแล้วส่ง canvas_history ออกมาทันที
+    clearAll(D, E, F);
+    D.socket.emit("redo");
+    check("วาดใหม่หลังย้อนแล้ว กดทำซ้ำไม่ติด (กองทำซ้ำหายทั้งกอง)",
+      (await E.quiet("canvas_history", 700)).length, 0);
+
+    D.socket.emit("undo");
+    const h3 = await E.wait("canvas_history", null, 3000);
+    check("ย้อนแล้วได้เส้นที่เพิ่งวาดออกไป (fill เดิมไม่กลับมา)", h3.items[h3.items.length - 1].type, "stroke_end");
+    check("ย้อนแล้วมีอะไรให้ทำซ้ำได้อีกครั้ง", h3.canRedo, true);
+
+    // ย้อนรวดเดียวจนหมด ต้องย้อนไม่ได้อีก
+    for (let i = 0; i < 60; i++) D.socket.emit("undo");
+    const h4 = await E.wait("canvas_history", (h) => h.canUndo === false, 4000);
+    check("ย้อนจนหมดแล้ว กระดานว่างและย้อนต่อไม่ได้", h4.items.length, 0);
+    check("ย้อนจนหมดแล้วยังทำซ้ำได้", h4.canRedo, true);
+  });
+
+  await runPart("14. เพดานประวัติต่อตา — กันหน่วยความจำบวม", async () => {
+    // ย้อนกลับมาที่ของเดิมก่อน เพื่อไม่ให้เริ่มจากกระดานว่าง
+    D.socket.emit("redo");
+
+    // ยิงจุดให้เกินเพดาน 30000 จุด (ข้อความละ 500 จุด = เพดานต่อข้อความพอดี)
+    D.socket.emit("stroke_start", { x: 0, y: 0, color: "#000000", size: 5, tool: "pen" });
+    for (let i = 0; i < 75; i++) {
+      const points = Array.from({ length: 500 }, (_, k) => ({
+        x: ((i * 500 + k) % 900) / 1000,
+        y: ((i * 500 + k * 7) % 900) / 1000,
+      }));
+      D.socket.emit("stroke_points", { points });
+    }
+    await E.quiet("stroke_points", 800);
+
+    checkOk("ชนเพดานแล้ว server เตือนใน log", serverLog.join("\n").includes("ชนเพดาน"));
+
+    // สำคัญ: ถึงจะหยุดเก็บ แต่ยังต้อง "ส่งต่อ" ให้ทุกคนตามปกติ เกมจะได้ไม่สะดุด
+    clearAll(D, E, F);
+    D.socket.emit("stroke_points", { points: [{ x: 0.11, y: 0.12 }] });
+    checkOk("ชนเพดานแล้วยังส่งจุดต่อให้คนอื่นตามปกติ",
+      (await E.tryWait("stroke_points", null, 2000)) !== null);
+
+    // และ server ต้องยังรับคำสั่งอื่นได้อยู่ ไม่ได้ค้าง
+    clearAll(D, E, F);
+    D.socket.emit("clear_canvas");
+    checkOk("ชนเพดานแล้วยังสั่งล้างจอได้", (await E.tryWait("clear_canvas", null, 2000)) !== null);
+    checkOk("ชนเพดานแล้ว server ยังไม่ตาย", (await emitAck(F.socket, "create_room", { name: "ยังอยู่", avatar: 0 }))?.ok === true);
+  });
+
   // ปิดทุก socket เพื่อให้โปรเซสจบได้
   for (const rec of [A, B, C, ...others]) rec.socket.disconnect();
 }

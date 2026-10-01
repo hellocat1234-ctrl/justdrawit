@@ -1005,29 +1005,20 @@ input {
   background: var(--red);
 }
 
-/* ที่จองไว้ให้ปุ่มย้อนกลับ/ทำซ้ำ (ข้อ 4)
-   จองที่ตั้งแต่ตอนนี้เพื่อให้ความสูงคอลัมน์นิ่ง พอใส่ปุ่มจริงกระดานจะได้ไม่เปลี่ยนขนาด
-   ทำเป็นกรอบเส้นประจางๆ ให้เห็นว่าเป็นที่ว่างที่ตั้งใจ ไม่ใช่ของที่ลืมใส่ */
-.toolbar__slot {
+/* ปุ่มย้อนกลับ/ทำซ้ำ (ข้อ 4) — เรียงสองปุ่มเคียงกันเหมือนแถวปุ่มเครื่องมือ
+   สูงเท่าปุ่มอื่น (48px) คอลัมน์ขวาจึงสูงเท่าเดิม ไม่ดันให้กระดานขยับ */
+.toolbar__group--history {
   display: grid;
-  place-items: center;
-  gap: 2px;
-  min-height: 56px;
-  padding: 6px;
-  border: 2px dashed var(--muted);
-  color: var(--muted);
-  font-size: 11px;
-  text-align: center;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
 }
 
-.toolbar__slot-text {
-  font-family: var(--font-head);
-}
-
-.toolbar__slot-note {
-  font-family: var(--font-pixel);
-  font-size: 9px;
-  letter-spacing: 1px;
+/* ปุ่มที่กดไม่ได้ (ไม่มีอะไรให้ย้อน/ทำซ้ำ) — จางกว่าปุ่มที่แค่ "ไม่ถูกเลือก" (0.45)
+   เพื่อให้เห็นชัดว่าเป็นสถานะ "ใช้ไม่ได้ตอนนี้" ไม่ใช่ "ยังไม่ได้เลือก" */
+.tool:disabled,
+.tool:disabled:hover {
+  opacity: 0.22;
+  cursor: default;
 }
 
 /* ---- กล่องคำตอบ / ในห้อง ----
@@ -1335,9 +1326,9 @@ input {
     grid-column: auto;
   }
 
-  /* ที่จองไว้ให้ปุ่มย้อนกลับ/ทำซ้ำ ไม่จำเป็นบนมือถือ (ที่จำกัด) */
-  .toolbar__slot {
-    display: none;
+  /* ปุ่มย้อนกลับ/ทำซ้ำบนมือถือ — ต่อท้ายแถว ใช้ความกว้างเท่าปุ่มเครื่องมือ (48px) */
+  .toolbar__group--history {
+    grid-template-columns: repeat(2, 48px);
   }
 
   /* ปุ่มและจุดสีต้องกดง่ายด้วยนิ้ว อย่างน้อย 44px (DESIGN.md หัวข้อจอเล็ก)

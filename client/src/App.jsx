@@ -19,7 +19,19 @@ export default function App() {
 
   // สถานะของเกมที่กำลังเล่น ผูก socket ไว้ที่นี่ (ไม่ใช่ในหน้า Game) เพื่อไม่ให้ event หลุด
   // ดูเหตุผลเต็มๆ ในคอมเมนต์ของ useGame
-  const { game, chooseLeft, chooseWord, sendGuess, startGame, resetGame } = useGame();
+  const {
+    game,
+    chooseLeft,
+    chooseWord,
+    sendGuess,
+    startGame,
+    resetGame,
+    // ข้อ 4: ส่งการวาดออก · ขอย้อน/ทำซ้ำ · ผูกกระดานเข้ากับตัวรับ action ของคนอื่น
+    sendAction,
+    askUndo,
+    askRedo,
+    bindCanvas,
+  } = useGame();
 
   function showToast(text) {
     setToast({ text, id: Date.now() });
@@ -102,6 +114,10 @@ export default function App() {
             chooseWord={chooseWord}
             sendGuess={sendGuess}
             startGame={startGame}
+            sendAction={sendAction}
+            askUndo={askUndo}
+            askRedo={askRedo}
+            bindCanvas={bindCanvas}
             onLeave={handleLeave}
           />
         ) : (

@@ -3,9 +3,10 @@ import Avatar from "./Avatar";
 // แถบคะแนน — เรียงจากคะแนนมากไปน้อย
 // 👑 = หัวห้อง  ✏️ = คนวาดตานี้  ✅ = คนที่ทายถูกแล้ว (พื้นเขียวอ่อน)
 //
-// หมายเหตุ: server ไม่ได้บอกมาใน room_update ว่าใครทายถูกแล้ว (roomState ไม่มีช่องนั้น)
-// เลยต้องสะสมเอาเองจาก event correct_guess ที่ผูกไว้ใน useGame
-// ผลคือคนที่เข้าห้องกลางตาจะไม่เห็น ✅ ของคนที่ทายถูกไปก่อนหน้า — บอกผู้ใช้แล้ว
+// ที่มาของ guessed มีสองทาง รวมกันแล้วได้ครบทุกกรณี
+//   1) อยู่ในห้องตั้งแต่ต้นตา — สะสมเองจาก event correct_guess (ผูกไว้ใน useGame)
+//   2) เข้าห้องกลางตา — server แนบ guessedIds มาให้ใน round_start (ข้อ 4 แก้งานค้างของข้อ 2)
+// ทางที่ 2 ส่งมาแค่ id ไม่ส่งคำตอบ จึงไม่ทำให้ใครรู้คำก่อนทายถูก
 export default function Scoreboard({ players, drawerId, guessed = [], meId }) {
   const sorted = [...players].sort((a, b) => b.score - a.score);
 

@@ -50,7 +50,7 @@ const clamp01 = (v) => Math.min(1, Math.max(0, v));
  * ลิสต์ action ยังเป็นแหล่งความจริงเดียวของ "ตานี้วาดอะไรไปแล้ว"
  * ใช้ทั้งตอนจอเปลี่ยนขนาด (วาดซ้ำ) และจะใช้เป็น canvas_history ในข้อ 4
  */
-const Canvas = forwardRef(function Canvas({ canDraw, tool, color, size, resetKey, onAction }, ref) {
+const Canvas = forwardRef(function Canvas({ canDraw, tool, color, size, onAction }, ref) {
   const wrapRef = useRef(null);
   const canvasRef = useRef(null);
   const painterRef = useRef(null);
@@ -201,11 +201,17 @@ const Canvas = forwardRef(function Canvas({ canDraw, tool, color, size, resetKey
   }, []);
 
   // ── ขึ้นตาใหม่ ล้างกระดาน (โจทย์ข้อ 7) ──
-  useEffect(() => {
+  // เดิมเป็น useEffect ที่เฝ้าค่า resetKey แล้วล้างทุกครั้งที่ค่าปลี่ยน
+  // บั๊กที่เจอตอนเทสข้อ 4: มันแข่งกับการรับ canvas_history ของคนที่เข้าห้องกลางตา
+  //   ได้ประวัติมา → วาดลงจอกลายเป็น 2762 พิกเซล → พอ round_start ตกลง state ค่า roundKey เปลี่ยน
+  //   effect นี้ก็ล้างทิ้ง → เหลือ 0 ภาพหายทั้งที่ไม่มี error สักตัว และเป็นบ้างไม่เป็นบ้างตามจังหวะ
+  //   จับได้ด้วยการวัด "วาดเสร็จแล้วมีสีกี่พิกเซล" ไม่ใช่ด้วยการอ่านโค้ด
+  // ย้ายมาเป็นคำสั่งที่ useGame เรียกผ่าน ref แทน → วิ่งในคิวเดียวกับ canvas_history จึงเรียงลำดับแน่นอน
+  function resetBoard() {
     actionsRef.current = [];
     pendingRef.current = [];
     painterRef.current?.replay([]);
-  }, [resetKey]);
+  }
 
   // ── โหมดดีบักชั่วคราว: ดึงตัวเลขออกมาแสดงเป็นรอบๆ ทุก 250ms ──
   // ไม่ผูกกับ pointermove เพราะจะทำให้ React วาดจอใหม่ถี่เกินไปจนเส้นกระตุก
@@ -227,6 +233,8 @@ const Canvas = forwardRef(function Canvas({ canDraw, tool, color, size, resetKey
       painterRef.current?.apply(action);
       actionsRef.current.push(action);
     },
+    // ขึ้นตาใหม่ — useGame เรียกผ่านประตูเดียวกับ action อื่น จึงไม่แซงกัน
+    resetBoard,
     // canvas_history ทั้งก้อนที่ server ส่งมาตอนเข้าห้องกลางตา
     applyHistory(items) {
       actionsRef.current = [...items];

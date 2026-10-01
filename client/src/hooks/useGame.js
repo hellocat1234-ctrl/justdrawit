@@ -1,5 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { socket } from "../socket";
+
+// event การวาดที่ server ส่งกลับมาให้เราวาดตาม (events.md หัวข้อ 4)
+// ทุกตัวมี payload ที่หน้าตาเหมือน action ใน canvas/actions.js เป๊ะ
+// ต่างกันแค่ไม่มีช่อง type เราเลยเติมกลับเข้าไปแล้วส่งเข้า applyRemote ได้ตรงๆ
+const DRAW_EVENTS = ["stroke_start", "stroke_points", "stroke_end", "fill", "clear_canvas"];
 
 // สถานะตั้งต้นของเกมหนึ่งเกม
 function emptyGame() {
@@ -17,7 +22,13 @@ function emptyGame() {
     ranking: null, // จาก game_end
     guessed: [], // playerId ที่ทายถูกในตานี้ ไว้ขึ้น ✅
     messages: [], // แชท
-    roundKey: 0, // นับขึ้นทุกครั้งที่ขึ้นตาใหม่ — กระดานใช้ค่านี้รู้ว่าต้องล้างจอ (ข้อ 3)
+    // นับขึ้นทุกครั้งที่ขึ้นตาใหม่ — ใช้เป็นคีย์บอกกล่องแชทว่า "ขึ้นตาใหม่แล้ว โฟกัสช่องพิมพ์ให้หน่อย"
+    // (ข้อ 3 เดิมกระดานใช้ค่านี้ล้างจอ แต่ข้อ 4 ย้ายไปใช้คำสั่ง resetBoard ผ่านคิวเดียวกับ canvas_history แล้ว)
+    roundKey: 0,
+    // สถานะปุ่มย้อน/ทำซ้ำ (ข้อ 4) — server เป็นคนบอก เพราะ server เป็นเจ้าของลำดับการวาด
+    // client ทำนายล่วงหน้าได้แค่ตอนวาดเพิ่ม (ดู sendAction) แล้วรอ server ยืนยันด้วย canvas_history
+    canUndo: false,
+    canRedo: false,
   };
 }
 
@@ -35,10 +46,27 @@ export function useGame() {
   const [game, setGame] = useState(emptyGame);
   const [chooseLeft, setChooseLeft] = useState(0);
   const playersRef = useRef(null); // รายชื่อผู้เล่นรอบก่อน ไว้เทียบว่าใครเข้าออก
+  // ปลายทางของ action ที่มาจากคนอื่น — หน้า Game เป็นคนตั้งให้ เพราะมันถือ ref ของกระดานอยู่
+  // (กระดานอยู่ลึกกว่านี้ เจ้านี้จึงไม่ถือ ref เอง เหมือนที่หน้านี้ไม่ถือ socket ของหน้า Game)
+  const canvasApiRef = useRef(null);
+  // คำสั่งวาดที่มาถึง "ก่อนกระดานจะเกิด" — ต้องพักไว้ก่อนแล้วค่อยวาดตอนกระดานพร้อม
+  // จำเป็นจริงๆ ไม่ใช่กันเหนียว: ตอนเข้าห้องกลางตา server ส่ง game_started ต่อด้วย round_start
+  // แล้วต่อด้วย canvas_history มาพร้อมกันในจังหวะเดียว แต่ตอนนั้น React ยังไม่ทันวาดหน้า Game
+  // ถ้าทิ้งไปเลย คนที่เข้าทีหลังจะเห็นกระดานเปล่า ทั้งที่ในห้องมีรูปอยู่
+  // (บทเรียนเดียวกับบั๊ก StrictMode ตอนข้อ 1 และบั๊ก listener ตอนข้อ 2 — "ของมาถึงก่อนเจ้าบ้าน")
+  const pendingCanvasRef = useRef([]);
 
   useEffect(() => {
     // ใช้ฟังก์ชันรับค่าเก่า จะได้ไม่ต้องกังวลเรื่อง state ค้าง
     const patch = (fields) => setGame((g) => ({ ...g, ...fields }));
+
+    // ประตูเดียวที่ทุกอย่างซึ่งเปลี่ยนภาพบนกระดานต้องผ่าน — ไม่ว่ามาจาก socket หรือจากในเครื่อง
+    // วาดลงจอเลยถ้ากระดานพร้อม ถ้ายังก็พักไว้ก่อน แล้วระบายตามลำดับตอนกระดานเกิด (ดู bindCanvas)
+    // การมีประตูเดียวคือเหตุผลที่ "ขึ้นตาใหม่" กับ "รับประวัติจาก server" เรียงลำดับกันได้แน่นอน
+    const toCanvas = (cmd) => {
+      if (canvasApiRef.current) cmd.apply(canvasApiRef.current);
+      else pendingCanvasRef.current.push(cmd);
+    };
 
     const onGameStarted = (data) =>
       setGame({ ...emptyGame(), active: true, totalRounds: data?.totalRounds ?? null });
@@ -49,9 +77,15 @@ export function useGame() {
       patch({ options: data.options, chooseTime: data.time, summary: null });
 
     // ตาใหม่มาแล้ว ล้างของตาที่แล้วทั้งหมด (ตัวเลือกคำ สรุปตา คำจริง คนที่ทายถูก)
-    // roundKey ต้องบวกจากค่าเดิม (ไม่ใช้ค่าคงที่) เพราะกระดานเทียบค่านี้เพื่อล้างจอ
-    // ถ้าใช้ค่าคงที่ กระดานจะไม่รู้ว่าขึ้นตาใหม่
-    const onRoundStart = (data) =>
+    // roundKey ต้องบวกจากค่าเดิม (ไม่ใช้ค่าคงที่) ไม่งั้นกล่องแชทจะไม่รู้ว่าขึ้นตาใหม่แล้วต้องโฟกัสช่องพิมพ์
+    const onRoundStart = (data) => {
+      // ตาใหม่ = ล้างกระดาน ผ่านประตูเดียวกับทุกอย่าง
+      // สำคัญ: ต้องเข้าคิวเดียวกับ canvas_history ไม่ใช่ useEffect ที่เฝ้าค่า roundKey ในกระดาน
+      // ตอนแรกเขียนเป็น useEffect แล้วได้บั๊กแบบสุ่ม — พอ round_start ของจริงตกลง state
+      // ค่า roundKey เปลี่ยน 0→1 แล้วไปล้างภาพที่ canvas_history เพิ่งวาดเสร็จหมาดๆ ทิ้ง
+      // ใครเข้าห้องกลางตาจะเห็นกระดานว่างเปล่า บางรอบเป็นบางรอบไม่เป็น (แล้วแต่ใครถึงก่อน)
+      // เรียงในคิวเดียวกันแล้วไม่มีทางสลับ เพราะ socket ส่ง round_start มาก่อน canvas_history เสมอ
+      toCanvas({ apply: (api) => api.resetBoard() });
       setGame((g) => ({
         ...g,
         round: data,
@@ -62,9 +96,14 @@ export function useGame() {
         options: null,
         summary: null,
         word: null,
-        guessed: [],
+        // คนที่ทายถูกไปก่อนเราเข้าห้อง server บอกมาพร้อม round_start (guessedIds)
+        // ไม่งั้นคนที่เข้าห้องกลางตาจะไม่เห็น ✅ ของคนที่ทายไปแล้ว (งานค้างจากข้อ 2)
+        guessed: data.guessedIds ?? [],
         roundKey: g.roundKey + 1,
+        canUndo: false, // ตาใหม่ = กระดานว่าง server ล้างประวัติแล้ว
+        canRedo: false,
       }));
+    };
 
     const onYourWord = (data) => patch({ word: data.word });
     const onTimer = (data) => patch({ timeLeft: data.timeLeft });
@@ -108,6 +147,38 @@ export function useGame() {
       if (notes.length > 0) setGame((g) => ({ ...g, messages: [...g.messages, ...notes] }));
     };
 
+    // ── การวาด (ข้อ 4) ──
+    // action ของคนวาด ไหลเข้า applyRemote ตัวเดียวกับที่กระดานใช้ตอนวาดเอง
+    // จึงได้เส้นเหมือนกันเป๊ะ เพราะเป็น painter ตัวเดียวกัน กรองจุดซ้ำมาแล้วจาก server
+    const drawHandlers = DRAW_EVENTS.map((type) => [
+      type,
+      (data) => {
+        const action = { type, ...(data ?? {}) };
+        toCanvas({ apply: (api) => api.applyRemote(action) });
+      },
+    ]);
+
+    // ภาพทั้งชุดจาก server — มาสองจังหวะ
+    //   1) ตอนเราเข้าห้องกลางตา (server ส่งให้คนเดียว)
+    //   2) ตอนคนวาดกดย้อนกลับ/ทำซ้ำ (server ส่งให้ทั้งห้อง)
+    // สองจังหวะใช้ทางเดียวกันได้ เพราะผลที่ต้องการเหมือนกัน: "ลืมของเดิม วาดใหม่ตามลิสต์นี้"
+    const onCanvasHistory = (data) => {
+      const items = data?.items ?? [];
+      const cmd = { apply: (api) => api.applyHistory(items) };
+      if (canvasApiRef.current) {
+        pendingCanvasRef.current = []; // ของจริงมาถึงแล้ว ของที่พักไว้ไม่ต้องใช้อีก
+        cmd.apply(canvasApiRef.current);
+      } else {
+        // ประวัติทั้งชุดคือภาพล่าสุด ทับของที่พักไว้ก่อนหน้าทั้งหมด ไม่ใช่ต่อท้าย ไม่งั้นภาพซ้อนกันมั่ว
+        pendingCanvasRef.current = [cmd];
+      }
+      // server เป็นคนบอกว่ายังย้อน/ทำซ้ำได้อีกไหม — client ไม่เดาเอง
+      setGame((g) => ({ ...g, canUndo: !!data?.canUndo, canRedo: !!data?.canRedo }));
+    };
+
+    for (const [type, handler] of drawHandlers) socket.on(type, handler);
+    socket.on("canvas_history", onCanvasHistory);
+
     socket.on("game_started", onGameStarted);
     socket.on("choose_word", onChooseWord);
     socket.on("round_start", onRoundStart);
@@ -120,6 +191,8 @@ export function useGame() {
     socket.on("room_update", onRoomUpdate);
 
     return () => {
+      for (const [type, handler] of drawHandlers) socket.off(type, handler);
+      socket.off("canvas_history", onCanvasHistory);
       socket.off("game_started", onGameStarted);
       socket.off("choose_word", onChooseWord);
       socket.off("round_start", onRoundStart);
@@ -145,9 +218,40 @@ export function useGame() {
     return () => clearInterval(tick);
   }, [game.options, game.chooseTime]);
 
+  // ส่ง action ของกระดานไปให้ server (ข้อ 4 ข้อ 7)
+  // action ในเครื่องเราหน้าตาเป็น { type, ...ช่องข้อมูล } ซึ่งตรงกับ events.md อยู่แล้ว
+  // จึงแค่แยก type ออกมาเป็นชื่อ event ที่เหลือเป็น payload — ไม่ต้องแปลงอะไรอีก
+  const sendAction = useCallback((action) => {
+    const { type, ...payload } = action;
+    socket.emit(type, payload);
+    // วาดเพิ่มแล้ว = ย้อนได้แน่นอน และกองทำซ้ำหาย (server ทำเหมือนกัน)
+    // ที่ต้องทำนายตรงนี้ด้วย เพราะ server ไม่ได้ส่งอะไรกลับมาให้ action ที่ถูกต้อง
+    // (มันส่งต่อให้ "คนอื่น" เท่านั้น) — เดี๋ยว canvas_history จาก server จะมายืนยันอีกที
+    setGame((g) => (g.canUndo && !g.canRedo ? g : { ...g, canUndo: true, canRedo: false }));
+  }, []);
+
+  // บอก server ว่า "ขอ" ย้อน/ทำซ้ำ — server เป็นคนตัดสินว่าทำได้จริงไหม
+  // แล้วตอบกลับด้วย canvas_history ที่มีสถานะปุ่มล่าสุดมาด้วย
+  const askUndo = useCallback(() => socket.emit("undo"), []);
+  const askRedo = useCallback(() => socket.emit("redo"), []);
+
+  // ให้หน้า Game ผูก ref ของกระดานเข้ามา เพื่อรับ action ของคนอื่นไปวาด
+  // และระบายของที่พักไว้ตอนกระดานยังไม่เกิดออกไปตามลำดับที่มาถึง
+  const bindCanvas = useCallback((api) => {
+    canvasApiRef.current = api;
+    if (!api) return; // กระดานถูกถอด (StrictMode ถอดแล้วใส่ใหม่) ของที่มาถึงระหว่างนั้นรอต่อได้
+    const queued = pendingCanvasRef.current;
+    pendingCanvasRef.current = [];
+    for (const cmd of queued) cmd.apply(api);
+  }, []);
+
   return {
     game,
     chooseLeft,
+    sendAction,
+    askUndo,
+    askRedo,
+    bindCanvas,
     chooseWord: (word) => socket.emit("word_chosen", { word }),
     sendGuess: (text) => socket.emit("guess", { text }),
     startGame: () => socket.emit("start_game"),
@@ -155,6 +259,7 @@ export function useGame() {
     resetGame: () => {
       setGame(emptyGame());
       playersRef.current = null;
+      pendingCanvasRef.current = [];
     },
   };
 }
