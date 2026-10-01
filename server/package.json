@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "test": "node tests/smoke.js",
-    "seed": "node scripts/seed-scores.js"
+    "seed": "node scripts/seed-scores.js",
+    "get-model": "node scripts/get-model.js"
   },
   "keywords": [],
   "author": "",
@@ -14,6 +15,8 @@
   "dependencies": {
     "dotenv": "^18.0.5",
     "express": "^5.2.1",
+    "onnxruntime-node": "^1.30.0",
+    "sharp": "^0.35.5",
     "socket.io": "^4.8.4"
   }
 }

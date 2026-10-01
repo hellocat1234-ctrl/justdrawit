@@ -1,14 +1,63 @@
 // ---------- AI ทายภาพ + กติกาด่านของโหมด Solo (ข้อ 7) ----------
 // ไฟล์นี้ไม่ผูกกับ socket จึงเทสแยกได้ · key อยู่ใน server/.env เท่านั้น (index.js โหลดด้วย dotenv)
 //
-// AI มีสองโหมด
-//   "claude" = มี ANTHROPIC_API_KEY → ส่งภาพให้ Claude ดูจริง (ไม่ส่งคำตอบไปด้วย)
-//   "mock"   = ไม่มี key หรือสั่ง AI_MODE=mock → เดาสุ่มจากคลังคำ ยิ่งผ่านเวลาไปนานยิ่งมีโอกาสถูก
+// AI มีสามโหมด เรียงตามลำดับที่เลือกใช้
+//   "model"  = โมเดลในเครื่อง (Quick, Draw!) โหลดติด → ดูภาพจริง ฟรี ไม่ใช้ key (ai-model.js)
+//   "claude" = โมเดลใช้ไม่ได้ + มี ANTHROPIC_API_KEY → ส่งภาพให้ Claude ดูจริง (ไม่ส่งคำตอบไปด้วย)
+//   "mock"   = ไม่มีทั้งสองอย่างหรือสั่ง AI_MODE=mock → เดาสุ่มจากคลังคำ ยิ่งผ่านเวลาไปนานยิ่งมีโอกาสถูก
+// โมเดลโหลดไม่ขึ้นหรือพังกลางทาง → ถอยไปสมองถัดไปเอง server ไม่ล่ม
+const fs = require("fs");
+const path = require("path");
+const aiModel = require("./ai-model");
 
 // AI_API_URL ไว้ให้เทสชี้ไปเซิร์ฟเวอร์ปลอม ใช้งานจริงไม่ต้องตั้ง
 const API_URL = process.env.AI_API_URL || "https://api.anthropic.com/v1/messages";
 const DEFAULT_MODEL = "claude-haiku-4-5-20251001";
 const API_TIMEOUT_MS = 15000;
+
+// ---------- คำของโหมด Solo (server/data/ai-words.json) ----------
+// จับคู่ "ชื่อคลาสอังกฤษที่โมเดลรู้" กับ "คำไทย" แบ่ง easy/medium/hard · โหมดห้องปกติไม่ใช้ไฟล์นี้ (ใช้ words.json)
+const AI_WORDS_FILE = process.env.AI_WORDS_FILE || path.join(__dirname, "data", "ai-words.json");
+let soloBank = null;     // { easy: [{word, category, en}], medium: [...], hard: [...] } หรือ null ถ้าไฟล์ใช้ไม่ได้
+const thToEn = new Map(); // คำไทย → ชื่ออังกฤษ
+let modelOk = false;     // โมเดลพร้อมใช้ (โหลดติด + มีคลังคำ) · ถ้าพังกลางทางจะถูกปิด
+
+function loadSoloBank() {
+  try {
+    const raw = JSON.parse(fs.readFileSync(AI_WORDS_FILE, "utf8"));
+    const bank = { easy: [], medium: [], hard: [] };
+    const seen = new Set();
+    for (const level of Object.keys(bank)) {
+      for (const it of Array.isArray(raw?.[level]) ? raw[level] : []) {
+        const word = typeof it?.word === "string" ? it.word.trim() : "";
+        const en = typeof it?.en === "string" ? it.en.trim() : "";
+        if (!word || !en || seen.has(word)) continue; // คำไทยซ้ำ = กำกวม ข้าม
+        seen.add(word);
+        bank[level].push({ word, en, category: typeof it.category === "string" ? it.category : "" });
+        thToEn.set(word, en);
+      }
+    }
+    if (bank.easy.length + bank.medium.length + bank.hard.length === 0) throw new Error("ไม่มีคำเลย");
+    soloBank = bank;
+  } catch (err) {
+    soloBank = null;
+    thToEn.clear();
+    console.warn("อ่าน ai-words.json ไม่ได้ (Solo ใช้คลังคำปกติ และไม่ใช้โมเดล):", err.message);
+  }
+}
+
+// เรียกครั้งเดียวตอนสตาร์ท (ไม่ throw) · AI_MODE=mock ข้ามการโหลดโมเดลเพื่อให้สตาร์ทเร็ว/เทสคุมได้
+async function init() {
+  loadSoloBank();
+  modelOk = false;
+  if (process.env.AI_MODE === "mock" || !soloBank) return;
+  modelOk = await aiModel.load();
+}
+
+// คลังคำที่ Solo ใช้สุ่ม: ai-words.json ถ้ามี ไม่งั้นใช้ตัวสำรองที่ index.js ส่งมา
+function soloWords(fallbackBank) {
+  return soloBank || fallbackBank;
+}
 
 // ด่าน 1–2 = 60 วิ easy · 3–4 = 45 วิ medium · 5+ = 30 วิ hard
 function levelConfig(level) {
@@ -39,6 +88,7 @@ function scoreFor(timeLeft, time) {
 // ---------- ตัวทาย ----------
 function aiMode() {
   if (process.env.AI_MODE === "mock") return "mock";
+  if (modelOk && aiModel.isReady()) return "model";
   return process.env.ANTHROPIC_API_KEY ? "claude" : "mock";
 }
 
@@ -96,6 +146,17 @@ async function claudeGuess({ image, wrong }) {
   return text.trim().split(/\s*\n\s*/)[0].slice(0, 40);
 }
 
+// โมเดลในเครื่องทาย: เลือกจากคำที่เกมมีเท่านั้น ตัดคำที่เคยทายผิดในด่านนี้ออก คำอันดับหนึ่ง = คำที่ AI ตอบ
+// ภาพว่าง (ยังไม่มีเส้น) หรือไม่เหลือคำให้เลือก → ตอบ "ไม่รู้"
+async function modelGuess({ image, wrong }) {
+  const banned = new Set(wrong.map((w) => thToEn.get(w)).filter(Boolean));
+  const allowed = new Set([...thToEn.values()].filter((en) => !banned.has(en)));
+  const top = await aiModel.classify(image, { allowed, top: 1 });
+  if (!top || top.length === 0) return "ไม่รู้";
+  const th = [...thToEn.entries()].find(([, en]) => en === top[0].label)?.[0];
+  return th || "ไม่รู้";
+}
+
 // เทียบคำแบบเดียวกับโหมดห้อง: ตัดช่องว่าง ไม่สนตัวพิมพ์เล็กใหญ่ (เปลี่ยนที่ index.js ถ้าเกณฑ์ห้องเปลี่ยน)
 function sameWord(a, b) {
   const n = (s) => String(s).replace(/\s+/g, "").toLowerCase();
@@ -104,11 +165,23 @@ function sameWord(a, b) {
 
 // ทายหนึ่งครั้ง → { guess, correct } · โหมด claude ล้มเหลวจะ throw (index.js จับแล้วส่ง AI_UNAVAILABLE)
 async function guessImage({ image, word, allWords, elapsed, time, wrong }) {
-  const guess =
-    aiMode() === "claude"
-      ? await claudeGuess({ image, wrong })
-      : mockGuess({ word, allWords, elapsed, time, wrong });
+  let guess = null;
+  if (aiMode() === "model") {
+    try {
+      guess = await modelGuess({ image, wrong });
+    } catch (err) {
+      // โมเดลพัง → ปิดมัน แล้วใช้ Claude/จำลองต่อทันที (ด่านนี้และด่านถัดไป) ผู้เล่นไม่เห็นข้อผิดพลาด
+      console.warn("โมเดล AI พัง ถอยไปใช้สมองถัดไป:", err.message);
+      modelOk = false;
+    }
+  }
+  if (guess === null) {
+    guess =
+      aiMode() === "claude"
+        ? await claudeGuess({ image, wrong })
+        : mockGuess({ word, allWords, elapsed, time, wrong });
+  }
   return { guess, correct: sameWord(guess, word) };
 }
 
-module.exports = { levelConfig, pickWord, scoreFor, aiMode, guessImage, mockChance, parseImage, sameWord };
+module.exports = { init, soloWords, levelConfig, pickWord, scoreFor, aiMode, guessImage, mockChance, parseImage, sameWord };

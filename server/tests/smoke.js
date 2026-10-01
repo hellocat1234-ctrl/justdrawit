@@ -1358,7 +1358,8 @@ async function main() {
 
   await runPart("23. Solo ผ่าน socket — เริ่ม · ทายถูก · เสียชีวิต · จบเกม · บันทึกคะแนน · key ไม่หลุด", async () => {
     fs.rmSync(SCORES_FILE, { force: true });
-    const words = readWordFile();
+    // Solo สุ่มคำจาก ai-words.json (ไม่ใช่ words.json ของโหมดห้อง)
+    const words = JSON.parse(fs.readFileSync(path.join(SERVER_DIR, "data", "ai-words.json"), "utf8"));
     const names = (lv) => words[lv].map((w) => w.word);
     const P = track(await connect());
 
@@ -1467,7 +1468,7 @@ async function main() {
     const stubUrl = `http://localhost:${stub.address().port}/v1/messages`;
 
     // server ตัวที่สองบนพอร์ต 3001 ใช้ key ปลอม ไม่บังคับ mock จึงอยู่โหมด claude
-    const env = { ...process.env, SCORES_FILE, PORT: "3001", ANTHROPIC_API_KEY: SECRET_KEY, AI_API_URL: stubUrl, AI_NEXT_DELAY_MS: "300" };
+    const env = { ...process.env, SCORES_FILE, PORT: "3001", ANTHROPIC_API_KEY: SECRET_KEY, AI_API_URL: stubUrl, AI_NEXT_DELAY_MS: "300", AI_MODEL_DIR: path.join(os.tmpdir(), "jdi-no-model") }; // ชี้โมเดลไปที่ที่ไม่มีไฟล์ = ถอยมา claude
     delete env.AI_MODE; delete env.AI_MOCK_CHANCE; delete env.AI_TIME_OVERRIDE;
     const child2 = spawn(process.execPath, ["index.js"], { cwd: SERVER_DIR, stdio: "ignore", env });
     try {
@@ -1524,19 +1525,134 @@ async function main() {
     }
   });
 
+  await runPart("25. AI โมเดลในเครื่อง — คลังคำ ai-words.json · ทายภาพ · ถอยเป็นโหมดจำลอง", async () => {
+    const aiLib = require("../ai");
+    const http = require("http");
+    const sharp = require("sharp");
+    const words = JSON.parse(fs.readFileSync(path.join(SERVER_DIR, "data", "ai-words.json"), "utf8"));
+    const all = Object.values(words).flat();
+    check("ai-words.json มีครบ 3 ระดับและแต่ละระดับมีคำ", ["easy", "medium", "hard"].map((l) => words[l]?.length > 0), [true, true, true]);
+    checkOk("ทุกคำมี word/en/category เป็นข้อความ", all.every((w) => [w.word, w.en, w.category].every((x) => typeof x === "string" && x)));
+    check("คำไทยไม่ซ้ำกันเลย (ซ้ำ = กำกวม)", new Set(all.map((w) => w.word)).size, all.length);
+    check("ชื่ออังกฤษไม่ซ้ำกันเลย", new Set(all.map((w) => w.en)).size, all.length);
+
+    const modelDir = path.join(SERVER_DIR, "models");
+    const hasModel = fs.existsSync(path.join(modelDir, "model.onnx")) && fs.existsSync(path.join(modelDir, "config.json"));
+    if (!hasModel) {
+      console.log("   ⚠️  ข้ามเทสที่ต้องใช้โมเดล: ยังไม่ได้ดาวน์โหลด (รัน npm run get-model ก่อน)");
+      return;
+    }
+    const labels = new Set(Object.values(JSON.parse(fs.readFileSync(path.join(modelDir, "config.json"), "utf8")).id2label));
+    check("ทุกชื่ออังกฤษใน ai-words.json เป็นคลาสที่โมเดลรู้จริง", all.filter((w) => !labels.has(w.en)).map((w) => w.en), []);
+
+    // วาดรูปตัวอย่างลงกระดานขนาด 512×384 พื้นขาว (เหมือนที่ client ส่ง) · sw = ความหนาเส้น · color = สีเส้น
+    const png = async (shapes, sw, color = "#000000") => {
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="384"><rect width="100%" height="100%" fill="#fff"/><g fill="none" stroke="${color}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${shapes}</g></svg>`;
+      return "data:image/png;base64," + (await sharp(Buffer.from(svg)).png().toBuffer()).toString("base64");
+    };
+    const CIRCLE = '<circle cx="256" cy="192" r="120"/>';
+    const HOUSE = '<path d="M130 200 L256 90 L382 200 Z M160 190 V310 H352 V190 M225 310 V240 H287 V310"/>';
+    const SQUARE = '<rect x="140" y="80" width="230" height="230"/>';
+
+    const savedMode = process.env.AI_MODE;
+    delete process.env.AI_MODE;
+    await aiLib.init();
+    try {
+      check("โหลดโมเดลติด → aiMode เป็น model", aiLib.aiMode(), "model");
+      const bank = aiLib.soloWords({});
+      const picked = Array.from({ length: 200 }, () => aiLib.pickWord(bank, "easy"));
+      const easySet = new Set(words.easy.map((w) => w.word));
+      checkOk("Solo สุ่มคำ easy จาก ai-words.json 200 ครั้ง ได้แต่คำในไฟล์", picked.every((w) => easySet.has(w)));
+
+      const vocab = all.map((w) => w.word);
+      const top5 = async (img, target) => {
+        const wrong = [];
+        for (let i = 0; i < 5; i++) { // ทายซ้ำแบบในเกมจริง: คำที่ผิดแล้วห้ามตอบซ้ำ
+          const r = await aiLib.guessImage({ image: img, word: target, allWords: vocab, elapsed: 1, time: 60, wrong });
+          if (r.correct) return { hit: true, round: i + 1 };
+          wrong.push(r.guess);
+        }
+        return { hit: false };
+      };
+      for (const [name, shape, target] of [["วงกลม", CIRCLE, "วงกลม"], ["บ้าน", HOUSE, "บ้าน"], ["สี่เหลี่ยม", SQUARE, "สี่เหลี่ยม"]]) {
+        for (const sw of [5, 24]) {
+          const r = await top5(await png(shape, sw), target);
+          checkOk(`${name} เส้นหนา ${sw}px ทายถูกภายใน 5 ครั้ง (ครั้งที่ ${r.round ?? "-"})`, r.hit);
+        }
+      }
+      const red = await top5(await png(CIRCLE, 12, "#e8553f"), "วงกลม");
+      checkOk("เส้นสีแดงบนกระดานขาว ก็ทายวงกลมถูกภายใน 5 ครั้ง", red.hit);
+      const first = await aiLib.guessImage({ image: await png(CIRCLE, 8), word: "วงกลม", allWords: vocab, elapsed: 1, time: 60, wrong: [] });
+      checkOk(`วงกลมทายครั้งเดียวถูกอันดับหนึ่ง (ได้ "${first.guess}")`, first.correct);
+
+      const t0 = Date.now();
+      await aiLib.guessImage({ image: await png(HOUSE, 8), word: "บ้าน", allWords: vocab, elapsed: 1, time: 60, wrong: [] });
+      const ms = Date.now() - t0;
+      checkOk(`ทายหนึ่งครั้งเร็วพอ (${ms} ms < 1000)`, ms < 1000);
+
+      const blank = await aiLib.guessImage({ image: await png("", 5), word: "บ้าน", allWords: vocab, elapsed: 1, time: 60, wrong: [] });
+      check("กระดานว่าง → ตอบ ไม่รู้ ไม่ล่ม", [blank.guess, blank.correct], ["ไม่รู้", false]);
+      const noMore = await aiLib.guessImage({ image: await png(CIRCLE, 8), word: "บ้าน", allWords: vocab, elapsed: 1, time: 60, wrong: ["วงกลม"] });
+      checkOk("คำที่ทายผิดไปแล้วไม่ถูกตอบซ้ำ", noMore.guess !== "วงกลม");
+      checkOk("คำตอบเป็นคำไทยที่อยู่ใน ai-words.json เสมอ", vocab.includes(first.guess) && vocab.includes(noMore.guess));
+
+      // โมเดลพังกลางทาง (ภาพที่ sharp ถอดไม่ได้) → ถอยเป็นโหมดจำลองทันที ไม่ throw
+      process.env.AI_MOCK_CHANCE = "1";
+      const broken = await aiLib.guessImage({ image: "data:image/png;base64,AAAA", word: "แมว", allWords: ["แมว"], elapsed: 1, time: 60, wrong: [] });
+      check("โมเดลพังกลางทาง → ใช้โหมดจำลองต่อ ได้คำตอบปกติ", [broken.guess, broken.correct], ["แมว", true]);
+      check("และ aiMode บอกตามจริงว่าตอนนี้เป็น mock", aiLib.aiMode(), "mock");
+      delete process.env.AI_MOCK_CHANCE;
+    } finally {
+      savedMode === undefined ? delete process.env.AI_MODE : (process.env.AI_MODE = savedMode);
+    }
+
+    // ผ่าน socket จริงบน server ตัวที่สอง: (ก) มีโมเดล (ข) ไฟล์โมเดลเสีย (ค) ไม่มีไฟล์โมเดล — ต้องเล่นได้ทุกกรณี
+    const brokenDir = fs.mkdtempSync(path.join(os.tmpdir(), "jdi-broken-model-"));
+    fs.copyFileSync(path.join(modelDir, "config.json"), path.join(brokenDir, "config.json"));
+    fs.writeFileSync(path.join(brokenDir, "model.onnx"), "ไม่ใช่โมเดล");
+    for (const [label, dir, expected] of [["มีโมเดล", modelDir, "model"], ["ไฟล์โมเดลเสีย", brokenDir, "mock"], ["ไม่มีโมเดล", path.join(os.tmpdir(), "jdi-no-model"), "mock"]]) {
+      const env = { ...process.env, SCORES_FILE, PORT: "3001", AI_MODEL_DIR: dir, AI_NEXT_DELAY_MS: "300" };
+      delete env.AI_MODE; delete env.AI_MOCK_CHANCE; delete env.AI_TIME_OVERRIDE; delete env.ANTHROPIC_API_KEY;
+      const child3 = spawn(process.execPath, ["index.js"], { cwd: SERVER_DIR, stdio: "ignore", env });
+      try {
+        let up = false;
+        for (let i = 0; i < 150 && !up; i++) {
+          up = await fetch("http://localhost:3001/test.html").then((r) => r.ok).catch(() => false);
+          if (!up) await new Promise((r) => setTimeout(r, 100));
+        }
+        checkOk(`[${label}] server เปิดได้ (ไม่ล่ม)`, up);
+        const sock = io("http://localhost:3001", { transports: ["websocket"] });
+        const P = track(sock);
+        await new Promise((r) => sock.on("connect", r));
+        sock.emit("ai_start", { name: "ModelTest" });
+        const r1 = await P.wait("ai_round_start");
+        check(`[${label}] aiMode บอกถูก`, r1.aiMode, expected);
+        checkOk(`[${label}] คำของ Solo มาจาก ai-words.json`, all.some((w) => w.word === r1.word));
+        sock.emit("ai_snapshot", { image: await png(CIRCLE, 8) });
+        const g = await P.wait("ai_guess");
+        checkOk(`[${label}] ได้คำทายกลับมา ("${g.guess}")`, typeof g.guess === "string" && g.guess.length > 0);
+        sock.disconnect();
+      } finally {
+        child3.kill();
+        await new Promise((r) => setTimeout(r, 300));
+      }
+    }
+    fs.rmSync(brokenDir, { recursive: true, force: true });
+  });
+
   // ปิดทุก socket เพื่อให้โปรเซสจบได้
   for (const rec of [A, B, C, ...others]) rec.socket.disconnect();
 }
 
-// กันเทสค้าง: ถ้าเกิน 150 วิให้หยุด (ไม่หน่วงไม่ให้โปรเซสปิดตัว)
+// กันเทสค้าง: ถ้าเกิน 180 วิให้หยุด (ไม่หน่วงไม่ให้โปรเซสปิดตัว)
 // เดิมตั้งไว้ 90 วิ ตอนที่ชุดเทสทั้งชุดใช้ราว 35 วิ — ข้อ 5 เพิ่มการสร้างห้องจริง 30 ห้อง
 // กับการรอ "ต้องไม่มีอะไรมา" อีกหลายจุด รวมแล้วราว 50 วิ จึงขยับเพดานขึ้นให้ยังเหลือที่เผื่อเท่าของเดิม
 // (ข้อ 6 กับข้อ 15 กินเวลา 9 + 21 วิอยู่แล้ว เพราะเป็นการรอตัวจับเวลาจริงของเกม ลดไม่ได้)
 const watchdog = setTimeout(() => {
-  console.log("\n❌ เทสค้างเกิน 150 วินาที — ยกเลิก");
+  console.log("\n❌ เทสค้างเกิน 180 วินาที — ยกเลิก");
   stopServer();
   process.exit(1);
-}, 150000);
+}, 180000);
 watchdog.unref();
 
 main()

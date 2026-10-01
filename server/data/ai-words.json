@@ -1,0 +1,978 @@
+{
+  "easy": [
+    {
+      "word": "แอปเปิล",
+      "category": "ผลไม้",
+      "en": "apple"
+    },
+    {
+      "word": "กล้วย",
+      "category": "ผลไม้",
+      "en": "banana"
+    },
+    {
+      "word": "แมว",
+      "category": "สัตว์",
+      "en": "cat"
+    },
+    {
+      "word": "ปลา",
+      "category": "สัตว์",
+      "en": "fish"
+    },
+    {
+      "word": "งู",
+      "category": "สัตว์",
+      "en": "snake"
+    },
+    {
+      "word": "ช้าง",
+      "category": "สัตว์",
+      "en": "elephant"
+    },
+    {
+      "word": "เป็ด",
+      "category": "สัตว์",
+      "en": "duck"
+    },
+    {
+      "word": "หมู",
+      "category": "สัตว์",
+      "en": "pig"
+    },
+    {
+      "word": "วัว",
+      "category": "สัตว์",
+      "en": "cow"
+    },
+    {
+      "word": "ม้า",
+      "category": "สัตว์",
+      "en": "horse"
+    },
+    {
+      "word": "กระต่าย",
+      "category": "สัตว์",
+      "en": "rabbit"
+    },
+    {
+      "word": "พระอาทิตย์",
+      "category": "ธรรมชาติ",
+      "en": "sun"
+    },
+    {
+      "word": "ดาว",
+      "category": "ธรรมชาติ",
+      "en": "star"
+    },
+    {
+      "word": "เมฆ",
+      "category": "ธรรมชาติ",
+      "en": "cloud"
+    },
+    {
+      "word": "ต้นไม้",
+      "category": "ธรรมชาติ",
+      "en": "tree"
+    },
+    {
+      "word": "ดอกไม้",
+      "category": "ธรรมชาติ",
+      "en": "flower"
+    },
+    {
+      "word": "บ้าน",
+      "category": "สิ่งของ",
+      "en": "house"
+    },
+    {
+      "word": "รถยนต์",
+      "category": "ยานพาหนะ",
+      "en": "car"
+    },
+    {
+      "word": "รถบัส",
+      "category": "ยานพาหนะ",
+      "en": "bus"
+    },
+    {
+      "word": "นาฬิกา",
+      "category": "สิ่งของ",
+      "en": "clock"
+    },
+    {
+      "word": "กุญแจ",
+      "category": "สิ่งของ",
+      "en": "key"
+    },
+    {
+      "word": "ร่ม",
+      "category": "สิ่งของ",
+      "en": "umbrella"
+    },
+    {
+      "word": "หนังสือ",
+      "category": "สิ่งของ",
+      "en": "book"
+    },
+    {
+      "word": "เก้าอี้",
+      "category": "สิ่งของ",
+      "en": "chair"
+    },
+    {
+      "word": "โต๊ะ",
+      "category": "สิ่งของ",
+      "en": "table"
+    },
+    {
+      "word": "เตียง",
+      "category": "สิ่งของ",
+      "en": "bed"
+    },
+    {
+      "word": "แก้วน้ำ",
+      "category": "สิ่งของ",
+      "en": "cup"
+    },
+    {
+      "word": "ตา",
+      "category": "ร่างกาย",
+      "en": "eye"
+    },
+    {
+      "word": "หู",
+      "category": "ร่างกาย",
+      "en": "ear"
+    },
+    {
+      "word": "จมูก",
+      "category": "ร่างกาย",
+      "en": "nose"
+    },
+    {
+      "word": "ปาก",
+      "category": "ร่างกาย",
+      "en": "mouth"
+    },
+    {
+      "word": "มือ",
+      "category": "ร่างกาย",
+      "en": "hand"
+    },
+    {
+      "word": "เท้า",
+      "category": "ร่างกาย",
+      "en": "foot"
+    },
+    {
+      "word": "วงกลม",
+      "category": "รูปทรง",
+      "en": "circle"
+    },
+    {
+      "word": "สี่เหลี่ยม",
+      "category": "รูปทรง",
+      "en": "square"
+    },
+    {
+      "word": "สามเหลี่ยม",
+      "category": "รูปทรง",
+      "en": "triangle"
+    },
+    {
+      "word": "หน้ายิ้ม",
+      "category": "รูปทรง",
+      "en": "smiley face"
+    },
+    {
+      "word": "ภูเขา",
+      "category": "ธรรมชาติ",
+      "en": "mountain"
+    },
+    {
+      "word": "พิซซ่า",
+      "category": "อาหาร",
+      "en": "pizza"
+    },
+    {
+      "word": "ไอศกรีม",
+      "category": "อาหาร",
+      "en": "ice cream"
+    },
+    {
+      "word": "โดนัท",
+      "category": "อาหาร",
+      "en": "donut"
+    },
+    {
+      "word": "คุกกี้",
+      "category": "อาหาร",
+      "en": "cookie"
+    },
+    {
+      "word": "รุ้ง",
+      "category": "ธรรมชาติ",
+      "en": "rainbow"
+    },
+    {
+      "word": "เต็นท์",
+      "category": "สิ่งของ",
+      "en": "tent"
+    },
+    {
+      "word": "ประตู",
+      "category": "สิ่งของ",
+      "en": "door"
+    },
+    {
+      "word": "หมวก",
+      "category": "เสื้อผ้า",
+      "en": "hat"
+    },
+    {
+      "word": "รองเท้า",
+      "category": "เสื้อผ้า",
+      "en": "shoe"
+    },
+    {
+      "word": "ดินสอ",
+      "category": "สิ่งของ",
+      "en": "pencil"
+    },
+    {
+      "word": "ช้อน",
+      "category": "สิ่งของ",
+      "en": "spoon"
+    },
+    {
+      "word": "ส้อม",
+      "category": "สิ่งของ",
+      "en": "fork"
+    },
+    {
+      "word": "มีด",
+      "category": "สิ่งของ",
+      "en": "knife"
+    },
+    {
+      "word": "ใบไม้",
+      "category": "ธรรมชาติ",
+      "en": "leaf"
+    }
+  ],
+  "medium": [
+    {
+      "word": "หมา",
+      "category": "สัตว์",
+      "en": "dog"
+    },
+    {
+      "word": "กบ",
+      "category": "สัตว์",
+      "en": "frog"
+    },
+    {
+      "word": "ลิง",
+      "category": "สัตว์",
+      "en": "monkey"
+    },
+    {
+      "word": "สิงโต",
+      "category": "สัตว์",
+      "en": "lion"
+    },
+    {
+      "word": "ฝน",
+      "category": "ธรรมชาติ",
+      "en": "rain"
+    },
+    {
+      "word": "จักรยาน",
+      "category": "ยานพาหนะ",
+      "en": "bicycle"
+    },
+    {
+      "word": "เครื่องบิน",
+      "category": "ยานพาหนะ",
+      "en": "airplane"
+    },
+    {
+      "word": "เรือใบ",
+      "category": "ยานพาหนะ",
+      "en": "sailboat"
+    },
+    {
+      "word": "ฟัน",
+      "category": "ร่างกาย",
+      "en": "tooth"
+    },
+    {
+      "word": "แฮมเบอร์เกอร์",
+      "category": "อาหาร",
+      "en": "hamburger"
+    },
+    {
+      "word": "เค้กวันเกิด",
+      "category": "อาหาร",
+      "en": "birthday cake"
+    },
+    {
+      "word": "มนุษย์หิมะ",
+      "category": "สิ่งของ",
+      "en": "snowman"
+    },
+    {
+      "word": "ถุงเท้า",
+      "category": "เสื้อผ้า",
+      "en": "sock"
+    },
+    {
+      "word": "กรรไกร",
+      "category": "สิ่งของ",
+      "en": "scissors"
+    },
+    {
+      "word": "โทรทัศน์",
+      "category": "สิ่งของ",
+      "en": "television"
+    },
+    {
+      "word": "มือถือ",
+      "category": "สิ่งของ",
+      "en": "cell phone"
+    },
+    {
+      "word": "โน้ตบุ๊ก",
+      "category": "สิ่งของ",
+      "en": "laptop"
+    },
+    {
+      "word": "กล้องถ่ายรูป",
+      "category": "สิ่งของ",
+      "en": "camera"
+    },
+    {
+      "word": "หลอดไฟ",
+      "category": "สิ่งของ",
+      "en": "light bulb"
+    },
+    {
+      "word": "เทียน",
+      "category": "สิ่งของ",
+      "en": "candle"
+    },
+    {
+      "word": "แปรงสีฟัน",
+      "category": "สิ่งของ",
+      "en": "toothbrush"
+    },
+    {
+      "word": "สะพาน",
+      "category": "สถานที่",
+      "en": "bridge"
+    },
+    {
+      "word": "แมงมุม",
+      "category": "สัตว์",
+      "en": "spider"
+    },
+    {
+      "word": "ผีเสื้อ",
+      "category": "สัตว์",
+      "en": "butterfly"
+    },
+    {
+      "word": "ผึ้ง",
+      "category": "สัตว์",
+      "en": "bee"
+    },
+    {
+      "word": "มด",
+      "category": "สัตว์",
+      "en": "ant"
+    },
+    {
+      "word": "หอยทาก",
+      "category": "สัตว์",
+      "en": "snail"
+    },
+    {
+      "word": "ปู",
+      "category": "สัตว์",
+      "en": "crab"
+    },
+    {
+      "word": "เต่า",
+      "category": "สัตว์",
+      "en": "sea turtle"
+    },
+    {
+      "word": "หมึกยักษ์",
+      "category": "สัตว์",
+      "en": "octopus"
+    },
+    {
+      "word": "ฉลาม",
+      "category": "สัตว์",
+      "en": "shark"
+    },
+    {
+      "word": "วาฬ",
+      "category": "สัตว์",
+      "en": "whale"
+    },
+    {
+      "word": "โลมา",
+      "category": "สัตว์",
+      "en": "dolphin"
+    },
+    {
+      "word": "เพนกวิน",
+      "category": "สัตว์",
+      "en": "penguin"
+    },
+    {
+      "word": "นกฮูก",
+      "category": "สัตว์",
+      "en": "owl"
+    },
+    {
+      "word": "ยีราฟ",
+      "category": "สัตว์",
+      "en": "giraffe"
+    },
+    {
+      "word": "ม้าลาย",
+      "category": "สัตว์",
+      "en": "zebra"
+    },
+    {
+      "word": "แพนด้า",
+      "category": "สัตว์",
+      "en": "panda"
+    },
+    {
+      "word": "อูฐ",
+      "category": "สัตว์",
+      "en": "camel"
+    },
+    {
+      "word": "จระเข้",
+      "category": "สัตว์",
+      "en": "crocodile"
+    },
+    {
+      "word": "แกะ",
+      "category": "สัตว์",
+      "en": "sheep"
+    },
+    {
+      "word": "หัวกะโหลก",
+      "category": "สิ่งของ",
+      "en": "skull"
+    },
+    {
+      "word": "มงกุฎ",
+      "category": "สิ่งของ",
+      "en": "crown"
+    },
+    {
+      "word": "ดาบ",
+      "category": "สิ่งของ",
+      "en": "sword"
+    },
+    {
+      "word": "กีตาร์",
+      "category": "ดนตรี",
+      "en": "guitar"
+    },
+    {
+      "word": "ไมโครโฟน",
+      "category": "ดนตรี",
+      "en": "microphone"
+    },
+    {
+      "word": "หูฟัง",
+      "category": "สิ่งของ",
+      "en": "headphones"
+    },
+    {
+      "word": "เฮลิคอปเตอร์",
+      "category": "ยานพาหนะ",
+      "en": "helicopter"
+    },
+    {
+      "word": "รถไฟ",
+      "category": "ยานพาหนะ",
+      "en": "train"
+    },
+    {
+      "word": "รถบรรทุก",
+      "category": "ยานพาหนะ",
+      "en": "truck"
+    },
+    {
+      "word": "มอเตอร์ไซค์",
+      "category": "ยานพาหนะ",
+      "en": "motorbike"
+    },
+    {
+      "word": "บอลลูน",
+      "category": "ยานพาหนะ",
+      "en": "hot air balloon"
+    },
+    {
+      "word": "ปราสาท",
+      "category": "สถานที่",
+      "en": "castle"
+    },
+    {
+      "word": "ตึกระฟ้า",
+      "category": "สถานที่",
+      "en": "skyscraper"
+    },
+    {
+      "word": "หอไอเฟล",
+      "category": "สถานที่",
+      "en": "The Eiffel Tower"
+    },
+    {
+      "word": "ฟ้าแลบ",
+      "category": "ธรรมชาติ",
+      "en": "lightning"
+    },
+    {
+      "word": "เกล็ดหิมะ",
+      "category": "ธรรมชาติ",
+      "en": "snowflake"
+    },
+    {
+      "word": "เห็ด",
+      "category": "ธรรมชาติ",
+      "en": "mushroom"
+    },
+    {
+      "word": "กระบองเพชร",
+      "category": "ธรรมชาติ",
+      "en": "cactus"
+    },
+    {
+      "word": "ต้นมะพร้าว",
+      "category": "ธรรมชาติ",
+      "en": "palm tree"
+    },
+    {
+      "word": "องุ่น",
+      "category": "ผลไม้",
+      "en": "grapes"
+    },
+    {
+      "word": "แตงโม",
+      "category": "ผลไม้",
+      "en": "watermelon"
+    },
+    {
+      "word": "สตรอว์เบอร์รี",
+      "category": "ผลไม้",
+      "en": "strawberry"
+    },
+    {
+      "word": "สับปะรด",
+      "category": "ผลไม้",
+      "en": "pineapple"
+    },
+    {
+      "word": "แครอท",
+      "category": "อาหาร",
+      "en": "carrot"
+    },
+    {
+      "word": "ขนมปัง",
+      "category": "อาหาร",
+      "en": "bread"
+    },
+    {
+      "word": "แซนด์วิช",
+      "category": "อาหาร",
+      "en": "sandwich"
+    },
+    {
+      "word": "ฮอทดอก",
+      "category": "อาหาร",
+      "en": "hot dog"
+    },
+    {
+      "word": "ลูกแพร์",
+      "category": "ผลไม้",
+      "en": "pear"
+    },
+    {
+      "word": "โถส้วม",
+      "category": "สิ่งของ",
+      "en": "toilet"
+    },
+    {
+      "word": "อ่างอาบน้ำ",
+      "category": "สิ่งของ",
+      "en": "bathtub"
+    },
+    {
+      "word": "โซฟา",
+      "category": "สิ่งของ",
+      "en": "couch"
+    },
+    {
+      "word": "พัดลม",
+      "category": "สิ่งของ",
+      "en": "fan"
+    },
+    {
+      "word": "ไฟฉาย",
+      "category": "สิ่งของ",
+      "en": "flashlight"
+    },
+    {
+      "word": "บันได",
+      "category": "สิ่งของ",
+      "en": "ladder"
+    },
+    {
+      "word": "ค้อน",
+      "category": "สิ่งของ",
+      "en": "hammer"
+    },
+    {
+      "word": "เลื่อย",
+      "category": "สิ่งของ",
+      "en": "saw"
+    },
+    {
+      "word": "ขวาน",
+      "category": "สิ่งของ",
+      "en": "axe"
+    },
+    {
+      "word": "พลั่ว",
+      "category": "สิ่งของ",
+      "en": "shovel"
+    },
+    {
+      "word": "ไม้กวาด",
+      "category": "สิ่งของ",
+      "en": "broom"
+    },
+    {
+      "word": "ถัง",
+      "category": "สิ่งของ",
+      "en": "bucket"
+    },
+    {
+      "word": "กระเป๋าเป้",
+      "category": "สิ่งของ",
+      "en": "backpack"
+    },
+    {
+      "word": "กระเป๋าเดินทาง",
+      "category": "สิ่งของ",
+      "en": "suitcase"
+    },
+    {
+      "word": "แว่นตา",
+      "category": "สิ่งของ",
+      "en": "eyeglasses"
+    },
+    {
+      "word": "เสื้อยืด",
+      "category": "เสื้อผ้า",
+      "en": "t-shirt"
+    },
+    {
+      "word": "กางเกง",
+      "category": "เสื้อผ้า",
+      "en": "pants"
+    },
+    {
+      "word": "เพชร",
+      "category": "สิ่งของ",
+      "en": "diamond"
+    },
+    {
+      "word": "ซองจดหมาย",
+      "category": "สิ่งของ",
+      "en": "envelope"
+    },
+    {
+      "word": "หกเหลี่ยม",
+      "category": "รูปทรง",
+      "en": "hexagon"
+    },
+    {
+      "word": "ซิกแซก",
+      "category": "รูปทรง",
+      "en": "zigzag"
+    },
+    {
+      "word": "ป้ายหยุด",
+      "category": "สิ่งของ",
+      "en": "stop sign"
+    },
+    {
+      "word": "ไฟจราจร",
+      "category": "สิ่งของ",
+      "en": "traffic light"
+    },
+    {
+      "word": "รั้ว",
+      "category": "สิ่งของ",
+      "en": "fence"
+    },
+    {
+      "word": "บาสเกตบอล",
+      "category": "กีฬา",
+      "en": "basketball"
+    },
+    {
+      "word": "ฟุตบอล",
+      "category": "กีฬา",
+      "en": "soccer ball"
+    },
+    {
+      "word": "เบสบอล",
+      "category": "กีฬา",
+      "en": "baseball"
+    },
+    {
+      "word": "ดัมเบล",
+      "category": "กีฬา",
+      "en": "dumbbell"
+    },
+    {
+      "word": "จานบิน",
+      "category": "สิ่งของ",
+      "en": "flying saucer"
+    }
+  ],
+  "hard": [
+    {
+      "word": "จิงโจ้",
+      "category": "สัตว์",
+      "en": "kangaroo"
+    },
+    {
+      "word": "แมงป่อง",
+      "category": "สัตว์",
+      "en": "scorpion"
+    },
+    {
+      "word": "ยุง",
+      "category": "สัตว์",
+      "en": "mosquito"
+    },
+    {
+      "word": "นกแก้ว",
+      "category": "สัตว์",
+      "en": "parrot"
+    },
+    {
+      "word": "หงส์",
+      "category": "สัตว์",
+      "en": "swan"
+    },
+    {
+      "word": "ฟลามิงโก",
+      "category": "สัตว์",
+      "en": "flamingo"
+    },
+    {
+      "word": "เม่น",
+      "category": "สัตว์",
+      "en": "hedgehog"
+    },
+    {
+      "word": "กระรอก",
+      "category": "สัตว์",
+      "en": "squirrel"
+    },
+    {
+      "word": "แรด",
+      "category": "สัตว์",
+      "en": "rhinoceros"
+    },
+    {
+      "word": "มังกร",
+      "category": "สิ่งมีชีวิต",
+      "en": "dragon"
+    },
+    {
+      "word": "นางเงือก",
+      "category": "สิ่งมีชีวิต",
+      "en": "mermaid"
+    },
+    {
+      "word": "เปียโน",
+      "category": "ดนตรี",
+      "en": "piano"
+    },
+    {
+      "word": "ไวโอลิน",
+      "category": "ดนตรี",
+      "en": "violin"
+    },
+    {
+      "word": "กลอง",
+      "category": "ดนตรี",
+      "en": "drums"
+    },
+    {
+      "word": "ทรัมเป็ต",
+      "category": "ดนตรี",
+      "en": "trumpet"
+    },
+    {
+      "word": "แทรกเตอร์",
+      "category": "ยานพาหนะ",
+      "en": "tractor"
+    },
+    {
+      "word": "รถพยาบาล",
+      "category": "ยานพาหนะ",
+      "en": "ambulance"
+    },
+    {
+      "word": "รถดับเพลิง",
+      "category": "ยานพาหนะ",
+      "en": "firetruck"
+    },
+    {
+      "word": "เรือดำน้ำ",
+      "category": "ยานพาหนะ",
+      "en": "submarine"
+    },
+    {
+      "word": "ประภาคาร",
+      "category": "สถานที่",
+      "en": "lighthouse"
+    },
+    {
+      "word": "โบสถ์",
+      "category": "สถานที่",
+      "en": "church"
+    },
+    {
+      "word": "กังหันลม",
+      "category": "สถานที่",
+      "en": "windmill"
+    },
+    {
+      "word": "ทอร์นาโด",
+      "category": "ธรรมชาติ",
+      "en": "tornado"
+    },
+    {
+      "word": "กองไฟ",
+      "category": "ธรรมชาติ",
+      "en": "campfire"
+    },
+    {
+      "word": "หัวหอม",
+      "category": "อาหาร",
+      "en": "onion"
+    },
+    {
+      "word": "มันฝรั่ง",
+      "category": "อาหาร",
+      "en": "potato"
+    },
+    {
+      "word": "บร็อกโคลี",
+      "category": "อาหาร",
+      "en": "broccoli"
+    },
+    {
+      "word": "สเต็ก",
+      "category": "อาหาร",
+      "en": "steak"
+    },
+    {
+      "word": "ถั่วลิสง",
+      "category": "อาหาร",
+      "en": "peanut"
+    },
+    {
+      "word": "สร้อยคอ",
+      "category": "สิ่งของ",
+      "en": "necklace"
+    },
+    {
+      "word": "นาฬิกาทราย",
+      "category": "สิ่งของ",
+      "en": "hourglass"
+    },
+    {
+      "word": "ปฏิทิน",
+      "category": "สิ่งของ",
+      "en": "calendar"
+    },
+    {
+      "word": "เครื่องคิดเลข",
+      "category": "สิ่งของ",
+      "en": "calculator"
+    },
+    {
+      "word": "แผนที่",
+      "category": "สิ่งของ",
+      "en": "map"
+    },
+    {
+      "word": "เข็มทิศ",
+      "category": "สิ่งของ",
+      "en": "compass"
+    },
+    {
+      "word": "หัวดับเพลิง",
+      "category": "สิ่งของ",
+      "en": "fire hydrant"
+    },
+    {
+      "word": "ตู้จดหมาย",
+      "category": "สิ่งของ",
+      "en": "mailbox"
+    },
+    {
+      "word": "ร่มชูชีพ",
+      "category": "สิ่งของ",
+      "en": "parachute"
+    },
+    {
+      "word": "เรือแคนู",
+      "category": "ยานพาหนะ",
+      "en": "canoe"
+    },
+    {
+      "word": "เรือเร็ว",
+      "category": "ยานพาหนะ",
+      "en": "speedboat"
+    },
+    {
+      "word": "สมอง",
+      "category": "ร่างกาย",
+      "en": "brain"
+    },
+    {
+      "word": "ไม้เทนนิส",
+      "category": "กีฬา",
+      "en": "tennis racquet"
+    },
+    {
+      "word": "สเก็ตบอร์ด",
+      "category": "กีฬา",
+      "en": "skateboard"
+    },
+    {
+      "word": "นางฟ้า",
+      "category": "สิ่งมีชีวิต",
+      "en": "angel"
+    }
+  ]
+}

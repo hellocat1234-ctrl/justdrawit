@@ -146,3 +146,6 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# โมเดล AI ของโหมด Solo (ไฟล์ใหญ่ ดาวน์โหลดด้วย npm run get-model)
+server/models/

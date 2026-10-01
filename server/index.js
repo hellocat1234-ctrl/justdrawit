@@ -601,7 +601,7 @@ function stopSolo(socket) {
 function startSoloRound(socket, solo) {
   const cfg = ai.levelConfig(solo.level);
   const time = SOLO_TIME_OVERRIDE || cfg.time;
-  const word = ai.pickWord(WORD_BANK, cfg.difficulty, solo.usedWords);
+  const word = ai.pickWord(ai.soloWords(WORD_BANK), cfg.difficulty, solo.usedWords);
   solo.usedWords.add(word);
   solo.word = word;
   solo.time = time;
@@ -665,7 +665,7 @@ async function handleSoloSnapshot(socket, data) {
     const { guess, correct } = await ai.guessImage({
       image,
       word: solo.word,
-      allWords: ALL_WORDS,
+      allWords: Object.values(ai.soloWords(WORD_BANK)).flat().map((w) => w.word),
       elapsed: (now - solo.startedAt) / 1000,
       time: solo.time,
       wrong: solo.wrong,
@@ -983,6 +983,10 @@ io.on("connection", (socket) => {
 });
 
 const PORT = Number(process.env.PORT) || 3000; // เทสเปิด server ตัวที่สองบนพอร์ตอื่นได้
-server.listen(PORT, () => {
-  console.log(`server พร้อมแล้ว ที่ http://localhost:${PORT}`);
+// โหลดคลังคำ/โมเดลของ Solo ให้เสร็จก่อนเปิดรับคน (ไม่ throw โหลดไม่ได้ก็ใช้สมองอื่น)
+ai.init().then(() => {
+  server.listen(PORT, () => {
+    console.log(`server พร้อมแล้ว ที่ http://localhost:${PORT}`);
+    console.log(`AI Solo: โหมด ${ai.aiMode()}`);
+  });
 });
