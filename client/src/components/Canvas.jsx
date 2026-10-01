@@ -240,6 +240,19 @@ const Canvas = forwardRef(function Canvas({ canDraw, tool, color, size, onAction
       actionsRef.current = [...items];
       painterRef.current?.replay(actionsRef.current);
     },
+    // ภาพกระดานตอนนี้เป็น data URL JPEG ย่อให้กว้างไม่เกิน maxWidth (ข้อ 7 Solo ส่งให้ AI ดู)
+    // กระดานเป็นพื้นขาวทึบ (painter ถมสีพื้นเอง) JPEG จึงไม่ได้พื้นดำ · ย่อก่อนส่งเพื่อให้ข้อความเล็กและเร็ว
+    snapshot(maxWidth = 512) {
+      const src = canvasRef.current;
+      if (!src || src.width === 0) return null;
+      const w = Math.min(maxWidth, src.width);
+      const h = Math.max(1, Math.round((src.height * w) / src.width));
+      const out = document.createElement("canvas");
+      out.width = w;
+      out.height = h;
+      out.getContext("2d").drawImage(src, 0, 0, w, h);
+      return out.toDataURL("image/jpeg", 0.8);
+    },
     // ให้ข้อ 4 เรียกอ่านได้ตอนขอประวัติ
     getActions() {
       return actionsRef.current;

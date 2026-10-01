@@ -343,7 +343,7 @@ input {
 
 .lobby__rules {
   grid-area: rules;
-  padding: 16px 20px;
+  padding: 10px 20px 12px;
 }
 
 .lobby__rules .panel__title {
@@ -1788,4 +1788,106 @@ select[class] {
   background-position: right 14px center;
   background-size: 14px;
   cursor: pointer;
+}
+/* ============================ Solo แข่งกับ AI (ข้อ 7) ============================ */
+
+/* ปุ่มเข้า Solo ในกล่องวิธีเล่นของหน้าแรก */
+.lobby__solo {
+  margin-top: 6px;
+}
+
+/* หน้ากรอกชื่อก่อนเริ่ม */
+.solo-intro {
+  display: grid;
+  gap: 12px;
+  width: 100%;
+  max-width: 460px;
+  margin: 0 auto;
+}
+
+.solo-intro__text {
+  margin: 0;
+  color: var(--muted);
+}
+
+/* หน้าเล่น: ใช้โครงเดียวกับหน้าเกม แต่ไม่มีคอลัมน์รายชื่อ เหลือ กระดาน + เครื่องมือ
+   (จอ ≤1000px กลับเป็นคอลัมน์เดียวตามกฎเดิมของ .game ซึ่งชนะด้วยลำดับในไฟล์ จึงต้องเขียนซ้ำใน media ด้านล่าง) */
+.game--solo {
+  grid-template-columns: minmax(0, 1fr) 240px;
+}
+
+@media (min-width: 1001px) and (max-width: 1400px) {
+  .game--solo {
+    grid-template-columns: minmax(0, 1fr) 232px;
+  }
+}
+
+@media (max-width: 1000px) {
+  .game--solo {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* กล่อง AI อยู่ใต้กระดานกล่องเดียว กว้างเต็ม สูง 176px เท่ากล่องของหน้าเกม (งบที่เผื่อไว้ใต้กระดานจึงไม่เปลี่ยน) */
+.game__answers--solo {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.ai-box__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.ai-box__guess {
+  margin: 0;
+  font-family: var(--font-head);
+  font-weight: 600;
+  font-size: 26px;
+  overflow-wrap: anywhere;
+}
+
+.ai-box__guess--ok {
+  color: var(--green);
+}
+
+.ai-box__hint,
+.ai-box__past,
+.ai-box__mode {
+  margin: 2px 0 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.ai-box__mode {
+  font-style: italic;
+  font-size: 12px;
+}
+
+.ai-box__leave {
+  align-self: flex-end;
+  min-height: 32px;
+  font-size: 13px;
+}
+
+/* ผลด่านและหน้าจบเกม */
+.solo-result {
+  margin: 4px 0 10px;
+  font-family: var(--font-head);
+  font-weight: 600;
+  font-size: 20px;
+}
+
+.solo-result--ok {
+  color: var(--green);
+}
+
+.solo-result--bad {
+  color: var(--red);
+}
+
+.solo-final__score {
+  margin: 4px 0 0;
+  font-family: var(--font-pixel);
+  font-size: 44px;
 }

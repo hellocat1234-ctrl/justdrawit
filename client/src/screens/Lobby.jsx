@@ -8,7 +8,7 @@ import { monthKey, useLeaderboard } from "../hooks/useLeaderboard";
 // หน้าแรก: แท็บ CREATE / JOIN · เลือกอวตาร · ใส่ชื่อ · (แท็บ JOIN มีช่องรหัสห้อง)
 // ขวาเป็นกล่อง Top 10 (เดือนนี้/ตลอดกาล) · วิธีเล่นแบบย่ออยู่ใต้ฟอร์ม
 // ฝั่งนี้แค่ช่วยให้ใช้ง่าย ของจริง server เป็นคนตรวจซ้ำเสมอ (server-authoritative)
-export default function Lobby({ connected, onEntered, onError, onOpenLeaderboard }) {
+export default function Lobby({ connected, onEntered, onError, onOpenLeaderboard, onOpenSolo }) {
   const [tab, setTab] = useState("create"); // create | join
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
@@ -171,6 +171,15 @@ export default function Lobby({ connected, onEntered, onError, onOpenLeaderboard
           <p className="rules-tip">
             🎨 <strong>Mini Challenge</strong> บางตาสุ่มกติกาพิเศษ
           </p>
+          {/* Solo ไม่ต้องเข้าห้อง ส่งชื่อที่กรอกไว้ไปให้ ไม่ต้องพิมพ์ซ้ำ */}
+          <button
+            type="button"
+            className="btn btn--wide lobby__solo"
+            disabled={!connected}
+            onClick={() => onOpenSolo(name)}
+          >
+            🤖 Solo แข่งกับ AI
+          </button>
         </aside>
       </div>
     </div>
