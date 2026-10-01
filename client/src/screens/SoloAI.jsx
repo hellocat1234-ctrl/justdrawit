@@ -11,7 +11,7 @@ import Mascot, { MascotNote } from "../components/Mascot";
 import AnimatedNumber from "../components/AnimatedNumber";
 import { TopIcons, InfoModal, ExitModal } from "../components/TopIcons";
 import { play } from "../sound/sfx";
-import { clearBoard } from "../canvas/actions";
+import { beginStroke, extendStroke, endStroke, clearBoard } from "../canvas/actions";
 import { PAINT_COLORS, SIZE_DEFAULT, TOOLS } from "../canvas/palette";
 
 // ส่งภาพให้ AI ดูทุก 5 วินาที (server รับห่างกันได้ไม่ต่ำกว่า 4 วิ)
@@ -28,6 +28,7 @@ const MODE_TEXT = {
   claude: "AI Claude — ดูภาพจริง",
   mock: "โหมดจำลอง — ไม่มีโมเดลและไม่มี API key AI เดาสุ่ม ไม่ได้ดูภาพจริง",
 };
+const MAX_GUESS_CHARS = 40; // ตรงกับเพดานที่ server รับ
 const NEXT_DELAY_S = 4; // server พัก 4 วิก่อนด่านถัดไป (ใช้แสดงนับถอยหลังเฉยๆ)
 
 // การกระทำที่ "ย้อนได้ทีละหนึ่งอัน" — หนึ่งเส้น (start..end) หนึ่งครั้งเทสี หนึ่งครั้งล้างจอ
@@ -47,17 +48,21 @@ function lastOpIndex(actions) {
  * หน้านี้แค่แสดงผลและส่งภาพ — นับเวลาถอยหลังเองเพื่อโชว์เท่านั้น server เป็นคนปิดด่าน
  */
 export default function SoloAI({ initialName = "", onBack }) {
-  // intro = กรอกชื่อ · starting = ส่ง ai_start แล้วรอด่านแรก · playing · rest = พักระหว่างด่าน · over = จบเกม
+  // intro = กรอกชื่อ · starting = ส่ง ai_start แล้วรอด่านแรก · playing = ช่วง 1 เราวาด AI ทาย
+  // watch = ช่วง 2 ดูภาพที่เล่นซ้ำแล้วพิมพ์ทาย · rest = พักระหว่างช่วง · over = จบเกม
   const [phase, setPhase] = useState("intro");
   const [name, setName] = useState(initialName);
-  const [round, setRound] = useState(null); // { level, word, time, lives, aiMode }
+  const [round, setRound] = useState(null); // { level, word, time, lives, aiMode, drawNext }
+  const [watch, setWatch] = useState(null); // ช่วง 2: { level, time, lives, category } (ไม่มีคำตอบ)
+  const [answer, setAnswer] = useState(""); // ช่องพิมพ์ทายของช่วง 2
+  const [wrongAnswers, setWrongAnswers] = useState([]); // คำที่เราทายผิดในช่วง 2
   const [roundId, setRoundId] = useState(0); // นับขึ้นทุกด่าน ไว้สั่งล้างกระดาน
   const [lives, setLives] = useState(3);
   const [score, setScore] = useState(0);
   const [timeLeft, setTimeLeft] = useState(null);
   const [guesses, setGuesses] = useState([]); // คำที่ AI เดาในด่านนี้
   const [thinking, setThinking] = useState(false);
-  const [result, setResult] = useState(null); // ผลด่านล่าสุด { correct, gained, word }
+  const [result, setResult] = useState(null); // ผลช่วงล่าสุด { kind: "draw" | "guess", correct, gained, word }
   const [restLeft, setRestLeft] = useState(NEXT_DELAY_S);
   const [final, setFinal] = useState(null); // { totalScore, levelReached, rank }
   const [hist, setHist] = useState({ undo: false, redo: false });
@@ -74,6 +79,8 @@ export default function SoloAI({ initialName = "", onBack }) {
   const roundRef = useRef(null);
   const thinkingRef = useRef(false);
   const thinkTimer = useRef(null);
+  const watchRef = useRef(null);
+  const strokeTimers = useRef([]); // ตัวตั้งเวลาเล่นเส้นของช่วง 2 (เคลียร์ตอนจบช่วง/ออกจากหน้า)
   const redoRef = useRef([]); // กองทำซ้ำ (เก็บฝั่งเครื่องเรา ไม่มี server เก็บให้เหมือนห้องปกติ)
 
   function setThink(on) {
@@ -83,10 +90,33 @@ export default function SoloAI({ initialName = "", onBack }) {
     if (on) thinkTimer.current = setTimeout(() => setThink(false), THINK_TIMEOUT_MS);
   }
 
+  function clearStrokes() {
+    strokeTimers.current.forEach(clearTimeout);
+    strokeTimers.current = [];
+  }
+
+  // เล่นซ้ำหนึ่งเส้นที่ server ส่งมา: ค่อยๆ ต่อจุดตลอด ms (server เป็นคนกำหนดจังหวะ) ด้วย action ชุดเดียวกับการวาดจริง
+  // ใช้ applyRemote (วาด + เก็บ แต่ไม่ส่งออก) จึงได้เส้นเรียบเหมือนที่ผู้เล่นวาดเอง
+  function playStroke({ points, color, size, ms }) {
+    const board = canvasRef.current;
+    if (!board || !Array.isArray(points) || points.length === 0) return;
+    board.applyRemote(beginStroke({ x: points[0].x, y: points[0].y, color, size, tool: TOOLS.PEN }));
+    const rest = points.slice(1);
+    const steps = Math.max(1, Math.min(rest.length, Math.round((ms || 0) / 40)));
+    const per = Math.ceil(rest.length / steps);
+    for (let i = 0; i < steps; i++) {
+      const chunk = rest.slice(i * per, (i + 1) * per);
+      if (chunk.length === 0) continue;
+      strokeTimers.current.push(setTimeout(() => canvasRef.current?.applyRemote(extendStroke(chunk)), ((i + 1) * ms) / steps));
+    }
+    strokeTimers.current.push(setTimeout(() => canvasRef.current?.applyRemote(endStroke()), ms));
+  }
+
   // ── ผูก event ของ Solo ครั้งเดียวตอนเปิดหน้า ──
   useEffect(() => {
     const onRoundStart = (d) => {
       roundRef.current = d;
+      watchRef.current = null;
       setRound(d);
       setLives(d.lives);
       setTimeLeft(d.time);
@@ -106,9 +136,42 @@ export default function SoloAI({ initialName = "", onBack }) {
       setThink(false);
       setScore(d.totalScore);
       setLives(d.lives);
-      setResult({ correct: d.correct, gained: d.gained, word: roundRef.current?.word ?? "" });
+      setResult({ kind: "draw", correct: d.correct, gained: d.gained, word: roundRef.current?.word ?? "" });
       setRestLeft(NEXT_DELAY_S);
       setPhase("rest");
+    };
+    // ช่วง 2 เริ่ม: ล้างกระดาน แล้วรอเส้นที่ server ส่งมาทีละเส้น
+    const onDrawStart = (d) => {
+      clearStrokes();
+      watchRef.current = d;
+      setWatch(d);
+      setLives(d.lives);
+      setTimeLeft(d.time);
+      setResult(null);
+      setAnswer("");
+      setWrongAnswers([]);
+      canvasRef.current?.resetBoard();
+      redoRef.current = [];
+      setHist({ undo: false, redo: false });
+      setPhase("watch");
+      play("roundStart");
+    };
+    const onDrawStroke = (d) => {
+      if (watchRef.current) playStroke(d); // ใช้ ref ที่ตั้งทันทีตอน ai_draw_start (phaseRef ยังไม่ทันอัปเดตตอนเส้นแรกมาถึง)
+    };
+    const onDrawReply = (d) => {
+      if (!d?.correct) setWrongAnswers((w) => [...w, String(d?.text ?? "")]);
+    };
+    const onDrawEnd = (d) => {
+      clearStrokes();
+      watchRef.current = null;
+      canvasRef.current?.applyRemote(endStroke()); // ปิดเส้นที่เล่นค้างอยู่ (ถ้ามี)
+      setScore(d.totalScore);
+      setLives(d.lives);
+      setResult({ kind: "guess", correct: d.correct, gained: d.gained, word: String(d.word ?? "") });
+      setRestLeft(NEXT_DELAY_S);
+      setPhase("rest");
+      if (d.correct) play("selfCorrect");
     };
     const onGameEnd = (d) => {
       setThink(false);
@@ -126,17 +189,26 @@ export default function SoloAI({ initialName = "", onBack }) {
     socket.on("ai_round_start", onRoundStart);
     socket.on("ai_guess", onGuess);
     socket.on("ai_round_end", onRoundEnd);
+    socket.on("ai_draw_start", onDrawStart);
+    socket.on("ai_draw_stroke", onDrawStroke);
+    socket.on("ai_draw_reply", onDrawReply);
+    socket.on("ai_draw_end", onDrawEnd);
     socket.on("ai_game_end", onGameEnd);
     socket.on("game_error", onError);
     return () => {
       socket.off("ai_round_start", onRoundStart);
       socket.off("ai_guess", onGuess);
       socket.off("ai_round_end", onRoundEnd);
+      socket.off("ai_draw_start", onDrawStart);
+      socket.off("ai_draw_stroke", onDrawStroke);
+      socket.off("ai_draw_reply", onDrawReply);
+      socket.off("ai_draw_end", onDrawEnd);
+      clearStrokes();
       socket.off("ai_game_end", onGameEnd);
       socket.off("game_error", onError);
       clearTimeout(thinkTimer.current);
       // ออกจากหน้ากลางเกม = เลิกเล่น (server ไม่บันทึกคะแนน)
-      if (phaseRef.current === "starting" || phaseRef.current === "playing" || phaseRef.current === "rest") {
+      if (phaseRef.current === "starting" || phaseRef.current === "playing" || phaseRef.current === "watch" || phaseRef.current === "rest") {
         socket.emit("leave_room");
       }
     };
@@ -151,19 +223,21 @@ export default function SoloAI({ initialName = "", onBack }) {
   }, [roundId]);
 
   // นับเวลาถอยหลังไว้โชว์ (server เป็นคนตัดสินว่าหมดเวลาจริง)
+  const live = phase === "playing" || phase === "watch";
+  const stage = phase === "watch" ? watch : round; // ช่วงที่กำลังเล่นอยู่ (ใช้ดูเวลาเต็ม)
   useEffect(() => {
-    if (phase !== "playing" || !round) return undefined;
-    const deadline = Date.now() + round.time * 1000;
+    if (!live || !stage) return undefined;
+    const deadline = Date.now() + stage.time * 1000;
     const id = setInterval(() => {
       setTimeLeft(Math.max(0, Math.ceil((deadline - Date.now()) / 1000)));
     }, 250);
     return () => clearInterval(id);
-  }, [phase, round]);
+  }, [live, stage]);
 
   // 10 วิสุดท้าย ติ๊กทุกวินาที (เปลี่ยนค่า timeLeft ทีละวินาทีอยู่แล้ว ไม่ซ้ำ)
   useEffect(() => {
-    if (phase === "playing" && timeLeft > 0 && timeLeft <= 10) play("tick", timeLeft <= 3);
-  }, [phase, timeLeft]);
+    if (live && timeLeft > 0 && timeLeft <= 10) play("tick", timeLeft <= 3);
+  }, [live, timeLeft]);
 
   // นับถอยหลังช่วงพัก
   useEffect(() => {
@@ -195,6 +269,15 @@ export default function SoloAI({ initialName = "", onBack }) {
     setFinal(null);
     setPhase("starting");
     socket.emit("ai_start", { name });
+  }
+
+  // ช่วง 2: ส่งคำที่พิมพ์ให้ server ตัดสิน (ฝั่งนี้ไม่รู้คำตอบเลย)
+  function sendAnswer(e) {
+    e.preventDefault();
+    const text = answer.trim();
+    if (phase !== "watch" || !text) return;
+    socket.emit("ai_draw_guess", { text });
+    setAnswer("");
   }
 
   function handleLeave() {
@@ -309,7 +392,11 @@ export default function SoloAI({ initialName = "", onBack }) {
         </div>
 
         <div className="topbar__word">
-          {round && phase !== "starting" ? (
+          {phase === "watch" && watch ? (
+            <span className="topbar__idle" title="หมวดหมู่ของภาพ">
+              ภาพนี้คืออะไร? {watch.category && <>หมวด: <b>{watch.category}</b></>}
+            </span>
+          ) : round && phase !== "starting" ? (
             <span className="topbar__real-word" title="คำที่คุณต้องวาด">
               {round.word}
             </span>
@@ -319,7 +406,7 @@ export default function SoloAI({ initialName = "", onBack }) {
         </div>
 
         <div className="topbar__meta">
-          <Timer timeLeft={phase === "playing" ? timeLeft : null} />
+          <Timer timeLeft={live ? timeLeft : null} />
         </div>
 
         <TopIcons onInfo={() => setShowInfo(true)} onExit={() => setShowExit(true)} />
@@ -327,6 +414,12 @@ export default function SoloAI({ initialName = "", onBack }) {
 
       <main className="game game--solo">
         <section className="game__stage">
+          {/* ป้ายบอกช่วง: ช่วง 1 ขึ้นเฉพาะด่านที่มีช่วง 2 ต่อท้าย */}
+          {phase === "watch" ? (
+            <div className="solo-stage solo-stage--watch">ช่วง 2/2 · ดูภาพแล้วพิมพ์ทาย</div>
+          ) : (phase === "playing" || (phase === "rest" && result?.kind === "draw")) && round?.drawNext ? (
+            <div className="solo-stage">ช่วง 1/2 · คุณวาด AI ทาย</div>
+          ) : null}
           <Canvas
             ref={canvasRef}
             canDraw={canDraw}
@@ -335,13 +428,48 @@ export default function SoloAI({ initialName = "", onBack }) {
             size={Math.min(size, SOLO_MAX_SIZE)}
             onAction={handleAction}
             empty={
-              phase === "playing" && round ? <MascotNote mood="draw">วาด “{round.word}” เลย!</MascotNote> : null
+              phase === "playing" && round ? (
+                <MascotNote mood="draw">วาด “{round.word}” เลย!</MascotNote>
+              ) : phase === "watch" ? (
+                <MascotNote mood="wait">ดูให้ดี แล้วพิมพ์ทายเลย!</MascotNote>
+              ) : null
             }
           />
 
-          <TimeBar timeLeft={phase === "playing" ? timeLeft : null} total={round?.time ?? null} />
+          <TimeBar timeLeft={live ? timeLeft : null} total={stage?.time ?? null} />
 
           <div className="game__answers game__answers--solo">
+            {phase === "watch" ? (
+              <section className="panel ai-box" aria-live="polite">
+                <h2 className="panel__title">พิมพ์คำตอบ</h2>
+                <div className="ai-box__body">
+                  <p className="ai-box__hint">
+                    ภาพนี้เป็นการเล่นซ้ำภาพที่คนจริงเคยวาด (ชุดข้อมูล Google Quick, Draw!) ไม่ใช่ AI สร้างภาพเอง
+                  </p>
+                  {wrongAnswers.length > 0 && (
+                    <p className="ai-box__past">ทายผิดไปแล้ว: {wrongAnswers.join(" · ")}</p>
+                  )}
+                </div>
+                <form className="chat__form" onSubmit={sendAnswer}>
+                  <input
+                    className="input chat__input"
+                    value={answer}
+                    onChange={(e) => setAnswer(e.target.value)}
+                    maxLength={MAX_GUESS_CHARS}
+                    placeholder="พิมพ์คำที่คิดว่าใช่ แล้วกด Enter"
+                    autoComplete="off"
+                    aria-label="พิมพ์คำตอบ"
+                    autoFocus
+                  />
+                  <button type="submit" className="btn btn--primary" disabled={!answer.trim()}>
+                    ทาย
+                  </button>
+                </form>
+                <button type="button" className="link-btn ai-box__leave" onClick={() => setShowExit(true)}>
+                  ออกจากเกม (ไม่บันทึกคะแนน)
+                </button>
+              </section>
+            ) : (
             <section className="panel ai-box" aria-live="polite">
               <h2 className="panel__title">AI คิดว่า...</h2>
               <div className="ai-box__body">
@@ -370,6 +498,7 @@ export default function SoloAI({ initialName = "", onBack }) {
                 ออกจากเกม (ไม่บันทึกคะแนน)
               </button>
             </section>
+            )}
           </div>
         </section>
 
@@ -397,17 +526,23 @@ export default function SoloAI({ initialName = "", onBack }) {
         <Modal labelledBy="solo-rest-title">
           <Mascot mood={result.correct ? "happy" : "shock"} className="mascot--modal" />
           <h2 className="modal__title" id="solo-rest-title">
-            {result.correct ? "🎉 AI ทายถูก!" : "💔 AI ทายไม่ออก"}
+            {result.kind === "guess"
+              ? result.correct ? "🎉 ทายถูก!" : "⏰ ทายไม่ทัน"
+              : result.correct ? "🎉 AI ทายถูก!" : "💔 AI ทายไม่ออก"}
           </h2>
-          <p className="modal__note">คำที่ให้วาดคือ</p>
+          <p className="modal__note">{result.kind === "guess" ? "คำตอบของภาพนี้คือ" : "คำที่ให้วาดคือ"}</p>
           <p className="answer">{result.word}</p>
           {result.correct ? (
-            <p className="solo-result solo-result--ok">+{result.gained} คะแนน · ขึ้นด่านถัดไป</p>
+            <p className="solo-result solo-result--ok">
+              +{result.gained} คะแนน{result.kind === "draw" && round?.drawNext ? " · ผ่านช่วงที่ 1" : " · ผ่านด่านนี้"}
+            </p>
           ) : (
             <p className="solo-result solo-result--bad">เสียไป 1 ชีวิต · เหลือ {hearts}</p>
           )}
           <p className="modal__note">
-            รวม {score} คะแนน · ด่านถัดไปใน <span className="modal__count">{restLeft}</span>
+            รวม {score} คะแนน ·{" "}
+            {result.kind === "draw" && round?.drawNext ? "ช่วงที่ 2 (ดูภาพแล้วทาย)" : "ด่านถัดไป"} ใน{" "}
+            <span className="modal__count">{restLeft}</span>
           </p>
         </Modal>
       )}
@@ -420,7 +555,11 @@ export default function SoloAI({ initialName = "", onBack }) {
           </h2>
           {result && (
             <p className="modal__note">
-              {result.correct ? "" : `ด่านสุดท้าย AI ทายไม่ออก (คำว่า "${result.word}")`}
+              {result.correct
+                ? ""
+                : result.kind === "guess"
+                  ? `ด่านสุดท้ายทายภาพไม่ทัน (คำว่า "${result.word}")`
+                  : `ด่านสุดท้าย AI ทายไม่ออก (คำว่า "${result.word}")`}
             </p>
           )}
           <p className="solo-final__score">{final.totalScore}</p>

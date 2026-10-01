@@ -7,6 +7,7 @@ const { Server } = require("socket.io");
 const { cleanName } = require("./clean");
 const leaderboard = require("./leaderboard");
 const ai = require("./ai");
+const aiDrawings = require("./ai-drawings");
 
 const app = express();
 const server = http.createServer(app);
@@ -599,6 +600,12 @@ const SOLO_NEXT_DELAY_MS = Number(process.env.AI_NEXT_DELAY_MS) || 4000; // พ�
 const SOLO_TIME_OVERRIDE = Number(process.env.AI_TIME_OVERRIDE) || 0;     // ไว้ให้เทสย่อเวลาเท่านั้น
 const SNAPSHOT_MIN_GAP_MS = 4000;     // ภาพถี่กว่านี้ทิ้งเงียบ ๆ (client ส่งทุก 5 วิ) กันเปลืองค่า API
 const MAX_SNAPSHOT_CHARS = 600000;    // เพดานขนาดภาพ (ตัวอักษรของ data URL) · Socket.IO เองก็ตัดที่ ~1MB
+// ช่วงสอง "ดูภาพแล้วทาย": เล่นซ้ำภาพที่คนจริงเคยวาด (Quick, Draw!) ให้จบภายในครึ่งหนึ่งของเวลา
+const DRAW_BUDGET_RATIO = 0.5;
+const DRAW_COLOR = "#000000";
+const DRAW_SIZE = 4;
+const GUESS_MIN_GAP_MS = 300;  // พิมพ์ทายถี่กว่านี้ทิ้งเงียบ ๆ
+const MAX_GUESS_CHARS = 40;
 const IMAGE_RE = /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/;
 
 function stopSolo(socket) {
@@ -606,8 +613,14 @@ function stopSolo(socket) {
   if (!solo) return;
   clearTimeout(solo.roundTimer);
   clearTimeout(solo.nextTimer);
+  clearStrokeTimers(solo);
   solo.over = true;
   socket.data.solo = null;
+}
+
+function clearStrokeTimers(solo) {
+  for (const t of solo.strokeTimers || []) clearTimeout(t);
+  solo.strokeTimers = [];
 }
 
 function startSoloRound(socket, solo) {
@@ -622,11 +635,12 @@ function startSoloRound(socket, solo) {
   solo.busy = false;
   solo.wrong = [];
   solo.drawing = true;
+  solo.drawNext = aiDrawings.available(ai.soloWords(WORD_BANK), cfg.difficulty); // ด่านนี้จะมีช่องสองต่อท้ายไหม
   solo.roundId++;
   clearTimeout(solo.roundTimer);
   solo.roundTimer = setTimeout(() => endSoloRound(socket, solo, false), time * 1000);
   // ส่งคำจริงให้ผู้เล่นได้เพราะเขาเป็นคนวาด · aiMode บอกว่าตอนนี้ AI จริงหรือจำลอง
-  socket.emit("ai_round_start", { level: solo.level, word, time, lives: solo.lives, aiMode: ai.aiMode() });
+  socket.emit("ai_round_start", { level: solo.level, word, time, lives: solo.lives, aiMode: ai.aiMode(), drawNext: solo.drawNext });
 }
 
 function endSoloRound(socket, solo, correct) {
@@ -644,10 +658,78 @@ function endSoloRound(socket, solo, correct) {
   socket.emit("ai_round_end", { correct, gained, totalScore: solo.totalScore, lives: solo.lives });
 
   if (solo.lives <= 0) return endSoloGame(socket, solo);
-  if (correct) solo.level++; // ผ่านถึงขึ้นด่าน · ทายไม่ออกเสียชีวิตแต่ยังอยู่ด่านเดิม (ได้คำใหม่)
+  solo.passed = correct; // ผ่านช่องแรกหรือไม่ — เอาไปตัดสินขึ้นด่านเมื่อจบช่องสอง (advanceSolo)
   solo.nextTimer = setTimeout(() => {
-    if (!solo.over) startSoloRound(socket, solo);
+    if (solo.over) return;
+    if (solo.drawNext) startDrawRound(socket, solo);
+    else advanceSolo(socket, solo);
   }, SOLO_NEXT_DELAY_MS);
+}
+
+// ผ่านช่องแรกถึงขึ้นด่าน · ทายไม่ออกเสียชีวิตแต่ยังอยู่ด่านเดิม (ได้คำใหม่) · แล้วเริ่มช่องแรกของด่านถัดไป
+function advanceSolo(socket, solo) {
+  if (solo.over) return;
+  if (solo.passed) solo.level++;
+  startSoloRound(socket, solo);
+}
+
+// ช่องสอง: server เล่นซ้ำภาพคนจริงทีละเส้น ผู้เล่นพิมพ์ทาย · server ตัดสินเอง
+// ⚠️ ห้ามให้คำตอบ (ทั้งไทย/อังกฤษ) อยู่ใน event ใดก่อน ai_draw_end — ส่งได้แค่หมวดหมู่เป็นคำใบ้
+function startDrawRound(socket, solo) {
+  const cfg = ai.levelConfig(solo.level);
+  const picked = aiDrawings.pick(ai.soloWords(WORD_BANK), cfg.difficulty, solo.usedWords);
+  if (!picked) return advanceSolo(socket, solo); // ไม่มีภาพ → ข้ามช่องสอง ไม่ล่ม
+  const time = SOLO_TIME_OVERRIDE || cfg.time;
+  solo.usedWords.add(picked.word);
+  solo.guessWord = picked.word;
+  solo.guessTime = time;
+  solo.guessStartedAt = Date.now();
+  solo.lastGuessAt = 0;
+  solo.guessing = true;
+  solo.roundId++;
+  clearStrokeTimers(solo);
+  clearTimeout(solo.roundTimer);
+  solo.roundTimer = setTimeout(() => endDrawRound(socket, solo, false), time * 1000);
+  socket.emit("ai_draw_start", { level: solo.level, time, lives: solo.lives, category: picked.category });
+  for (const s of aiDrawings.schedule(picked.strokes, time * 1000 * DRAW_BUDGET_RATIO)) {
+    solo.strokeTimers.push(
+      setTimeout(() => {
+        if (!solo.over && solo.guessing) {
+          socket.emit("ai_draw_stroke", { points: s.points, color: DRAW_COLOR, size: DRAW_SIZE, ms: s.ms });
+        }
+      }, s.at)
+    );
+  }
+}
+
+function endDrawRound(socket, solo, correct) {
+  if (solo.over || !solo.guessing) return;
+  solo.guessing = false;
+  clearTimeout(solo.roundTimer);
+  clearStrokeTimers(solo);
+  let gained = 0;
+  if (correct) {
+    gained = ai.scoreFor(solo.guessTime - (Date.now() - solo.guessStartedAt) / 1000, solo.guessTime);
+    solo.totalScore += gained;
+  } else {
+    solo.lives--;
+  }
+  // เฉลยคำตอบได้แล้ว เพราะช่องนี้จบแล้ว
+  socket.emit("ai_draw_end", { correct, gained, totalScore: solo.totalScore, lives: solo.lives, word: solo.guessWord });
+  if (solo.lives <= 0) return endSoloGame(socket, solo);
+  solo.nextTimer = setTimeout(() => advanceSolo(socket, solo), SOLO_NEXT_DELAY_MS);
+}
+
+function handleSoloGuess(socket, data) {
+  const solo = socket.data.solo;
+  if (!solo || !solo.guessing) return;
+  const text = typeof data?.text === "string" ? data.text.trim() : "";
+  if (!text || text.length > MAX_GUESS_CHARS) return;
+  const now = Date.now();
+  if (now - solo.lastGuessAt < GUESS_MIN_GAP_MS) return;
+  solo.lastGuessAt = now;
+  if (normalize(text) === normalize(solo.guessWord)) return endDrawRound(socket, solo, true);
+  socket.emit("ai_draw_reply", { text, correct: false });
 }
 
 // จบเกม: server บันทึกคะแนนเอง (client ส่งคะแนนมาไม่ได้) แล้วบอกอันดับ
@@ -973,6 +1055,7 @@ io.on("connection", (socket) => {
     const solo = {
       name, level: 1, lives: SOLO_LIVES, totalScore: 0, usedWords: new Set(), roundId: 0,
       over: false, drawing: false, busy: false, roundTimer: null, nextTimer: null,
+      guessing: false, drawNext: false, passed: false, strokeTimers: [],
     };
     socket.data.solo = solo;
     startSoloRound(socket, solo);
@@ -980,6 +1063,10 @@ io.on("connection", (socket) => {
 
   socket.on("ai_snapshot", (data) => {
     handleSoloSnapshot(socket, data);
+  });
+
+  socket.on("ai_draw_guess", (data) => {
+    handleSoloGuess(socket, data);
   });
 
   socket.on("leave_room", () => {
@@ -997,6 +1084,7 @@ io.on("connection", (socket) => {
 const PORT = Number(process.env.PORT) || 3000; // เทสเปิด server ตัวที่สองบนพอร์ตอื่นได้
 // โหลดคลังคำ/โมเดลของ Solo ให้เสร็จก่อนเปิดรับคน (ไม่ throw โหลดไม่ได้ก็ใช้สมองอื่น)
 ai.init().then(() => {
+  aiDrawings.load();
   server.listen(PORT, () => {
     console.log(`server พร้อมแล้ว ที่ http://localhost:${PORT}`);
     console.log(`AI Solo: โหมด ${ai.aiMode()}`);

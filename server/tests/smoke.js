@@ -20,6 +20,10 @@ const os = require("os");
 const SCORES_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "jdi-scores-"));
 const SCORES_FILE = path.join(SCORES_DIR, "scores.json");
 process.env.SCORES_FILE = SCORES_FILE;
+// ช่วง "ดูภาพแล้วทาย" ของ Solo: ปกติชี้ไปไฟล์ที่ไม่มี เพื่อให้ข้อ 21-25 ไม่ขึ้นกับว่าเครื่องนี้ดาวน์โหลดภาพไว้หรือยัง
+// (server ทุกตัวที่เทสสตาร์ทสืบทอดค่านี้) · ข้อ 26 ตั้งค่าเฉพาะของมันเอง
+const NO_DRAWINGS_FILE = path.join(os.tmpdir(), "jdi-no-drawings.json");
+process.env.AI_DRAWINGS_FILE = NO_DRAWINGS_FILE;
 const URL = "http://localhost:3000";
 const SECRET_KEY = "sk-ant-TEST-SECRET-must-never-leak";
 
@@ -1523,7 +1527,8 @@ async function main() {
       await new Promise((r) => setTimeout(r, 4200));
       sock.emit("ai_snapshot", { image: TINY_PNG });
       const err2 = await P.tryWait("game_error", (e) => e.code === "AI_UNAVAILABLE", 3000);
-      checkOk("เชื่อมต่อ API ไม่ได้ → AI_UNAVAILABLE", err2 !== null && P.dump().filter((e) => e.name === "game_error").length === 2);
+      checkOk("เชื่อมต่อ API ไม่ได้ → ได้ AI_UNAVAILABLE", err2 !== null);
+      check("เชื่อมต่อ API ไม่ได้ → game_error รวมสองครั้ง (ครั้งนี้ + ครั้ง 500)", P.dump().filter((e) => e.name === "game_error").map((e) => e.args[0].code), ["AI_UNAVAILABLE", "AI_UNAVAILABLE"]);
       sock.disconnect();
     } finally {
       child2.kill();
@@ -1644,6 +1649,166 @@ async function main() {
       }
     }
     fs.rmSync(brokenDir, { recursive: true, force: true });
+  });
+
+  await runPart("26. Solo ช่วง AI วาด-เราทาย — ไม่มีคำตอบหลุด · ทายถูก/ผิด/หมดเวลา · ไม่มีไฟล์ภาพแล้วข้ามช่วงสอง", async () => {
+    const drawLib = require("../ai-drawings");
+    const words = JSON.parse(fs.readFileSync(path.join(SERVER_DIR, "data", "ai-words.json"), "utf8"));
+
+    // --- หน่วย: ตรวจรูปแบบภาพ + จัดจังหวะ ---
+    checkOk("ภาพถูกรูปแบบผ่าน", !!drawLib.cleanDrawing([[0.1, 0.2, 0.3, 0.4], [0.5, 0.5]]));
+    check("พิกัดเกิน 1 → ทิ้งทั้งภาพ", drawLib.cleanDrawing([[0.1, 0.2], [0.1, 1.5]]), null);
+    check("จำนวนเลขคี่ → ทิ้ง", drawLib.cleanDrawing([[0.1, 0.2, 0.3]]), null);
+    check("ไม่ใช่ตัวเลข → ทิ้ง", drawLib.cleanDrawing([["0.1", 0.2]]), null);
+    check("ภาพว่าง → ทิ้ง", drawLib.cleanDrawing([]), null);
+    const plan = drawLib.schedule([[0.2, 0.2, 0.8, 0.2], [0.8, 0.3, 0.8, 0.9, 0.2, 0.9], [0.5, 0.5]], 30000);
+    const lastEnd = plan[plan.length - 1].at + plan[plan.length - 1].ms;
+    checkOk("จังหวะ: ทุกเส้นเรียงตามเวลาและจบไม่เกินงบ (ครึ่งของ 60 วิ = 30 วิ)", plan.every((x, i) => i === 0 || x.at >= plan[i - 1].at + plan[i - 1].ms) && lastEnd <= 30000);
+    checkOk("จังหวะ: เส้นยาวใช้เวลานานกว่าเส้นสั้น", plan[1].ms > plan[0].ms && plan[0].ms > plan[2].ms);
+
+    // --- ไฟล์ภาพจริง (ถ้าดาวน์โหลดไว้แล้ว) ต้องไม่มีชื่อคำ/ข้อมูลอื่นติดมา ---
+    const realFile = path.join(SERVER_DIR, "data", "ai-drawings.json");
+    if (fs.existsSync(realFile)) {
+      const raw = fs.readFileSync(realFile, "utf8");
+      const data = JSON.parse(raw);
+      const ens = Object.values(words).flat().map((w) => w.en);
+      checkOk("ai-drawings.json ไม่มีฟิลด์ word/countrycode/recognized และไม่มีตัวอักษรไทยเลย", !/"word"|countrycode|recognized|key_id|[฀-๿]/.test(raw));
+      check("ทุกคำใน ai-words.json มีภาพอย่างน้อย 1 ภาพ", ens.filter((en) => !(data[en]?.length > 0)), []);
+      checkOk("ทุกภาพผ่านการตรวจรูปแบบ (พิกัด 0–1)", Object.values(data).flat().every((d) => drawLib.cleanDrawing(d)));
+    } else {
+      console.log("   ⚠️  ข้ามเช็คไฟล์ภาพจริง: ยังไม่ได้ดาวน์โหลด (รัน npm run get-drawings ก่อน)");
+    }
+
+    // --- ผ่าน socket: server ตัวที่สองบนพอร์ต 3001 ชี้ไปไฟล์ภาพชั่วคราวที่มีแค่คำเดียว (cat = แมว, easy) ---
+    // B ของทุกด่านจึงเป็น "แมว" แน่นอน (ไม่มีภาพอื่นให้สุ่ม) เทสถึงรู้คำตอบเพื่อทายถูกได้
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "jdi-draw-"));
+    const fixture = path.join(dir, "ai-drawings.json");
+    fs.writeFileSync(fixture, JSON.stringify({
+      cat: [[[0.2, 0.2, 0.5, 0.3, 0.8, 0.2], [0.3, 0.5, 0.7, 0.5], [0.5, 0.6, 0.5, 0.8]]],
+      dog: [[[0.1, 0.1, 5, 0.3]]], // พิกัดเสีย → ต้องถูกทิ้ง ไม่ทำให้ล่ม
+    }));
+    const spawnChild = (extra) => spawn(process.execPath, ["index.js"], {
+      cwd: SERVER_DIR, stdio: "ignore",
+      env: { ...process.env, SCORES_FILE, PORT: "3001", AI_MODE: "mock", AI_NEXT_DELAY_MS: "300", ...extra },
+    });
+    const waitUp = async () => {
+      for (let i = 0; i < 100; i++) {
+        if (await fetch("http://localhost:3001/test.html").then((r) => r.ok).catch(() => false)) return true;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      return false;
+    };
+    const dumpIdx = (P, name) => P.dump().findIndex((e) => e.name === name);
+
+    let child = spawnChild({ AI_DRAWINGS_FILE: fixture, AI_MOCK_CHANCE: "0", AI_TIME_OVERRIDE: "3" });
+    try {
+      checkOk("server ตัวที่สองเปิดได้", await waitUp());
+      const sock = io("http://localhost:3001", { transports: ["websocket"] });
+      const P = track(sock);
+      await new Promise((r) => sock.on("connect", r));
+      const strokeAt = [];
+      let t0 = 0;
+      sock.on("ai_draw_start", () => { t0 = Date.now(); });
+      sock.on("ai_draw_stroke", () => strokeAt.push(Date.now() - t0));
+
+      sock.emit("ai_start", { name: "DrawMode" });
+      const r1 = await P.wait("ai_round_start");
+      check("ai_round_start บอกว่าด่านนี้มีช่องสองต่อ (drawNext)", r1.drawNext, true);
+
+      // ส่งทายตอนยังเป็นช่องแรก → เงียบ ไม่มีอะไรเกิด
+      sock.emit("ai_draw_guess", { text: "แมว" });
+      check("ทายตอนยังไม่ถึงช่องสอง → เงียบ", (await P.quiet("ai_draw_reply", 300)).length + (await P.quiet("ai_draw_end", 10)).length, 0);
+
+      // A: ไม่ส่งภาพ หมดเวลา เสียชีวิต
+      const e1 = await P.wait("ai_round_end", null, 5000);
+      check("ช่องแรกหมดเวลา: เสียชีวิต 1", [e1.correct, e1.lives], [false, 2]);
+      const start = await P.wait("ai_draw_start", null, 3000);
+      check("ai_draw_start: มีแค่ level time lives category", Object.keys(start).sort(), ["category", "level", "lives", "time"]);
+      check("ai_draw_start: ด่านเดิม เวลา 3 วิ (เทสย่อ) เหลือ 2 ชีวิต หมวดหมู่เป็นข้อความ", [start.level, start.time, start.lives, typeof start.category], [1, 3, 2, "string"]);
+      const startIdx = dumpIdx(P, "ai_draw_start");
+
+      // ข้อมูลเสียทุกแบบ → เงียบ ไม่ล่ม
+      for (const bad of [null, undefined, 5, "แมว", {}, { text: 5 }, { text: "" }, { text: "   " }, { text: "ก".repeat(41) }, { text: ["แมว"] }]) sock.emit("ai_draw_guess", bad);
+      check("ทายด้วยข้อมูลเสีย 10 แบบ → ไม่มีคำตอบกลับ", (await P.quiet("ai_draw_reply", 400)).length, 0);
+      checkOk("ข้อมูลเสียแล้ว server ยังอยู่", await fetch("http://localhost:3001/test.html").then((r) => r.ok).catch(() => false));
+
+      // ทายผิด → ได้ ai_draw_reply · ทายถี่ติดกัน (ก่อน 300ms) ตัวที่สองถูกทิ้ง
+      sock.emit("ai_draw_guess", { text: "หมา" });
+      sock.emit("ai_draw_guess", { text: "ปลา" });
+      const rep = await P.wait("ai_draw_reply");
+      check("ทายผิด: ได้ correct:false", rep, { text: "หมา", correct: false });
+      check("ทายถี่ติดกัน → ตอบแค่ครั้งแรก", (await P.quiet("ai_draw_reply", 200)).length, 1);
+      check("ทายผิดแล้วด่านยังไม่จบ", (await P.quiet("ai_draw_end", 100)).length, 0);
+
+      // ทายถูก (normalize เดิม: ตัดช่องว่าง) → จบช่อง ได้คะแนน
+      await new Promise((r) => setTimeout(r, 350));
+      sock.emit("ai_draw_guess", { text: " แ มว " });
+      const end1 = await P.wait("ai_draw_end", null, 2000);
+      checkOk("ทายถูก: correct, คะแนน 100–500, ชีวิตไม่เสีย, เฉลย แมว",
+        end1.correct === true && end1.gained >= 100 && end1.gained <= 500 && end1.totalScore === end1.gained && end1.lives === 2 && end1.word === "แมว");
+      check("ai_draw_end: มีแค่ correct gained totalScore lives word", Object.keys(end1).sort(), ["correct", "gained", "lives", "totalScore", "word"]);
+
+      // ★ คำตอบต้องไม่หลุดใน event ใดตั้งแต่เริ่มช่องสองจนถึงก่อนเฉลย
+      const endIdx = dumpIdx(P, "ai_draw_end");
+      const leaked = JSON.stringify(P.dump().slice(startIdx, endIdx));
+      checkOk("ไม่มีคำตอบ (ไทย/อังกฤษ) หลุดใน event ใดของช่วง AI วาดก่อนเฉลย", !leaked.includes("แมว") && !/\bcat\b/i.test(leaked));
+      const strokes = P.dump().filter((e) => e.name === "ai_draw_stroke").map((e) => e.args[0]);
+      checkOk("มีเส้นถึง client และพิกัดอยู่ใน 0–1 สีดำ มีช่อง ms", strokes.length >= 1 &&
+        strokes.every((s) => Object.keys(s).sort().join() === "color,ms,points,size" && s.color === "#000000" &&
+          s.points.every((p) => p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1)));
+      const before = strokes.length;
+      await new Promise((r) => setTimeout(r, 1800));
+      check("ทายถูกแล้ว เส้นที่เหลือถูกยกเลิก (ไม่มีเส้นใหม่มาอีก)", P.dump().filter((e) => e.name === "ai_draw_stroke").length, before);
+
+      // ทายซ้ำหลังจบช่องแล้ว → เงียบ
+      sock.emit("ai_draw_guess", { text: "แมว" });
+      check("ทายหลังจบช่อง → ไม่มี ai_draw_end ใหม่ (ยังมีแค่ครั้งเดียว)", (await P.quiet("ai_draw_end", 300)).length, 1);
+
+      // A ไม่ผ่าน → ยังด่าน 1 ชีวิตยัง 2
+      const r2 = await P.wait("ai_round_start", (e) => e.lives === 2, 3000);
+      check("ช่องแรกไม่ผ่านแม้ช่องสองถูก → ยังด่าน 1", [r2.level, r2.lives], [1, 2]);
+
+      // รอบ 2: A หมดเวลา (ชีวิต 1) → B ไม่ทาย → หมดเวลา เสียชีวิตสุดท้าย
+      clearAll(P);
+      strokeAt.length = 0;
+      await P.wait("ai_round_end", null, 5000);
+      await P.wait("ai_draw_start", null, 3000);
+      const end2 = await P.wait("ai_draw_end", null, 5000);
+      check("หมดเวลาช่องสอง: ไม่ได้คะแนน เสียชีวิต เฉลยคำ", [end2.correct, end2.gained, end2.lives, end2.totalScore, end2.word], [false, 0, 0, end1.gained, "แมว"]);
+      check("เส้นทั้ง 3 ถูกวาดครบก่อนหมดเวลา", strokeAt.length, 3);
+      checkOk(`เส้นสุดท้ายมาถึงภายในครึ่งหนึ่งของเวลา (1.5 วิ + เผื่อเครือข่าย) ได้ ${strokeAt.at(-1)} ms`, strokeAt.at(-1) <= 1500 + 400);
+      const over = await P.wait("ai_game_end", null, 3000);
+      check("ชีวิตหมดในช่องสอง → จบเกม บันทึกคะแนน", [over.totalScore, over.levelReached], [end1.gained, 1]);
+      check("ไม่มี key/ช่องแปลก ๆ ใน ai_game_end", Object.keys(over).sort(), ["levelReached", "rank", "totalScore"]);
+      sock.disconnect();
+    } finally {
+      child.kill();
+      await new Promise((r) => setTimeout(r, 400));
+    }
+
+    // --- ไม่มีไฟล์ภาพ / ไฟล์เสีย → ข้ามช่องสอง ไม่ล่ม ---
+    fs.writeFileSync(fixture, "{ not json");
+    for (const [label, file] of [["ไม่มีไฟล์", path.join(dir, "missing.json")], ["ไฟล์ JSON เสีย", fixture]]) {
+      child = spawnChild({ AI_DRAWINGS_FILE: file, AI_MOCK_CHANCE: "1", AI_TIME_OVERRIDE: "3" });
+      try {
+        checkOk(`${label}: server ยังเปิดได้`, await waitUp());
+        const sock = io("http://localhost:3001", { transports: ["websocket"] });
+        const P = track(sock);
+        await new Promise((r) => sock.on("connect", r));
+        sock.emit("ai_start", { name: "NoDraw" });
+        const r1 = await P.wait("ai_round_start");
+        check(`${label}: drawNext เป็น false`, r1.drawNext, false);
+        sock.emit("ai_snapshot", { image: TINY_PNG });
+        await P.wait("ai_round_end");
+        const r2 = await P.wait("ai_round_start", (e) => e.level === 2, 3000);
+        check(`${label}: ข้ามช่องสอง ไปด่าน 2 ตามเดิม`, [r2.level, P.dump().some((e) => e.name === "ai_draw_start")], [2, false]);
+        sock.disconnect();
+      } finally {
+        child.kill();
+        await new Promise((r) => setTimeout(r, 400));
+      }
+    }
+    fs.rmSync(dir, { recursive: true, force: true });
   });
 
   // ปิดทุก socket เพื่อให้โปรเซสจบได้

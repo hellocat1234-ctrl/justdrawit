@@ -880,6 +880,25 @@ input {
   box-shadow: var(--shadow-xs);
 }
 
+/* ป้ายบอกช่วงของ Solo (ช่วง 1/2 · ช่วง 2/2) สูงเท่าป้าย Mini Challenge จึงอยู่ในงบความสูงที่เผื่อไว้แล้ว */
+.solo-stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 14px;
+  border: var(--border);
+  box-shadow: var(--shadow-sm);
+  background: var(--teal);
+  color: var(--white);
+  font-family: var(--font-head);
+  font-weight: 600;
+  text-align: center;
+}
+
+.solo-stage--watch {
+  background: var(--blue);
+}
+
 /* ---- กระดานวาด ---- */
 
 /* พื้นขาว ขอบดำ 4px อัตราส่วน 4:3 (DESIGN.md) */

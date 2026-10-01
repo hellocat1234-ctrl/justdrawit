@@ -27,7 +27,20 @@ cd server && npm run get-model
 
 คำของ Solo อยู่ที่ `server/data/ai-words.json` (คำไทยจับคู่กับชื่ออังกฤษที่โมเดลรู้จัก คัดเฉพาะคำที่โมเดลทายถูกบ่อยพอ)
 
+## ช่วง "ดูภาพแล้วทาย" ของโหมด Solo
+
+ทุกด่านของ Solo มีสองช่วง: ช่วงแรกผู้เล่นวาด AI ทาย ช่วงสอง server เล่นซ้ำภาพวาดที่ **คนจริงเคยวาด** (จากชุดข้อมูล Quick, Draw!)
+ทีละเส้น ผู้เล่นพิมพ์ทาย **ไม่ใช่ AI สร้างภาพเอง** ภาพเก็บที่ `server/data/ai-drawings.json` (พิกัดเส้นล้วน ไม่มีชื่อคำติดมา ประมาณ 2 MB commit ไว้แล้ว)
+สร้างไฟล์ใหม่ได้ด้วย (ต้อง `get-model` ก่อน เพราะใช้โมเดลกรองเฉพาะภาพที่ทายถูกอันดับหนึ่ง ใช้เวลาราว 3 นาที):
+
+```bash
+cd server && npm run get-drawings
+```
+
+ไม่มีไฟล์ภาพหรือไฟล์เสีย ก็ยังเล่นได้ เพียงข้ามช่วงสอง
+
 ## เครดิต
 
 - โมเดล: [VinayHajare/quickdraw-mobilevit-small-onnx](https://huggingface.co/VinayHajare/quickdraw-mobilevit-small-onnx) สัญญาอนุญาต MIT (ปรับต่อจาก MobileViT-Small ของ Apple)
 - ชุดข้อมูลที่ใช้ฝึก: [Google Quick, Draw! Dataset](https://github.com/googlecreativelab/quickdraw-dataset) สัญญาอนุญาต CC BY 4.0
+- ภาพวาดในช่วง "ดูภาพแล้วทาย" (`server/data/ai-drawings.json`): คัดและแปลงพิกัดจากชุดข้อมูล Google Quick, Draw! เดียวกัน (CC BY 4.0) ภาพเป็นผลงานของผู้เล่นทั่วโลกที่ร่วมวาดให้ชุดข้อมูลนี้
