@@ -57,6 +57,33 @@ export default function Toolbar({
       // aria-disabled บอกโปรแกรมอ่านหน้าจอว่าตอนนี้ใช้ไม่ได้ (ตัวกันการกดจริงคือ CSS pointer-events)
       aria-disabled={locked || undefined}
     >
+      {/* ── ปุ่มย้อนกลับ / ทำซ้ำ (ข้อ 4) — อยู่บนสุดของคอลัมน์ เหมือนแถบริบบอนของ Word ──
+          ทั้งคู่เป็นปุ่ม "สั่ง" ไม่ใช่โหมด จึงใช้ tool--action (ทึบเต็มเวลากดได้)
+          ไม่ค้างสถานะกดไว้แบบปุ่มเครื่องมือ · กดไม่ได้เมื่อไม่มีอะไรให้ย้อน/ทำซ้ำ (server เป็นคนบอก)
+          ดูคีย์ลัด ⌘Z / ⌘⇧Z ได้ที่ screens/Game.jsx */}
+      <div className="toolbar__group toolbar__group--history" role="group" aria-label="ย้อนกลับและทำซ้ำ">
+        <button
+          type="button"
+          className="tool tool--action"
+          aria-label="ย้อนกลับ"
+          title="ย้อนกลับ (⌘Z)"
+          disabled={locked || !canUndo}
+          onClick={onUndo}
+        >
+          ↶
+        </button>
+        <button
+          type="button"
+          className="tool tool--action"
+          aria-label="ทำซ้ำ"
+          title="ทำซ้ำ (⌘⇧Z)"
+          disabled={locked || !canRedo}
+          onClick={onRedo}
+        >
+          ↷
+        </button>
+      </div>
+
       {/* ── เครื่องมือ 4 ปุ่ม เรียง 2 คอลัมน์ ── */}
       <div className="toolbar__group toolbar__group--tools" role="group" aria-label="เครื่องมือ">
         <button
@@ -146,33 +173,6 @@ export default function Toolbar({
           onChange={(e) => onSize(Number(e.target.value))}
         />
         <span className="toolbar__size-value">{size}</span>
-      </div>
-
-      {/* ── ปุ่มย้อนกลับ / ทำซ้ำ (ข้อ 4) ──
-          ทั้งคู่เป็นปุ่ม "สั่ง" ไม่ใช่โหมด จึงไม่ค้างสถานะกดไว้แบบปุ่มเครื่องมือ
-          กดไม่ได้เมื่อไม่มีอะไรให้ย้อน/ทำซ้ำ (server เป็นคนบอกว่าเหลืออะไรบ้าง)
-          ดูคีย์ลัด ⌘Z / ⌘⇧Z ได้ที่ screens/Game.jsx */}
-      <div className="toolbar__group toolbar__group--history" role="group" aria-label="ย้อนกลับและทำซ้ำ">
-        <button
-          type="button"
-          className="tool"
-          aria-label="ย้อนกลับ"
-          title="ย้อนกลับ (⌘Z)"
-          disabled={locked || !canUndo}
-          onClick={onUndo}
-        >
-          ↶
-        </button>
-        <button
-          type="button"
-          className="tool"
-          aria-label="ทำซ้ำ"
-          title="ทำซ้ำ (⌘⇧Z)"
-          disabled={locked || !canRedo}
-          onClick={onRedo}
-        >
-          ↷
-        </button>
       </div>
     </div>
   );

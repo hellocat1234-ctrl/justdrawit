@@ -119,6 +119,8 @@ export default function App() {
             askRedo={askRedo}
             bindCanvas={bindCanvas}
             onLeave={handleLeave}
+            // Toast ตัวกลางอยู่ที่ App หน้าเกมจึงขอยืมใช้ (เช่นตอนกดคัดลอกรหัสห้อง)
+            onToast={showToast}
           />
         ) : (
           <div className="screen">

@@ -32,6 +32,7 @@ export default function Game({
   askRedo,
   bindCanvas,
   onLeave,
+  onToast,
 }) {
   const players = room.players;
   const isDrawer = game.drawerId === meId;
@@ -77,6 +78,16 @@ export default function Game({
     return () => window.removeEventListener("keydown", onKey);
   }, [canDraw, askUndo, askRedo]);
 
+  // ── กดรหัสห้องเพื่อคัดลอก (ทุกคนเห็น ไม่ใช่แค่หัวห้อง) ──
+  // ใช้กติกาเดียวกับหน้าห้องรอ: เบราว์เซอร์ที่ยังไม่ให้สิทธิ์คัดลอก (เช่นเปิดผ่าน http บนวงแลน
+  // ที่ไม่ใช่ localhost) จะคัดลอกไม่ได้ — กรณีนั้นบอกให้ผู้ใช้จดรหัสเองจากข้อความใน Toast
+  function copyCode() {
+    navigator.clipboard?.writeText(room.code).then(
+      () => onToast("คัดลอกรหัสห้องแล้ว"),
+      () => onToast(`คัดลอกอัตโนมัติไม่ได้ รหัสห้องคือ ${room.code}`)
+    );
+  }
+
   // ปุ่มล้างจอ — ส่ง action clear_canvas เข้ากระดานทางช่องทางกลางช่องเดียวกับที่วาด
   // (ไม่ได้เรียก painter ตรงๆ เพราะต้องให้มันเก็บลงลิสต์และส่งออกให้คนอื่นด้วย
   //  และต้องให้ server เก็บเป็นการกระทำหนึ่งอัน เพื่อให้กดย้อนกลับได้)
@@ -108,6 +119,16 @@ export default function Game({
         </div>
 
         <div className="topbar__meta">
+          {/* รหัสห้องอยู่ข้างเลขรอบ ทุกคนในห้องเห็นและกดคัดลอกได้หมด */}
+          <button
+            type="button"
+            className="room-code"
+            onClick={copyCode}
+            title="กดเพื่อคัดลอกรหัสห้อง"
+            aria-label={`คัดลอกรหัสห้อง ${room.code}`}
+          >
+            ห้อง <span className="room-code__digits">{room.code}</span>
+          </button>
           <span className="topbar__round">
             รอบ {game.roundNo ?? "-"}/{game.totalRounds ?? "-"}
           </span>
