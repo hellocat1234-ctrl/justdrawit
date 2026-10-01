@@ -99,27 +99,48 @@ function isValidMonth(month) {
   return typeof month === "string" && MONTH_RE.test(month);
 }
 
-// 20 อันดับแรก · month = "YYYY-MM" หรือ null (ตลอดกาล)
-// เรียง คะแนนมากก่อน → ถ้าเท่ากัน ด่านไกลกว่าก่อน → ถ้ายังเท่า คนที่ทำได้ก่อนได้อันดับดีกว่า
-function getLeaderboard(month = null) {
-  const rows = loadScores().filter((r) => !month || r.playedAt.startsWith(month + "-"));
-  rows.sort(
-    (a, b) =>
-      b.score - a.score ||
-      b.levelReached - a.levelReached ||
-      a.playedAt.localeCompare(b.playedAt) ||
-      (Number(a.id) || 0) - (Number(b.id) || 0)
+// เทียบแถวสองแถว: คะแนนมากก่อน → ด่านไกลกว่าก่อน → เล่นก่อนได้เปรียบ → id น้อยกว่า
+function compareRows(a, b) {
+  return (
+    b.score - a.score ||
+    b.levelReached - a.levelReached ||
+    a.playedAt.localeCompare(b.playedAt) ||
+    (Number(a.id) || 0) - (Number(b.id) || 0)
   );
+}
+
+// หนึ่งชื่อหนึ่งแถว: เอาเกมที่ดีที่สุดของแต่ละชื่อ (ชื่อตรงกันทุกตัวอักษรนับเป็นคนเดียวกัน)
+// เรียงตามกติกาเดียวกับ compareRows · month = "YYYY-MM" หรือ null (ตลอดกาล)
+// ถ้าใส่ month จะเลือก "เกมที่ดีที่สุดในเดือนนั้น" ไม่ใช่ของตลอดกาล
+function bestPerName(month = null) {
+  const best = new Map();
+  for (const r of loadScores()) {
+    if (month && !r.playedAt.startsWith(month + "-")) continue;
+    const cur = best.get(r.name);
+    if (!cur || compareRows(r, cur) < 0) best.set(r.name, r);
+  }
+  return [...best.values()].sort(compareRows);
+}
+
+// 20 อันดับแรก · อันดับไม่ซ้ำกัน นับ 1, 2, 3...
+function getLeaderboard(month = null) {
   return {
     month,
     // ส่งเฉพาะ 4 ช่องที่หน้าจอใช้ ไม่ส่ง id กับเวลาเล่น
-    top: rows.slice(0, TOP_LIMIT).map((r, i) => ({
-      rank: i + 1,
-      name: r.name,
-      score: r.score,
-      levelReached: r.levelReached,
-    })),
+    top: bestPerName(month)
+      .slice(0, TOP_LIMIT)
+      .map((r, i) => ({ rank: i + 1, name: r.name, score: r.score, levelReached: r.levelReached })),
   };
 }
 
-module.exports = { SCORES_FILE, saveScore, getLeaderboard, isValidMonth, loadScores, writeScores, formatPlayedAt };
+// อันดับตลอดกาลของเกมหนึ่งเกม = 1 + จำนวน "คนอื่น" ที่เกมดีที่สุดของเขาดีกว่าหรือเท่าเกมนี้
+// (เท่ากันทุกอย่าง คนที่ทำได้ก่อนอยู่เหนือ) ใช้ตอนจบเกม Solo หลัง saveScore แล้ว
+function rankOf({ name, score, levelReached }) {
+  const me = { name: cleanName(name), score: cleanCount(score), levelReached: cleanCount(levelReached) };
+  const ahead = bestPerName(null).filter(
+    (r) => r.name !== me.name && (r.score > me.score || (r.score === me.score && r.levelReached >= me.levelReached))
+  );
+  return ahead.length + 1;
+}
+
+module.exports = { SCORES_FILE, saveScore, getLeaderboard, rankOf, isValidMonth, loadScores, writeScores, formatPlayedAt };

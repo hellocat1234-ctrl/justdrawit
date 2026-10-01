@@ -36,7 +36,7 @@ Just Drawit (ชื่อทีม TATA.IO) เป็นเว็บเกมว
 | server | Node.js + Express + Socket.IO (CommonJS, `require`) พอร์ต 3000 |
 | client | React + Vite, CSS ธรรมดา (ไม่ใช้ Tailwind), HTML5 Canvas, `socket.io-client` |
 | เก็บคะแนน | ไฟล์ `server/data/scores.json` (ไม่ใช้ database เพื่อให้ทันเวลา) |
-| AI ทายภาพ | AI ที่ดูรูปได้ (vision) เรียกจาก server เท่านั้น key อยู่ใน `server/.env` |
+| AI ทายภาพ | Claude (vision) เรียกจาก server เท่านั้น ผ่าน `fetch` ของ Node (ไม่ใช้ SDK) key อยู่ใน `server/.env` โหลดด้วย `dotenv` · ไม่มี key = โหมดจำลอง |
 
 ห้ามเพิ่ม library ใหม่โดยไม่บอกผู้ใช้ก่อนว่าคืออะไร ทำไมต้องใช้
 
@@ -46,6 +46,8 @@ Just Drawit (ชื่อทีม TATA.IO) เป็นเว็บเกมว
 justdrawit/
 ├─ CLAUDE.md  DESIGN.md  PROMPTS.md  events.md  README.md  .gitignore
 ├─ server/
+│  ├─ ai.js             ← AI ทายภาพ (Claude/จำลอง) · กติกาด่าน · สุ่มคำ · คิดคะแนน Solo ไม่ผูกกับ socket
+│  ├─ .env.example      ← ตัวอย่างไฟล์ .env (คัดลอกเป็น .env แล้วใส่ ANTHROPIC_API_KEY)
 │  ├─ index.js          ← server หลัก (ทำไว้แล้ว ดู "สถานะงาน")
 │  ├─ leaderboard.js    ← อ่าน/บันทึก scores.json (`saveScore` `getLeaderboard`) ไม่ผูกกับ socket
 │  ├─ clean.js          ← `cleanName` ใช้ร่วมกันระหว่าง index.js กับ leaderboard.js
@@ -616,8 +618,7 @@ selector ระดับเดียวกัน ตัวที่อยู่�
 · **หน้า Leaderboard เต็ม 16/16** (เทสเดิมรันซ้ำหลังย้ายไปใช้ `RankTable`) · `npm run build` ผ่าน
 · **ไม่ได้รัน `npm test` เพราะรอบนี้ไม่แตะ `server/`**
 
-**ข้อที่ตั้งใจเลือก**: หนึ่งแถว = หนึ่งเกม คนเดียวเล่นหลายรอบจึงติดอันดับได้หลายแถว (ตรงกับตัวอย่างใน `events.md`)
-ถ้าอยากให้หนึ่งคนหนึ่งแถว (เอาคะแนนดีสุด) แก้ที่ `getLeaderboard` ที่เดียว
+**ข้อที่ตั้งใจเลือก**: (เดิม) หนึ่งแถว = หนึ่งเกม — **ถูกเปลี่ยนเป็นหนึ่งชื่อหนึ่งแถวแล้วในข้อ 7 ส่วนที่ 1**
 
 ทดสอบแล้ว: **server 235/235** (`npm test` — เพิ่มข้อ 19 API 28 ข้อ: รูปแบบตรงสัญญา · ตัดที่ 20 · เรียงถูกรวมกรณีคะแนนเท่ากัน ·
 กรองเดือน · เดือนว่าง · month ผิด 9 แบบได้ 400 · ไฟล์ไม่มี/JSON เสีย/ไม่ใช่ array ไม่ล่ม · แถวเพี้ยนถูกกรอง
@@ -626,8 +627,24 @@ selector ระดับเดียวกัน ตัวที่อยู่�
 · ตลอดกาล · เดือนว่างขึ้นข้อความ · สลับเดือนเร็วๆ ได้ผลเดือนสุดท้าย · จอ 390px ไม่ล้น ปุ่ม ≥44px · กลับหน้าแรก · ไม่มี error ในคอนโซล)
 · `npm run seed` ทั้งครั้งแรกและครั้งที่สอง (ไม่ทับ) · `npm run build` ผ่าน
 
+### เสร็จแล้ว (ข้อ 7 ส่วนที่ 1 — Solo ฝั่ง server · client ยังไม่ได้ทำ)
+**สัญญากลางถูกแก้** (`events.md` หัวข้อ 6 และ 7 + 2 บรรทัดในตาราง "บันทึกการแก้ไข") · **เพิ่ม library `dotenv`** (ผู้ใช้สั่งให้ใช้) ส่วนเรียก Claude ใช้ `fetch` ของ Node จึงไม่เพิ่ม SDK
+
+- **Leaderboard เป็นหนึ่งชื่อหนึ่งแถว** (`bestPerName` ใน `leaderboard.js`) เอาเกมดีสุดของแต่ละชื่อ รายเดือนเอาเกมดีสุดในเดือนนั้น
+  ไฟล์ยังเก็บทุกเกม · เพิ่ม `rankOf` ไว้บอกอันดับตอนจบเกม (**ข้อสรุปเดิมของข้อ 6 "หนึ่งเกมหนึ่งแถว" ถูกแทนที่แล้ว**)
+- `server/ai.js` · `levelConfig` (ด่าน 1–2 60 วิ easy · 3–4 45 วิ medium · 5+ 30 วิ hard) · `pickWord` ไม่ซ้ำในเกมเดียว · `scoreFor` 100–500
+- AI สองโหมด: มี `ANTHROPIC_API_KEY` → Claude ดูภาพจริง (รุ่นตั้งได้ด้วย `AI_MODEL` ค่าเริ่มต้น Haiku 4.5) **ไม่ส่งคำตอบไปให้ Claude** · ไม่มี key → โหมดจำลอง · `ai_round_start.aiMode` บอก client
+- event: `ai_start` → `ai_round_start` · `ai_snapshot` → `ai_guess` · `ai_round_end` · `ai_game_end` สถานะอยู่ที่ `socket.data.solo` ไม่ปนกับห้อง
+- ด่านที่ทายไม่ออกเสียชีวิตแต่อยู่ด่านเดิม · server ขึ้นด่านถัดไปเองหลังพัก 4 วิ · ออกกลางเกม (`leave_room`/หลุด) ไม่บันทึกคะแนน
+- `ai_snapshot`: เช็ครูปแบบ data URL + เพดาน 600,000 ตัวอักษร + ห่างกัน ≥ 4 วิ + ทีละภาพ · ผิดกติกาทิ้งเงียบ · เรียก AI พัง → `game_error` `AI_UNAVAILABLE` ไม่ล่ม ไม่เสียชีวิต
+- จบเกม server เรียก `saveScore` เอง · client ส่งคะแนนเองไม่ได้ · key ไม่เคยอยู่ใน event ใดๆ (มีเทสตรวจ)
+- **env สำหรับเทสเท่านั้น**: `AI_MODE=mock` · `AI_MOCK_CHANCE` · `AI_TIME_OVERRIDE` · `AI_NEXT_DELAY_MS` · `AI_API_URL` · `PORT` (server ตัวที่สองของเทสข้อ 24 ใช้พอร์ต 3001)
+
+ทดสอบแล้ว: **`npm test` 300/300** (เพิ่มข้อ 21–24: หนึ่งชื่อหนึ่งแถว/`rankOf` · กติกาด่านและโหมดทาย · เกม Solo ผ่าน socket ครบตั้งแต่เริ่มจนจบและบันทึกคะแนน · โหมด Claude ชี้ไป API ปลอม ตรวจว่าภาพถึงและคำตอบไม่ถึง API · API พังแล้วได้ `AI_UNAVAILABLE`)
+· **ยังไม่ได้ทดสอบกับ Claude API จริง** (ไม่มี key ในเครื่องเทส) · ยังไม่ได้ทำ client
+
 ### ยังไม่ได้ทำ (ตามลำดับใน PROMPTS.md)
-- [ ] Solo แข่งกับ AI
+- [ ] Solo แข่งกับ AI ส่วนที่ 2: หน้าจอ client (`SoloAI.jsx` · ปุ่ม 🤖 Solo ใน Lobby · ส่ง `ai_snapshot` ทุก 5 วิ)
 - [ ] รวม client เข้ากับ server พอร์ตเดียว ให้เพื่อนในวงแลนเข้าเล่นได้
 
 ## คำสั่งที่ใช้บ่อย

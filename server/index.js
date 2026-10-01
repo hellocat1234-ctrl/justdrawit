@@ -1,9 +1,12 @@
+// โหลด server/.env (API key) เข้า process.env ก่อนอย่างอื่น · ไม่มีไฟล์ก็ไม่เป็นไร (Solo จะใช้โหมดจำลอง)
+require("dotenv").config({ path: __dirname + "/.env", quiet: true });
 const express = require("express");
 const http = require("http");
 const fs = require("fs");
 const { Server } = require("socket.io");
 const { cleanName } = require("./clean");
 const leaderboard = require("./leaderboard");
+const ai = require("./ai");
 
 const app = express();
 const server = http.createServer(app);
@@ -576,6 +579,113 @@ function leaveRoom(socket) {
   io.to(code).emit("room_update", roomState(room));
 }
 
+// ---------- Solo แข่งกับ AI (ข้อ 7) ----------
+// สถานะเกมเก็บที่ socket.data.solo ของผู้เล่นคนนั้นเอง ไม่เกี่ยวกับ rooms จึงไม่ปนกับเกมห้อง
+// กติกาทั้งหมด (เวลา ชีวิต คะแนน) server คุมเอง client ส่งได้แค่ภาพ
+const SOLO_LIVES = 3;
+const SOLO_NEXT_DELAY_MS = Number(process.env.AI_NEXT_DELAY_MS) || 4000; // พักให้ดูผลก่อนขึ้นด่านถัดไป
+const SOLO_TIME_OVERRIDE = Number(process.env.AI_TIME_OVERRIDE) || 0;     // ไว้ให้เทสย่อเวลาเท่านั้น
+const SNAPSHOT_MIN_GAP_MS = 4000;     // ภาพถี่กว่านี้ทิ้งเงียบ ๆ (client ส่งทุก 5 วิ) กันเปลืองค่า API
+const MAX_SNAPSHOT_CHARS = 600000;    // เพดานขนาดภาพ (ตัวอักษรของ data URL) · Socket.IO เองก็ตัดที่ ~1MB
+const IMAGE_RE = /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/;
+
+function stopSolo(socket) {
+  const solo = socket.data.solo;
+  if (!solo) return;
+  clearTimeout(solo.roundTimer);
+  clearTimeout(solo.nextTimer);
+  solo.over = true;
+  socket.data.solo = null;
+}
+
+function startSoloRound(socket, solo) {
+  const cfg = ai.levelConfig(solo.level);
+  const time = SOLO_TIME_OVERRIDE || cfg.time;
+  const word = ai.pickWord(WORD_BANK, cfg.difficulty, solo.usedWords);
+  solo.usedWords.add(word);
+  solo.word = word;
+  solo.time = time;
+  solo.startedAt = Date.now();
+  solo.lastSnapshotAt = 0;
+  solo.busy = false;
+  solo.wrong = [];
+  solo.drawing = true;
+  solo.roundId++;
+  clearTimeout(solo.roundTimer);
+  solo.roundTimer = setTimeout(() => endSoloRound(socket, solo, false), time * 1000);
+  // ส่งคำจริงให้ผู้เล่นได้เพราะเขาเป็นคนวาด · aiMode บอกว่าตอนนี้ AI จริงหรือจำลอง
+  socket.emit("ai_round_start", { level: solo.level, word, time, lives: solo.lives, aiMode: ai.aiMode() });
+}
+
+function endSoloRound(socket, solo, correct) {
+  if (solo.over || !solo.drawing) return; // จบไปแล้ว (เช่น ทายถูกพร้อมเวลาหมด) ไม่นับซ้ำ
+  solo.drawing = false;
+  clearTimeout(solo.roundTimer);
+  let gained = 0;
+  if (correct) {
+    const timeLeft = solo.time - (Date.now() - solo.startedAt) / 1000;
+    gained = ai.scoreFor(timeLeft, solo.time);
+    solo.totalScore += gained;
+  } else {
+    solo.lives--;
+  }
+  socket.emit("ai_round_end", { correct, gained, totalScore: solo.totalScore, lives: solo.lives });
+
+  if (solo.lives <= 0) return endSoloGame(socket, solo);
+  if (correct) solo.level++; // ผ่านถึงขึ้นด่าน · ทายไม่ออกเสียชีวิตแต่ยังอยู่ด่านเดิม (ได้คำใหม่)
+  solo.nextTimer = setTimeout(() => {
+    if (!solo.over) startSoloRound(socket, solo);
+  }, SOLO_NEXT_DELAY_MS);
+}
+
+// จบเกม: server บันทึกคะแนนเอง (client ส่งคะแนนมาไม่ได้) แล้วบอกอันดับ
+function endSoloGame(socket, solo) {
+  const result = { name: solo.name, score: solo.totalScore, levelReached: solo.level };
+  solo.over = true;
+  socket.data.solo = null;
+  leaderboard.saveScore(result);
+  socket.emit("ai_game_end", {
+    totalScore: result.score,
+    levelReached: result.levelReached,
+    rank: leaderboard.rankOf(result),
+  });
+}
+
+async function handleSoloSnapshot(socket, data) {
+  const solo = socket.data.solo;
+  if (!solo || !solo.drawing || solo.busy) return;
+  const image = data?.image;
+  if (typeof image !== "string" || image.length > MAX_SNAPSHOT_CHARS || !IMAGE_RE.test(image)) return;
+  const now = Date.now();
+  if (now - solo.lastSnapshotAt < SNAPSHOT_MIN_GAP_MS) return;
+  solo.lastSnapshotAt = now;
+  solo.busy = true; // ทีละภาพ ไม่ให้เรียก AI ซ้อนกัน
+  const roundId = solo.roundId;
+  try {
+    const { guess, correct } = await ai.guessImage({
+      image,
+      word: solo.word,
+      allWords: ALL_WORDS,
+      elapsed: (now - solo.startedAt) / 1000,
+      time: solo.time,
+      wrong: solo.wrong,
+    });
+    // รอ AI อยู่ระหว่างนั้นด่านอาจจบหรือผู้เล่นออกไปแล้ว ผลที่มาช้าต้องทิ้ง
+    if (solo.over || !solo.drawing || solo.roundId !== roundId) return;
+    if (!correct) solo.wrong.push(guess);
+    socket.emit("ai_guess", { guess, correct });
+    if (correct) endSoloRound(socket, solo, true);
+  } catch (err) {
+    // log แค่ข้อความ ไม่ log key หรือคำขอ
+    console.warn("เรียก AI ไม่สำเร็จ:", err.message);
+    if (!solo.over && solo.roundId === roundId) {
+      socket.emit("game_error", { code: "AI_UNAVAILABLE", message: "AI ตอบไม่ได้ในตอนนี้ ลองใหม่อีกครั้ง" });
+    }
+  } finally {
+    if (solo.roundId === roundId) solo.busy = false;
+  }
+}
+
 // ---------- เมื่อมีผู้เล่นต่อเข้ามา ----------
 io.on("connection", (socket) => {
   console.log("มีคนเชื่อมต่อเข้ามา:", socket.id);
@@ -842,15 +952,37 @@ io.on("connection", (socket) => {
     revealHint(room, "drawer");
   });
 
-  socket.on("leave_room", () => leaveRoom(socket));
+  // ---- Solo แข่งกับ AI ----
+  socket.on("ai_start", (data) => {
+    const name = cleanName(data?.name);
+    if (!name) return socket.emit("game_error", { code: "INVALID_NAME", message: "กรุณาใส่ชื่อ" });
+    leaveRoom(socket); // ผู้เล่นหนึ่งคนอยู่ได้อย่างเดียว: ห้อง หรือ Solo
+    stopSolo(socket);  // กดเริ่มซ้ำ = เริ่มเกมใหม่ เกมเก่าทิ้ง
+    const solo = {
+      name, level: 1, lives: SOLO_LIVES, totalScore: 0, usedWords: new Set(), roundId: 0,
+      over: false, drawing: false, busy: false, roundTimer: null, nextTimer: null,
+    };
+    socket.data.solo = solo;
+    startSoloRound(socket, solo);
+  });
+
+  socket.on("ai_snapshot", (data) => {
+    handleSoloSnapshot(socket, data);
+  });
+
+  socket.on("leave_room", () => {
+    stopSolo(socket); // ออกจาก Solo กลางเกม = ไม่บันทึกคะแนน
+    leaveRoom(socket);
+  });
 
   socket.on("disconnect", () => {
     console.log("มีคนหลุดออกไป:", socket.id);
+    stopSolo(socket); // เล่นไม่จบ = ไม่บันทึกคะแนน
     leaveRoom(socket);
   });
 });
 
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000; // เทสเปิด server ตัวที่สองบนพอร์ตอื่นได้
 server.listen(PORT, () => {
   console.log(`server พร้อมแล้ว ที่ http://localhost:${PORT}`);
 });

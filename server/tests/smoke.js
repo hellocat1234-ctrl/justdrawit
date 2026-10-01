@@ -21,6 +21,7 @@ const SCORES_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "jdi-scores-"));
 const SCORES_FILE = path.join(SCORES_DIR, "scores.json");
 process.env.SCORES_FILE = SCORES_FILE;
 const URL = "http://localhost:3000";
+const SECRET_KEY = "sk-ant-TEST-SECRET-must-never-leak";
 
 // ใช้ client ของ socket.io ที่มีอยู่ใน node_modules แล้วรันบน Node ได้เลย
 // ต้องอ้อมผ่าน package.json เพราะ exports map ของ socket.io ไม่เปิดให้ require "socket.io/client-dist/..." ตรงๆ
@@ -71,11 +72,14 @@ function connect() {
 // ทำแบบนี้เพื่อไม่พลาด event ที่มาถึงก่อนเราจะเรียก wait (ซึ่งเกิดได้บ่อยมาก)
 function track(socket) {
   const events = [];
-  socket.onAny((name, ...args) => events.push({ name, args }));
+  const all = []; // ไม่ถูก clear — ไว้ตรวจว่าไม่มีความลับหลุดมาตลอดการเชื่อมต่อ
+  socket.onAny((name, ...args) => { events.push({ name, args }); all.push({ name, args }); });
 
   const rec = {
     socket,
     clear() { events.length = 0; },
+    // ทุก event ที่ได้รับตลอดการเชื่อมต่อ (ไม่ถูก clear)
+    dump() { return all; },
     // predicate ส่ง null/undefined มาได้ แปลว่า "เอา event ชื่อนี้ตัวแรกก็พอ"
     wait(name, predicate, ms = 4000) {
       const match = typeof predicate === "function" ? predicate : () => true;
@@ -182,7 +186,9 @@ async function startServer() {
   child = spawn(process.execPath, ["index.js"], {
     cwd: SERVER_DIR,
     stdio: ["ignore", "pipe", "pipe"],
-    env: { ...process.env, SCORES_FILE },
+    // ข้อ 21-24 (Solo): บังคับ AI โหมดจำลอง ทายถูกเสมอ · ย่อเวลาด่านเหลือ 2 วิ · พักก่อนด่านถัดไป 0.3 วิ
+    // ใส่ key ปลอมไว้ด้วย เพื่อเช็คว่า key ไม่หลุดถึง client เลย
+    env: { ...process.env, SCORES_FILE, AI_MODE: "mock", AI_MOCK_CHANCE: "1", AI_TIME_OVERRIDE: "2", AI_NEXT_DELAY_MS: "300", ANTHROPIC_API_KEY: SECRET_KEY },
   });
   const collect = (buf) => serverLog.push(buf.toString().trimEnd());
   child.stdout.on("data", collect);
@@ -1272,6 +1278,250 @@ async function main() {
     check("ไฟล์เสีย → บันทึกได้ เริ่มนับ id ใหม่", after && [after.id, after.name], [1, "Joy"]);
     check("ไฟล์ใหม่อ่านได้และมีแถวเดียว", JSON.parse(fs.readFileSync(SCORES_FILE, "utf8")).length, 1);
     checkOk("ไฟล์เสียถูกเก็บสำรองไว้ ไม่หายไปเฉยๆ", fs.readdirSync(SCORES_DIR).some((f) => f.includes(".broken-")));
+  });
+
+
+  // ---------- Solo แข่งกับ AI (ข้อ 21-24) ----------
+  const TINY_PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+  const readRows = () => JSON.parse(fs.readFileSync(SCORES_FILE, "utf8"));
+
+  await runPart("21. Leaderboard หนึ่งชื่อหนึ่งแถว · rankOf", async () => {
+    const { rankOf } = require("../leaderboard");
+    const at = (d) => `2026-10-${d} 10:00`;
+    fs.writeFileSync(SCORES_FILE, JSON.stringify([
+      { id: 1, name: "Mew", score: 500, levelReached: 3, playedAt: at("01") },
+      { id: 2, name: "Mew", score: 1300, levelReached: 6, playedAt: at("02") },
+      { id: 3, name: "Mew", score: 900, levelReached: 5, playedAt: at("03") },
+      { id: 4, name: "Tar", score: 1300, levelReached: 7, playedAt: at("04") },
+      { id: 5, name: "Joy", score: 700, levelReached: 4, playedAt: "2026-09-10 10:00" },
+      { id: 6, name: "Joy", score: 100, levelReached: 1, playedAt: at("05") },
+    ]));
+    let r = await getBoard();
+    check("ตลอดกาล: Mew โผล่แถวเดียวด้วยเกมที่ดีที่สุด",
+      r.body.top.map((t) => [t.rank, t.name, t.score]), [[1, "Tar", 1300], [2, "Mew", 1300], [3, "Joy", 700]]);
+    r = await getBoard("?month=2026-10");
+    check("รายเดือน: เลือกเกมที่ดีที่สุด 'ในเดือนนั้น' (Joy เดือนนี้เหลือ 100)",
+      r.body.top.map((t) => [t.name, t.score]), [["Tar", 1300], ["Mew", 1300], ["Joy", 100]]);
+    check("rankOf: เกม 1500 คะแนนของคนใหม่ได้อันดับ 1", rankOf({ name: "New", score: 1500, levelReached: 1 }), 1);
+    check("rankOf: 1000 คะแนนตามหลัง Tar กับ Mew = อันดับ 3", rankOf({ name: "New", score: 1000, levelReached: 1 }), 3);
+    check("rankOf: คะแนนเท่ากันแต่ด่านน้อยกว่า ตามหลังคนเดิม", rankOf({ name: "New", score: 1300, levelReached: 5 }), 3);
+    check("rankOf: ไม่นับตัวเอง (Mew 1300/6 ได้อันดับ 2 ไม่ใช่ 3)", rankOf({ name: "Mew", score: 1300, levelReached: 6 }), 2);
+    check("rankOf: ไฟล์ว่างได้อันดับ 1", (fs.rmSync(SCORES_FILE, { force: true }), rankOf({ name: "A", score: 0, levelReached: 1 })), 1);
+  });
+
+  await runPart("22. AI/กติกาด่าน — ความยาก · สุ่มคำ · คะแนน · โหมดทาย (ไม่ผ่าน socket)", async () => {
+    const aiLib = require("../ai");
+    check("ด่าน 1-2 = 60 วิ easy", [1, 2].map((l) => aiLib.levelConfig(l)), [{ time: 60, difficulty: "easy" }, { time: 60, difficulty: "easy" }]);
+    check("ด่าน 3-4 = 45 วิ medium", [3, 4].map((l) => aiLib.levelConfig(l)), [{ time: 45, difficulty: "medium" }, { time: 45, difficulty: "medium" }]);
+    check("ด่าน 5 ขึ้นไป = 30 วิ hard", [5, 9, 50].map((l) => aiLib.levelConfig(l)), Array(3).fill({ time: 30, difficulty: "hard" }));
+
+    const words = readWordFile();
+    const bank = Object.fromEntries(["easy", "medium", "hard"].map((l) => [l, words[l]]));
+    for (const level of ["easy", "medium", "hard"]) {
+      const names = bank[level].map((w) => w.word);
+      let allIn = true;
+      for (let i = 0; i < 40; i++) if (!names.includes(aiLib.pickWord(bank, level))) allIn = false;
+      checkOk(`สุ่มระดับ ${level} ได้คำจากระดับนั้นเสมอ`, allIn);
+    }
+    const used = new Set();
+    for (let i = 0; i < 20; i++) used.add(aiLib.pickWord(bank, "hard", used));
+    check("สุ่ม 20 ครั้งโดยส่งชุดที่ใช้แล้ว ไม่ซ้ำเลย", used.size, 20);
+    check("คลังว่างทั้งหมด → null ไม่ล่ม", aiLib.pickWord({ easy: [], medium: [], hard: [] }, "easy"), null);
+    check("ระดับว่างถอยไประดับที่มีคำ", aiLib.pickWord({ easy: [{ word: "แมว" }] }, "hard"), "แมว");
+
+    check("เหลือเวลาเต็ม = 500 คะแนน", aiLib.scoreFor(60, 60), 500);
+    check("เหลือเวลา 0 = 100 คะแนน", aiLib.scoreFor(0, 60), 100);
+    checkOk("ยิ่งเหลือเวลามากยิ่งได้เยอะ", aiLib.scoreFor(45, 60) > aiLib.scoreFor(15, 60));
+    checkOk("เวลาติดลบ/เกินไม่ทำให้คะแนนหลุดช่วง 100-500", aiLib.scoreFor(-5, 60) === 100 && aiLib.scoreFor(99, 60) === 500);
+
+    // โหมดจำลองในโปรเซสเทสนี้ (ไม่มี key) — ตั้งโอกาสตายตัวเพื่อเทสทั้งสองทาง
+    const saved = { m: process.env.AI_MODE, c: process.env.AI_MOCK_CHANCE, k: process.env.ANTHROPIC_API_KEY };
+    delete process.env.AI_MODE; delete process.env.ANTHROPIC_API_KEY;
+    check("ไม่มี key → โหมดจำลอง", aiLib.aiMode(), "mock");
+    process.env.ANTHROPIC_API_KEY = "x";
+    check("มี key → โหมด claude", aiLib.aiMode(), "claude");
+    process.env.AI_MODE = "mock";
+    check("AI_MODE=mock บังคับโหมดจำลองแม้มี key", aiLib.aiMode(), "mock");
+    process.env.AI_MOCK_CHANCE = "0";
+    const g0 = await aiLib.guessImage({ image: TINY_PNG, word: "แมว", allWords: ["แมว", "หมา", "ปลา"], elapsed: 1, time: 60, wrong: [] });
+    check("จำลอง โอกาส 0 → ทายผิด ไม่ใช่คำจริง", [g0.correct, g0.guess !== "แมว"], [false, true]);
+    process.env.AI_MOCK_CHANCE = "1";
+    const g1 = await aiLib.guessImage({ image: TINY_PNG, word: "แมว", allWords: ["แมว", "หมา"], elapsed: 1, time: 60, wrong: [] });
+    check("จำลอง โอกาส 1 → ทายถูก", [g1.correct, g1.guess], [true, "แมว"]);
+    delete process.env.AI_MOCK_CHANCE;
+    checkOk("จำลอง ยิ่งนานยิ่งมีโอกาส (ต้นเวลา < ท้ายเวลา)", aiLib.mockChance(1, 60) < aiLib.mockChance(55, 60) && aiLib.mockChance(999, 60) <= 0.85 + 1e-9);
+    for (const [k, v] of Object.entries({ AI_MODE: saved.m, AI_MOCK_CHANCE: saved.c, ANTHROPIC_API_KEY: saved.k })) {
+      v === undefined ? delete process.env[k] : (process.env[k] = v);
+    }
+    check("parseImage รับ png และปฏิเสธข้อความอื่น", [!!aiLib.parseImage(TINY_PNG), aiLib.parseImage("data:text/html;base64,AAAA"), aiLib.parseImage("x")], [true, null, null]);
+  });
+
+  await runPart("23. Solo ผ่าน socket — เริ่ม · ทายถูก · เสียชีวิต · จบเกม · บันทึกคะแนน · key ไม่หลุด", async () => {
+    fs.rmSync(SCORES_FILE, { force: true });
+    const words = readWordFile();
+    const names = (lv) => words[lv].map((w) => w.word);
+    const P = track(await connect());
+
+    P.socket.emit("ai_start", { name: "   " });
+    checkOk("ชื่อว่าง → game_error INVALID_NAME", (await P.tryWait("game_error", (e) => e.code === "INVALID_NAME", 1500)) !== null);
+    check("ชื่อว่าง → ไม่เริ่มเกม", (await P.quiet("ai_round_start", 300)).length, 0);
+    P.socket.emit("ai_snapshot", { image: TINY_PNG });
+    check("ส่งภาพทั้งที่ไม่ได้เล่น → เงียบ", (await P.quiet("ai_guess", 400)).length, 0);
+
+    // --- ด่าน 1 ---
+    clearAll(P);
+    P.socket.emit("ai_start", { name: " SoloMew " });
+    const r1 = await P.wait("ai_round_start");
+    check("ด่าน 1: level/lives/aiMode (เวลาถูกย่อเหลือ 2 วิโดยเทส)", [r1.level, r1.lives, r1.aiMode, r1.time], [1, 3, "mock", 2]);
+    checkOk("ด่าน 1: คำมาจากระดับ easy", names("easy").includes(r1.word));
+
+    // ภาพเสียทุกแบบต้องถูกทิ้งเงียบ ๆ และ server ไม่ล่ม
+    const bad = [null, 5, {}, "", "data:image/png;base64,", "data:text/html;base64,AAAA", "data:image/png;base64,@@@@",
+      "data:image/png;base64," + "A".repeat(700000), { image: TINY_PNG }];
+    for (const image of bad) P.socket.emit("ai_snapshot", { image });
+    P.socket.emit("ai_snapshot");
+    P.socket.emit("ai_snapshot", null);
+    check("ภาพเสีย 11 แบบ → ไม่มี ai_guess", (await P.quiet("ai_guess", 500)).length, 0);
+    checkOk("ภาพเสียแล้ว server ยังอยู่", await serverIsUp());
+
+    // ส่งสองภาพติดกัน → ตอบแค่ภาพเดียว (กันเรียก AI ถี่)
+    P.socket.emit("ai_snapshot", { image: TINY_PNG });
+    P.socket.emit("ai_snapshot", { image: TINY_PNG });
+    const g = await P.wait("ai_guess");
+    check("AI ทายถูก (โหมดจำลองโอกาส 100%)", [g.guess, g.correct], [r1.word, true]);
+    const e1 = await P.wait("ai_round_end");
+    check("จบด่าน 1: ทายถูก lives ยังเต็ม", [e1.correct, e1.lives], [true, 3]);
+    checkOk("คะแนนอยู่ช่วง 100-500 และ totalScore เท่ากับที่ได้", e1.gained >= 100 && e1.gained <= 500 && e1.totalScore === e1.gained);
+    check("ส่งสองภาพติดกัน ได้ ai_guess แค่ 1", (await P.quiet("ai_guess", 200)).length, 1);
+
+    // --- ด่าน 2 (ผ่านแล้วขึ้นด่าน) ---
+    const r2 = await P.wait("ai_round_start", (e) => e.level === 2, 3000);
+    check("ขึ้นด่าน 2 อัตโนมัติ", [r2.level, r2.lives], [2, 3]);
+    checkOk("ด่าน 2 ยัง easy · ไม่ซ้ำคำด่านก่อน", names("easy").includes(r2.word) && r2.word !== r1.word);
+
+    // --- ไม่ส่งภาพเลย → หมดเวลา เสียชีวิต แต่ยังด่านเดิม ---
+    clearAll(P);
+    const e2 = await P.wait("ai_round_end", null, 4000);
+    check("หมดเวลา: ไม่ถูก ไม่ได้คะแนน เสีย 1 ชีวิต", [e2.correct, e2.gained, e2.lives, e2.totalScore], [false, 0, 2, e1.totalScore]);
+    const r2b = await P.wait("ai_round_start", null, 3000);
+    check("เสียชีวิตแล้วยังด่านเดิม", [r2b.level, r2b.lives], [2, 2]);
+    clearAll(P);
+    P.socket.emit("ai_snapshot", { image: TINY_PNG }); // ทายถูกในด่านนี้ → ด่าน 3 (medium)
+    const eWin2 = await P.wait("ai_round_end");
+    const r3 = await P.wait("ai_round_start", (e) => e.level === 3, 3000);
+    checkOk("ด่าน 3 คำมาจาก medium", names("medium").includes(r3.word));
+    clearAll(P);
+
+    // --- เสียครบ 3 ชีวิต ---
+    const e3 = await P.wait("ai_round_end", null, 4000);
+    await P.wait("ai_round_start", null, 3000);
+    const e4 = await P.wait("ai_round_end", (e) => e.lives === 0, 4000);
+    check("เสียชีวิตลำดับ: 1 → 0", [e3.lives, e4.lives], [1, 0]);
+    const end = await P.wait("ai_game_end", null, 3000);
+    check("จบเกม: คะแนนรวม = ผลรวมที่ได้ และด่านที่ถึง = 3", [end.totalScore, end.levelReached], [e1.gained + eWin2.gained, 3]);
+    check("จบเกม: ไม่มีช่อง key", Object.keys(end).sort(), ["levelReached", "rank", "totalScore"]);
+    P.clear();
+    check("จบเกมแล้วไม่มีด่านใหม่", (await P.quiet("ai_round_start", 600)).length, 0);
+
+    // --- server บันทึกคะแนนเอง ---
+    const rows = readRows();
+    check("server บันทึกคะแนนแล้ว 1 แถว ชื่อถูกตัดช่องว่าง", rows.map((r) => [r.name, r.score, r.levelReached]), [["SoloMew", end.totalScore, 3]]);
+    check("rank เป็นอันดับ 1 (ยังไม่มีใครอื่น)", end.rank, 1);
+
+    // --- client ส่งคะแนนเองไม่ได้ ---
+    for (const ev of ["ai_game_end", "ai_round_end", "save_score", "ai_score"]) {
+      P.socket.emit(ev, { name: "Cheat", totalScore: 999999, score: 999999, levelReached: 99 });
+    }
+    await new Promise((r) => setTimeout(r, 300));
+    check("client ส่งคะแนนปลอม → ไฟล์ไม่เปลี่ยน", readRows().length, 1);
+
+    // --- ออกกลางเกม = ไม่บันทึก ---
+    clearAll(P);
+    P.socket.emit("ai_start", { name: "Quitter" });
+    await P.wait("ai_round_start");
+    P.socket.emit("ai_snapshot", { image: TINY_PNG });
+    await P.wait("ai_round_end"); // ได้คะแนนแล้ว แต่ยังไม่จบเกม
+    P.socket.disconnect();
+    await new Promise((r) => setTimeout(r, 2800)); // เลยเวลาที่ด่านถัดไปจะเริ่ม/หมดเวลา
+    check("ออกกลางเกม → ไม่บันทึก และ server ไม่ล่ม", [readRows().length, await serverIsUp()], [1, true]);
+
+    // --- key ไม่หลุดถึง client ในทุก event ที่ได้รับ ---
+    checkOk("ไม่มี event ไหนมี key", JSON.stringify(P.dump()).includes(SECRET_KEY) === false);
+  });
+
+  await runPart("24. Solo โหมด Claude — ส่งภาพจริงไปที่ API ปลอม · ไม่ส่งคำตอบ · API พัง → AI_UNAVAILABLE", async () => {
+    const http = require("http");
+    const requests = [];
+    let failNext = false;
+    const stub = http.createServer((req, res) => {
+      let body = "";
+      req.on("data", (c) => (body += c));
+      req.on("end", () => {
+        requests.push({ headers: req.headers, body });
+        if (failNext) { res.writeHead(500); return res.end("boom"); }
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ content: [{ type: "text", text: "ยีราฟ\nอะไรก็ได้ต่อท้าย" }] }));
+      });
+    });
+    await new Promise((r) => stub.listen(0, r));
+    const stubUrl = `http://localhost:${stub.address().port}/v1/messages`;
+
+    // server ตัวที่สองบนพอร์ต 3001 ใช้ key ปลอม ไม่บังคับ mock จึงอยู่โหมด claude
+    const env = { ...process.env, SCORES_FILE, PORT: "3001", ANTHROPIC_API_KEY: SECRET_KEY, AI_API_URL: stubUrl, AI_NEXT_DELAY_MS: "300" };
+    delete env.AI_MODE; delete env.AI_MOCK_CHANCE; delete env.AI_TIME_OVERRIDE;
+    const child2 = spawn(process.execPath, ["index.js"], { cwd: SERVER_DIR, stdio: "ignore", env });
+    try {
+      let up = false;
+      for (let i = 0; i < 100 && !up; i++) {
+        up = await fetch("http://localhost:3001/test.html").then((r) => r.ok).catch(() => false);
+        if (!up) await new Promise((r) => setTimeout(r, 100));
+      }
+      checkOk("server ตัวที่สองเปิดได้", up);
+
+      const sock = io("http://localhost:3001", { transports: ["websocket"] });
+      const P = track(sock);
+      await new Promise((r) => sock.on("connect", r));
+
+      sock.emit("ai_start", { name: "ClaudeMode" });
+      const r1 = await P.wait("ai_round_start");
+      check("ด่าน 1 โหมด claude เวลา 60 วิตามอีเวนต์", [r1.aiMode, r1.time, r1.level], ["claude", 60, 1]);
+
+      sock.emit("ai_snapshot", { image: TINY_PNG });
+      const g = await P.wait("ai_guess");
+      check("ได้คำทายแรกบรรทัดเดียวจาก API", [g.guess, g.correct], ["ยีราฟ", false]);
+      check("เรียก API ครั้งเดียว ใช้ key ใน header", [requests.length, requests[0]?.headers["x-api-key"]], [1, SECRET_KEY]);
+      const sent = JSON.parse(requests[0].body);
+      checkOk("คำขอมีภาพ base64 จริง", sent.messages[0].content.some((c) => c.type === "image" && c.source.type === "base64"));
+      checkOk("คำขอ **ไม่มีคำตอบ** ของด่านนี้", !requests[0].body.includes(r1.word));
+      checkOk("key ไม่หลุดถึง client", !JSON.stringify(P.dump()).includes(SECRET_KEY));
+
+      // ภาพถัดมาถี่เกินไป (ก่อน 4 วิ) ต้องไม่เรียก API เพิ่ม
+      sock.emit("ai_snapshot", { image: TINY_PNG });
+      await new Promise((r) => setTimeout(r, 400));
+      check("ส่งภาพถี่กว่า 4 วิ → ไม่เรียก API เพิ่ม ไม่ตอบ", [requests.length, P.dump().filter((e) => e.name === "ai_guess").length], [1, 1]);
+
+      // ยังทำงานได้หลังครบ 4 วิ และคำที่ทายผิดไปแล้วถูกส่งไปบอกให้ไม่ตอบซ้ำ
+      await new Promise((r) => setTimeout(r, 3700));
+      failNext = true;
+      sock.emit("ai_snapshot", { image: TINY_PNG });
+      const err = await P.tryWait("game_error", (e) => e.code === "AI_UNAVAILABLE", 3000);
+      checkOk("API ตอบ 500 → game_error AI_UNAVAILABLE", err !== null);
+      checkOk("ภาพที่สองครบ 4 วิ เรียก API จริง และบอกคำที่ผิดไปแล้ว", requests.length === 2 && requests[1].body.includes("ยีราฟ"));
+      checkOk("API พังแล้ว server ไม่ล่ม", await fetch("http://localhost:3001/test.html").then((r) => r.ok).catch(() => false));
+      check("เรียก AI ไม่ได้ ไม่เสียชีวิตและไม่จบด่าน", (await P.quiet("ai_round_end", 300)).length, 0);
+
+      // ปลายทางไม่ตอบเลย (เชื่อมต่อไม่ได้) ก็ต้องไม่ล่ม
+      failNext = false;
+      stub.close();
+      await new Promise((r) => setTimeout(r, 4200));
+      sock.emit("ai_snapshot", { image: TINY_PNG });
+      const err2 = await P.tryWait("game_error", (e) => e.code === "AI_UNAVAILABLE", 3000);
+      checkOk("เชื่อมต่อ API ไม่ได้ → AI_UNAVAILABLE", err2 !== null && P.dump().filter((e) => e.name === "game_error").length === 2);
+      sock.disconnect();
+    } finally {
+      child2.kill();
+      stub.close();
+    }
   });
 
   // ปิดทุก socket เพื่อให้โปรเซสจบได้
