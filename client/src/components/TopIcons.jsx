@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import Modal from "./Modal";
 import TeamRules from "./TeamRules";
-import { useReduceMotion, useSoundMuted } from "../hooks/usePrefs";
+import { useMusicOn, useReduceMotion, useSoundMuted } from "../hooks/usePrefs";
 import { Icon } from "./Icons";
 import { copyText, inviteUrl } from "../invite";
 
@@ -112,6 +112,7 @@ export function ExitModal({ onYes, onNo, note }) {
 // ── ไอคอนบนแถบบน: เสียง · แชร์ลิงก์ (เฉพาะในห้อง) · ข้อมูล · ออก (สูง ≥44px ให้นิ้วแตะบนไอแพดได้) ──
 export function TopIcons({ onInfo, onExit, shareCode = null, onToast }) {
   const [muted, setMuted] = useSoundMuted();
+  const [music, setMusic] = useMusicOn();
 
   // ลิงก์เชิญ: คัดลอก URL ที่มี ?room=รหัส ให้เพื่อนกดแล้วเข้าห้องได้เลย
   async function share() {
@@ -130,17 +131,34 @@ export function TopIcons({ onInfo, onExit, shareCode = null, onToast }) {
       >
         <Icon name={muted ? "mute" : "sound"} size={26} />
       </button>
+      <button
+        type="button"
+        className={`icon-btn${music ? "" : " icon-btn--off"}`}
+        onClick={() => setMusic(!music)}
+        aria-pressed={music}
+        aria-label={music ? "ปิดเพลง" : "เปิดเพลง"}
+        title={music ? "ปิดเพลง" : "เปิดเพลง"}
+      >
+        <Icon name="music" size={26} />
+      </button>
+      {/* แชร์ = คัดลอกลิงก์เชิญ · รหัสห้องแสดงอยู่บนปุ่มเลย (ทุกคนในห้องเห็นและกดได้) */}
       {shareCode && (
-        <button type="button" className="icon-btn" onClick={share} aria-label="คัดลอกลิงก์เชิญ" title="คัดลอกลิงก์เชิญ">
+        <button
+          type="button"
+          className="icon-btn icon-btn--share"
+          onClick={share}
+          aria-label={`คัดลอกลิงก์เชิญ รหัสห้อง ${shareCode}`}
+          title="คัดลอกลิงก์เชิญ"
+        >
           <Icon name="share" size={24} />
+          <span className="room-code__digits">{shareCode}</span>
         </button>
       )}
       <button type="button" className="icon-btn" onClick={onInfo} aria-label="กติกา" title="กติกา">
         <Icon name="info" size={26} />
       </button>
-      <button type="button" className="icon-btn icon-btn--exit" onClick={onExit} title="ออกจากเกม">
+      <button type="button" className="icon-btn icon-btn--exit" onClick={onExit} aria-label="ออกจากเกม" title="ออกจากเกม">
         <DoorArt className="door--icon" />
-        <span>ออก</span>
       </button>
     </div>
   );

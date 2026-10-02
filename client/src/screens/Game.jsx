@@ -162,16 +162,6 @@ export default function Game({
     return () => window.removeEventListener("keydown", onKey);
   }, [canDraw, historyLocked, askUndo, askRedo]);
 
-  // ── กดรหัสห้องเพื่อคัดลอก (ทุกคนเห็น ไม่ใช่แค่หัวห้อง) ──
-  // ใช้กติกาเดียวกับหน้าห้องรอ: เบราว์เซอร์ที่ยังไม่ให้สิทธิ์คัดลอก (เช่นเปิดผ่าน http บนวงแลน
-  // ที่ไม่ใช่ localhost) จะคัดลอกไม่ได้ — กรณีนั้นบอกให้ผู้ใช้จดรหัสเองจากข้อความใน Toast
-  function copyCode() {
-    navigator.clipboard?.writeText(room.code).then(
-      () => onToast("คัดลอกรหัสห้องแล้ว"),
-      () => onToast(`คัดลอกอัตโนมัติไม่ได้ รหัสห้องคือ ${room.code}`)
-    );
-  }
-
   // ปุ่มล้างจอ — ส่ง action clear_canvas เข้ากระดานทางช่องทางกลางช่องเดียวกับที่วาด
   // (ไม่ได้เรียก painter ตรงๆ เพราะต้องให้มันเก็บลงลิสต์และส่งออกให้คนอื่นด้วย
   //  และต้องให้ server เก็บเป็นการกระทำหนึ่งอัน เพื่อให้กดย้อนกลับได้)
@@ -209,58 +199,7 @@ export default function Game({
           </div>
         )}
 
-        {/* คนวาดเห็นคำจริง (ได้จาก your_word) คนอื่นเห็นคำใบ้เป็นขีด */}
-        <div className="topbar__word">
-          {isDrawer && game.word ? (
-            <span className="topbar__real-word" title="คำที่คุณต้องวาด">
-              {game.word}
-            </span>
-          ) : game.options ? (
-            <span className="topbar__idle">กำลังเลือกคำ...</span>
-          ) : game.round ? (
-            // คำใบ้ขึ้นช้า: ยังไม่เปิดก็ยังไม่โชว์ช่อง บอกก่อนว่าอีกกี่วิจะได้เห็น
-            // (game.hint มาจาก server เท่านั้น — client ไม่เดาช่องเองเด็ดขาด)
-            game.hint ? (
-              <HintSlots hint={game.hint} />
-            ) : (
-              <span className="topbar__idle">
-                คำใบ้จะขึ้นเมื่อเหลือ {game.hintAt ?? "?"} วิ
-              </span>
-            )
-          ) : (
-            <span className="topbar__idle">—</span>
-          )}
-        </div>
-
-        {/* ปุ่มเปิดคำใบ้ก่อนเวลา — เห็นเฉพาะคนวาดตอนกำลังวาด และกดได้ครั้งเดียวต่อตา
-            ยังไม่เปิด = กดได้ · เปิดแล้ว (game.hint มีค่า) = ปิดปุ่ม ค้างไว้ให้เห็นว่ามีปุ่มนี้อยู่ */}
-        {isDrawer && drawing && (
-          <button
-            type="button"
-            className="hint-btn"
-            onClick={askHint}
-            disabled={game.hint !== null}
-            title={
-              game.hint !== null
-                ? "ตานี้เปิดคำใบ้ไปแล้ว"
-                : "ให้ทุกคนเห็นช่องคำใบ้ก่อนเวลา (ได้ครั้งเดียวต่อตา)"
-            }
-          >
-            <Icon name="bulb" size={20} /> {game.hint !== null ? "เปิดคำใบ้แล้ว" : "ให้คำใบ้"}
-          </button>
-        )}
-
         <div className="topbar__meta">
-          {/* รหัสห้องอยู่ข้างเลขรอบ ทุกคนในห้องเห็นและกดคัดลอกได้หมด */}
-          <button
-            type="button"
-            className="room-code"
-            onClick={copyCode}
-            title="กดเพื่อคัดลอกรหัสห้อง"
-            aria-label={`คัดลอกรหัสห้อง ${room.code}`}
-          >
-            ห้อง <span className="room-code__digits">{room.code}</span>
-          </button>
           <span className="topbar__round">
             รอบ {game.roundNo ?? "-"}/{game.totalRounds ?? "-"}
           </span>
@@ -293,7 +232,53 @@ export default function Game({
         </aside>
 
         <section className="game__stage">
-          <ChallengeBanner challenge={game.round?.challenge} />
+          {/* แถบคำ: Mini Challenge (แถบเล็กซ้าย) · คำที่ต้องวาด/คำใบ้ (กลาง ตัวใหญ่) · ปุ่มให้คำใบ้ (ขวา) */}
+          <div className="wordbar">
+            <div className="wordbar__side">
+              <ChallengeBanner challenge={game.round?.challenge} />
+            </div>
+
+            {/* คนวาดเห็นคำจริง (ได้จาก your_word) คนอื่นเห็นคำใบ้เป็นขีด */}
+            <div className="wordbar__word">
+              {isDrawer && game.word ? (
+                <span className="topbar__real-word" title="คำที่คุณต้องวาด">
+                  {game.word}
+                </span>
+              ) : game.options ? (
+                <span className="topbar__idle">กำลังเลือกคำ...</span>
+              ) : game.round ? (
+                // คำใบ้ขึ้นช้า: ยังไม่เปิดก็ยังไม่โชว์ช่อง บอกก่อนว่าอีกกี่วิจะได้เห็น
+                // (game.hint มาจาก server เท่านั้น — client ไม่เดาช่องเองเด็ดขาด)
+                game.hint ? (
+                  <HintSlots hint={game.hint} />
+                ) : (
+                  <span className="topbar__idle">คำใบ้จะขึ้นเมื่อเหลือ {game.hintAt ?? "?"} วิ</span>
+                )
+              ) : (
+                <span className="topbar__idle">—</span>
+              )}
+            </div>
+
+            {/* ปุ่มเปิดคำใบ้ก่อนเวลา — เห็นเฉพาะคนวาดตอนกำลังวาด และกดได้ครั้งเดียวต่อตา
+                ยังไม่เปิด = กดได้ · เปิดแล้ว (game.hint มีค่า) = ปิดปุ่ม ค้างไว้ให้เห็นว่ามีปุ่มนี้อยู่ */}
+            <div className="wordbar__side wordbar__side--end">
+              {isDrawer && drawing && (
+                <button
+                  type="button"
+                  className="hint-btn"
+                  onClick={askHint}
+                  disabled={game.hint !== null}
+                  title={
+                    game.hint !== null
+                      ? "ตานี้เปิดคำใบ้ไปแล้ว"
+                      : "ให้ทุกคนเห็นช่องคำใบ้ก่อนเวลา (ได้ครั้งเดียวต่อตา)"
+                  }
+                >
+                  <Icon name="bulb" size={20} /> {game.hint !== null ? "เปิดแล้ว" : "คำใบ้"}
+                </button>
+              )}
+            </div>
+          </div>
 
           <Canvas
             ref={canvasRef}

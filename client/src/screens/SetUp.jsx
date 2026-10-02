@@ -28,9 +28,11 @@ export default function SetUp({ connected, profile, onBack, onEntered, onError }
 
       <div className="setup">
         <section className="panel setup__opts" aria-label="ตั้งค่าห้อง">
-          <h2 className="panel__title">ตั้งค่า</h2>
+          <h2 className="panel__title setup__title">ตั้งค่า</h2>
           <div className="setup__opt">
-            <span className="field__label">จำนวนรอบ</span>
+            <h3 className="setup__head">
+              <Icon name="flag" size={22} /> จำนวนรอบ
+            </h3>
             <div className="segmented" role="group" aria-label="จำนวนรอบ">
               {ROUND_CHOICES.map((n) => (
                 <button
@@ -46,7 +48,9 @@ export default function SetUp({ connected, profile, onBack, onEntered, onError }
             </div>
           </div>
           <div className="setup__opt">
-            <span className="field__label">เวลาวาด (วินาที)</span>
+            <h3 className="setup__head">
+              <Icon name="clock" size={22} /> เวลาวาด <small>(วินาที)</small>
+            </h3>
             <div className="segmented" role="group" aria-label="เวลาวาดต่อตา">
               {TIME_CHOICES.map((n) => (
                 <button

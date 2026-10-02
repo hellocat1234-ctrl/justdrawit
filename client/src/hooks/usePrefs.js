@@ -7,6 +7,10 @@ export function useSoundMuted() {
   return [useSyncExternalStore(sfx.subscribe, sfx.isMuted), sfx.setMuted];
 }
 
+export function useMusicOn() {
+  return [useSyncExternalStore(sfx.subscribeMusic, sfx.isMusicOn), sfx.setMusic];
+}
+
 export function useReduceMotion() {
   return [useSyncExternalStore(subscribeMotion, reduceMotion), setReduceMotion];
 }

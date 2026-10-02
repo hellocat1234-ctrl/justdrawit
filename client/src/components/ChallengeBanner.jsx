@@ -1,24 +1,27 @@
 import { Icon } from "./Icons";
 
 // ป้าย Mini Challenge เหนือกระดาน (ข้อ 5)
-// แถบสีม่วง ตัวหนังสือขาว ถอดความจาก events.md หัวข้อ 5 ตรง ๆ
+// แถบเล็กสีม่วง (อยู่ซ้ายของคำที่ต้องวาด) ตัวหนังสือขาว ถอดความจาก events.md หัวข้อ 5 ตรง ๆ
 //
 // ป้ายนี้ขึ้นกับ "challenge ของตานี้" ที่ server ส่งมากับ round_start เท่านั้น
 // type "none" (หรือไม่มีก้อนมาเลย) = ไม่มีป้าย ไม่ต้องแสดงอะไร
 // คนที่เข้าห้องกลางตาก็ได้ challenge ชุดเดียวกัน เพราะ server ส่ง round_start ให้เขาใหม่พร้อมค่านั้น
 const CHALLENGES = {
-  colour_fix: ["palette", "COLOUR FIX วาดได้สีเดียว"],
-  dont_lift_pen: ["pen", "DON'T LIFT PEN ห้ามยกปากกา"],
+  colour_fix: ["palette", "COLOUR FIX", "วาดได้สีเดียว"],
+  dont_lift_pen: ["pen", "DON'T LIFT PEN", "ห้ามยกปากกา"],
 };
 
 export default function ChallengeBanner({ challenge }) {
   const found = CHALLENGES[challenge?.type];
   if (!found) return null;
-  const [icon, text] = found;
+  const [icon, title, sub] = found;
   return (
     <div className="challenge">
-      <Icon name={icon} size={22} />
-      {text}
+      <Icon name={icon} size={24} />
+      <span className="challenge__text">
+        <b>{title}</b>
+        <small>{sub}</small>
+      </span>
       {/* colour_fix โชว์ตัวอย่างสีที่ล็อกไว้ด้วย เพราะ "วาดได้สีเดียว" ไม่ได้บอกว่าสีอะไร
           ถ้าไม่โชว์ ผู้เล่นต้องเดาเองว่าสีที่ใช้ได้คือสีไหน (client ที่ไม่โชว์ = ผู้เล่นกดผิดแล้วงงว่าทำไมไม่ขึ้น)
           สีมาจาก server เท่านั้น ห้ามให้ client สุ่มหรือเดาเอง */}

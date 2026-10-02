@@ -810,7 +810,7 @@ input {
      392px คือที่กันไว้ให้: แถบบน 66 + ป้าย Mini Challenge 44 + แถบเวลา 14 + กล่องใต้กระดาน 176
      + ช่องว่าง 36 + ขอบจอ 28 + เผื่ออีก 28 (เดิม 360 ก่อนมีแถบเวลา · วัดจริงแล้วที่ 386 ล้น 3px) — คำนวณจากของจริงแล้ววัดซ้ำในเบราว์เซอร์
      ตั้งใจให้กระดานกินที่ที่เหลือทั้งหมด เพราะเป็นสิ่งที่ผู้เล่นจ้องตลอดเวลา */
-  max-width: calc((100dvh - 392px) * 4 / 3);
+  max-width: calc((100dvh - 402px) * 4 / 3);
   margin: 0 auto;
 }
 
@@ -1965,7 +1965,7 @@ select[class] {
   border: var(--border);
   background: var(--cream);
   box-shadow: var(--shadow-xs);
-  max-width: calc((100dvh - 392px) * 4 / 3);
+  max-width: calc((100dvh - 402px) * 4 / 3);
   overflow: hidden;
 }
 
@@ -3076,5 +3076,518 @@ select[class] {
 @media (max-width: 560px) {
   .mode-cards {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ==========================================================================
+   รอบ 3B — หน้าเกมโปร่งขึ้น · แถบเครื่องมือไอคอนลอย · แถบผู้เล่นเป็นระเบียบ · ปุ่มหน้าแรกสดขึ้น · SET UP
+   ========================================================================== */
+
+:root {
+  /* สีสดสำหรับปุ่มใหญ่หน้าแรก (สดกว่าสีปุ่มปกติ ให้เป็นจุดเด่นที่สุดของหน้า) */
+  --green-bright: #1fd964;
+  --blue-bright: #2a8cff;
+  --pink-bright: #ff4aa8;
+}
+
+/* ---- แถบบน: ชื่อคนวาด · รอบ · เวลา · ไอคอนเล็กๆ ---- */
+.topbar {
+  gap: 14px;
+  padding: 6px 14px;
+}
+
+.topbar__who {
+  flex: 1;
+  min-width: 0;
+}
+
+.topbar__meta {
+  margin-left: auto;
+}
+
+.top-icons {
+  gap: 6px;
+}
+
+.icon-btn--off .pix {
+  opacity: 0.4;
+}
+
+.icon-btn--share {
+  gap: 8px;
+  padding: 0 10px;
+}
+
+.icon-btn--share .room-code__digits {
+  font-size: 15px;
+}
+
+/* ---- แถบคำเหนือกระดาน: Mini Challenge (ซ้าย) · คำ/คำใบ้ (กลาง) · ปุ่มให้คำใบ้ (ขวา) ---- */
+.wordbar {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  height: 66px;
+  padding: 6px 12px;
+  border: var(--border-thick);
+  box-shadow: var(--shadow-sm);
+  background: var(--cream);
+  color: var(--ink);
+}
+
+.wordbar__side {
+  display: flex;
+  min-width: 0;
+}
+
+.wordbar__side--end {
+  justify-content: flex-end;
+}
+
+.wordbar__word {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  text-align: center;
+}
+
+.wordbar .topbar__real-word {
+  font-size: 40px;
+  letter-spacing: 3px;
+  line-height: 1.15;
+}
+
+.wordbar .topbar__idle {
+  font-size: 18px;
+}
+
+.wordbar .hint__slot {
+  width: 22px;
+  min-height: 24px;
+  font-size: 24px;
+}
+
+/* Mini Challenge ย่อเป็นแถบเล็กข้างคำ */
+.wordbar .challenge {
+  gap: 8px;
+  padding: 4px 10px;
+  text-align: left;
+  box-shadow: var(--shadow-xs);
+}
+
+.challenge__text {
+  display: grid;
+  line-height: 1.15;
+}
+
+.challenge__text b {
+  font-family: var(--font-pixel);
+  font-weight: 400;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+}
+
+.challenge__text small {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* ---- โครงหน้าเกมจอคอม: แถบผู้เล่นสูงเท่ากระดานพอดี ----
+   .game__stage ถูกถอดกล่องออก (display: contents) แล้ววางลูกลงตาราง
+   แถวที่ 2 = กระดาน · แถบผู้เล่น (ซ้าย) กับเครื่องมือ (ขวา) อยู่แถวเดียวกัน
+   แถบผู้เล่นใส่ contain: size เพื่อไม่ให้ความสูงของรายชื่อไปดันแถวสูงกว่ากระดาน (ล้นก็เลื่อนในกรอบ)
+   --board-w คือความกว้างสูงสุดของกระดานที่คิดจากความสูงจอ (สูตรเดียวกับ .board) ใช้กับทุกชิ้นในคอลัมน์กลางให้ขอบตรงกัน */
+@media (min-width: 1001px) {
+  .game:not(.game--solo) {
+    --board-w: max(320px, calc((100dvh - 402px) * 4 / 3));
+    grid-template-columns: 290px minmax(0, var(--board-w)) 240px;
+    justify-content: center;
+    row-gap: 12px;
+    align-items: start;
+  }
+
+  .game:not(.game--solo) .game__stage {
+    display: contents;
+  }
+
+  .game:not(.game--solo) .wordbar {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .game:not(.game--solo) .board {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .game:not(.game--solo) .timebar {
+    grid-column: 2;
+    grid-row: 3;
+  }
+
+  .game:not(.game--solo) .game__answers {
+    grid-column: 2;
+    grid-row: 4;
+  }
+
+  .game:not(.game--solo) .game__players {
+    grid-column: 1;
+    grid-row: 2;
+    align-self: stretch;
+    contain: size;
+    overflow-y: auto;
+  }
+
+  .game:not(.game--solo) .game__tools {
+    grid-column: 3;
+    grid-row: 2;
+  }
+}
+
+@media (min-width: 1001px) and (max-width: 1400px) {
+  .game:not(.game--solo) {
+    grid-template-columns: 250px minmax(0, var(--board-w)) 232px;
+  }
+}
+
+/* ---- แถบผู้เล่น: ทุกแถวเรียงเหมือนกัน (อวตาร · ชื่อ+ป้าย · คะแนนใหญ่ชิดขวา) ---- */
+.game__players {
+  padding: 10px;
+}
+
+.score-list {
+  gap: 8px;
+}
+
+.score-row {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  height: 68px;
+  padding: 0 8px;
+}
+
+.score-row__avatar {
+  position: relative;
+  display: grid;
+}
+
+.score-row .avatar-chip--lg {
+  width: 52px;
+  height: 52px;
+  border-width: 3px;
+}
+
+.score-row__check {
+  position: absolute;
+  right: -6px;
+  bottom: -6px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--ink);
+  background: var(--white);
+}
+
+.score-row__main {
+  gap: 5px;
+}
+
+.score-row__name {
+  font-size: 17px;
+  line-height: 1.2;
+}
+
+/* ป้ายอยู่บรรทัดเดียวเสมอ (ตำแหน่งเดิมทุกแถว) ล้นก็ถูกตัด ไม่ดันแถวให้สูงขึ้น */
+.score-row__tags {
+  flex-wrap: nowrap;
+  align-items: center;
+  height: 22px;
+  overflow: hidden;
+}
+
+.score-row__tags .you-tag {
+  margin-left: 0;
+}
+
+.score-row__score {
+  min-width: 3ch;
+  font-size: 22px;
+  text-align: right;
+}
+
+/* ---- แถบเครื่องมือ: ไอคอนลอยเปล่า ไม่มีกรอบ ---- */
+.swatch {
+  border-radius: 0; /* จุดสีเป็นสี่เหลี่ยม */
+}
+
+.tool {
+  position: relative;
+  height: 52px;
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+
+.tool:hover {
+  opacity: 0.8;
+}
+
+/* ที่เลือกอยู่: ไอคอนทึบเต็ม + ขีดดำใต้ไอคอน (ไม่ยุบ ไม่มีพื้น) */
+.tool--on,
+.tool--on:hover {
+  background: none;
+  box-shadow: none;
+  transform: none;
+  opacity: 1;
+}
+
+.tool--on::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 3px;
+  width: 24px;
+  height: 4px;
+  margin-left: -12px;
+  background: var(--ink);
+}
+
+.tool--danger,
+.tool--danger:hover {
+  background: none;
+  opacity: 0.8;
+}
+
+.tool--action,
+.tool--action:hover {
+  background: none;
+}
+
+.tool:active:not(:disabled) .pix {
+  transform: translateY(2px);
+}
+
+.toolbar__group--history {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.toolbar__group--tools {
+  display: flex;
+  justify-content: space-around;
+  gap: 0;
+  padding-top: 6px;
+  border-top: 3px dashed var(--ink);
+}
+
+.toolbar__group--tools .tool {
+  width: 52px;
+}
+
+/* ---- หน้าแรก: ปุ่มใหญ่เป็นจุดเด่นที่สุดของหน้า ---- */
+.big-btn {
+  gap: 16px;
+  min-height: 76px;
+  padding: 8px 20px;
+  border: var(--border-thick);
+  box-shadow:
+    6px 6px 0 var(--ink),
+    inset 0 5px 0 rgb(255 255 255 / 0.35);
+  font-weight: 700;
+  font-size: 32px;
+  letter-spacing: 1px;
+  text-shadow: 3px 3px 0 var(--ink);
+}
+
+.big-btn small {
+  margin-top: 2px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-shadow: 2px 2px 0 var(--ink);
+}
+
+.big-btn--green { background: var(--green-bright); }
+.big-btn--blue { background: var(--blue-bright); }
+.big-btn--pink { background: var(--pink-bright); }
+
+/* กดแล้วยุบลงตามขนาดเงา (6px) เหมือนปุ่มตู้เกม */
+.big-btn:active:not(:disabled) {
+  transform: translate(6px, 6px);
+  box-shadow:
+    0 0 0 var(--ink),
+    inset 0 5px 0 rgb(255 255 255 / 0.35);
+}
+
+.home__buttons {
+  gap: 14px;
+  margin-top: 12px;
+  padding-right: 6px; /* เผื่อที่ให้เงา 6px ไม่โดนขอบแผงตัด */
+}
+
+.setup__create {
+  min-height: 72px;
+  font-size: 30px;
+}
+
+@media (max-height: 820px) {
+  .big-btn {
+    min-height: 62px;
+    font-size: 27px;
+  }
+
+  .home__buttons {
+    gap: 10px;
+    margin-top: 6px;
+  }
+}
+
+/* ---- หน้า SET UP: กล่องตั้งค่าซ้าย ---- */
+.setup {
+  grid-template-columns: 330px minmax(0, 1fr);
+}
+
+.setup__opts {
+  gap: 18px;
+}
+
+.setup__title {
+  padding-bottom: 8px;
+  border-bottom: 3px solid var(--ink);
+}
+
+.setup__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-family: var(--font-head);
+  font-weight: 600;
+  font-size: 19px;
+}
+
+.setup__head small {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.setup__opt {
+  gap: 10px;
+}
+
+/* ปุ่มตัวเลขแถวเดียว เท่ากันทุกปุ่ม ใหญ่ ตัวเลขไม่โดนกรอบบีบ */
+.setup__opts .segmented {
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+
+.setup__opts .seg {
+  flex: 1;
+  min-width: 0;
+  height: 56px;
+  padding: 0;
+  font-size: 22px;
+  box-shadow: var(--shadow-xs);
+}
+
+.setup__opts .seg:active {
+  transform: translate(2px, 2px);
+  box-shadow: none;
+}
+
+/* ---- จอเล็ก ---- */
+@media (max-width: 1000px) {
+  .wordbar {
+    order: 0;
+  }
+
+  .score-list {
+    grid-auto-columns: minmax(230px, max-content);
+  }
+
+  .game__players {
+    contain: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .setup {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 620px) {
+  .wordbar {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+  }
+
+  .wordbar__side,
+  .wordbar__side--end {
+    justify-content: center;
+  }
+
+  .wordbar__side:empty {
+    display: none;
+  }
+}
+
+/* จอคอมเตี้ย/ไอแพด: เครื่องมือย่อให้สูงไม่เกินกระดาน (ไม่งั้นแถวขยายแล้วเกิดช่องว่างใต้กระดาน)
+   และแถบคำบีบให้พอดีความกว้างกระดาน */
+@media (min-width: 1001px) and (max-height: 820px) {
+  .game:not(.game--solo) .toolbar {
+    gap: 3px;
+  }
+
+  .game:not(.game--solo) .toolbar__group--history .tool {
+    height: 44px;
+  }
+
+  .game:not(.game--solo) .toolbar__group--tools .tool {
+    height: 46px;
+  }
+}
+
+@media (max-width: 1400px) {
+  .wordbar .topbar__real-word {
+    font-size: 30px;
+    letter-spacing: 1px;
+  }
+
+  .wordbar .hint__row {
+    gap: 5px;
+  }
+
+  .wordbar .hint__slot {
+    width: 15px;
+    min-height: 20px;
+    font-size: 20px;
+  }
+
+  .wordbar .challenge__text small {
+    display: none;
+  }
+}
+
+/* Solo: ป้ายบอกช่วงย่อเป็นแถบเล็กในแถบคำ (เหมือน Mini Challenge ของหน้าเกมปกติ) */
+.wordbar .solo-stage {
+  padding: 4px 10px;
+  font-size: 13px;
+  line-height: 1.2;
+  text-align: left;
+  box-shadow: var(--shadow-xs);
+}
+
+/* Solo (จอคอม): คอลัมน์กลางกว้างกว่ากระดาน → แถบคำกว้างเท่ากระดานและอยู่กลาง ขอบตรงกับกระดานเหมือนหน้าเกมปกติ */
+@media (min-width: 1001px) {
+  .game--solo .wordbar {
+    width: 100%;
+    max-width: max(320px, calc((100dvh - 402px) * 4 / 3));
+    margin: 0 auto;
   }
 }

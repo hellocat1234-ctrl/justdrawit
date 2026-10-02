@@ -73,23 +73,28 @@ export default function Scoreboard({
 
         return (
           <li className={classes.join(" ")} key={p.id}>
-            <Avatar index={p.avatar} />
-            <span className="score-row__main">
-              <span className="score-row__name">{p.name}</span>
-              {(tags.length > 0 || p.id === meId) && (
-                <span className="score-row__tags">
-                  {p.id === meId && <YouTag />}
-                  {tags.map(([kind, icon, text]) => (
-                    <span className={`tag tag--${kind}`} key={kind}>
-                      <Icon name={icon} size={13} /> {text}
-                    </span>
-                  ))}
+            {/* แถวทุกแถวเรียงเหมือนกันเป๊ะ: อวตาร (ติ๊กทายถูกทับมุมอวตาร) · ชื่อ + ป้าย · คะแนนใหญ่ชิดขวา */}
+            <span className="score-row__avatar">
+              <Avatar index={p.avatar} large />
+              {hasGuessed && (
+                <span className="score-row__check" title="ทายถูกแล้ว">
+                  <Icon name="check" size={12} label="ทายถูกแล้ว" />
                 </span>
               )}
             </span>
-            <span className="score-row__icons">{hasGuessed && <span title="ทายถูกแล้ว">
-                  <Icon name="check" size={16} />
-                </span>}</span>
+            <span className="score-row__main">
+              <span className="score-row__name">{p.name}</span>
+              <span className="score-row__tags">
+                {p.id === meId && <YouTag />}
+                {tags.map(([kind, icon, text]) => (
+                  // หัวห้อง/กำลังวาดโชว์แค่ไอคอน (ที่ในแถวมีจำกัด มี tooltip บอกชื่อ) ป้ายวาดคนถัดไปมีข้อความ
+                  <span className={`tag tag--${kind}`} key={kind} title={text}>
+                    <Icon name={icon} size={13} />
+                    {kind === "next" && ` ${text}`}
+                  </span>
+                ))}
+              </span>
+            </span>
             <span className="score-row__score">
               <AnimatedNumber value={p.score} />
             </span>

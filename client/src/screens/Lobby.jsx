@@ -61,15 +61,15 @@ export default function Lobby({
 
           <div className="home__buttons">
             <button type="button" className="big-btn big-btn--green" disabled={!connected} onClick={onOpenSetup}>
-              <Icon name="star" size={26} />
+              <Icon name="star" size={44} />
               <span>สร้างห้อง</span>
             </button>
             <button type="button" className="big-btn big-btn--blue" disabled={!connected} onClick={() => setJoining(true)}>
-              <Icon name="door" size={26} />
+              <Icon name="door" size={44} />
               <span>เข้าห้อง</span>
             </button>
             <button type="button" className="big-btn big-btn--pink" disabled={!connected} onClick={onOpenSolo}>
-              <Icon name="robot" size={28} />
+              <Icon name="robot" size={46} />
               <span>
                 SOLO <small>แข่งกับ AI</small>
               </span>

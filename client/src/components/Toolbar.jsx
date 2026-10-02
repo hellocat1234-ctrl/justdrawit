@@ -82,7 +82,7 @@ export default function Toolbar({
           disabled={locked || !canUndo}
           onClick={onUndo}
         >
-          <Icon name="undo" size={24} />
+          <Icon name="undo" size={28} />
         </button>
         <button
           type="button"
@@ -92,46 +92,7 @@ export default function Toolbar({
           disabled={locked || !canRedo}
           onClick={onRedo}
         >
-          <Icon name="redo" size={24} />
-        </button>
-      </div>
-
-      {/* ── เครื่องมือ 4 ปุ่ม เรียง 2 คอลัมน์ ── */}
-      <div className="toolbar__group toolbar__group--tools" role="group" aria-label="เครื่องมือ">
-        <button
-          type="button"
-          className={`tool${tool === TOOLS.PEN ? " tool--on" : ""}`}
-          aria-label="ปากกา"
-          aria-pressed={tool === TOOLS.PEN}
-          onClick={() => onTool(TOOLS.PEN)}
-        >
-          <Icon name="pen" size={26} />
-        </button>
-        <button
-          type="button"
-          className={`tool${tool === TOOLS.ERASER ? " tool--on" : ""}`}
-          aria-label="ยางลบ"
-          aria-pressed={tool === TOOLS.ERASER}
-          onClick={() => onTool(TOOLS.ERASER)}
-        >
-          <Icon name="eraser" size={26} />
-        </button>
-        {/* ถังสี — dont_lift_pen ซ่อนไปเลย เพราะกติกาคือ "ห้ามยกปากกา"
-            การเทสีทั้งพื้นที่ในคลิกเดียวไม่ใช่การวาดเส้นต่อเนื่อง และ server ก็ทิ้ง fill ทุกครั้งอยู่แล้ว */}
-        {!hideBucket && (
-          <button
-            type="button"
-            className={`tool${tool === TOOLS.BUCKET ? " tool--on" : ""}`}
-            aria-label="ถังสี"
-            aria-pressed={tool === TOOLS.BUCKET}
-            onClick={() => onTool(TOOLS.BUCKET)}
-          >
-            <Icon name="bucket" size={26} />
-          </button>
-        )}
-        {/* ล้างจอทำทันที ไม่ใช่โหมด จึงไม่ได้ค้างสถานะกดไว้แบบสามปุ่มบน */}
-        <button type="button" className="tool tool--danger" aria-label="ล้างจอ" onClick={onClear}>
-          <Icon name="trash" size={26} />
+          <Icon name="redo" size={28} />
         </button>
       </div>
 
@@ -201,6 +162,45 @@ export default function Toolbar({
           onChange={(e) => onSize(Number(e.target.value))}
         />
         <span className="toolbar__size-value">{Math.min(size, maxSize)}</span>
+      </div>
+
+      {/* ── เครื่องมือ 4 ปุ่ม แถวเดียว อยู่ล่างสุดของแถบ · ไอคอนลอยเปล่าๆ ไม่มีกรอบ อันที่เลือกทึบเต็มมีขีดใต้ไอคอน ── */}
+      <div className="toolbar__group toolbar__group--tools" role="group" aria-label="เครื่องมือ">
+        <button
+          type="button"
+          className={`tool${tool === TOOLS.PEN ? " tool--on" : ""}`}
+          aria-label="ปากกา"
+          aria-pressed={tool === TOOLS.PEN}
+          onClick={() => onTool(TOOLS.PEN)}
+        >
+          <Icon name="pen" size={30} />
+        </button>
+        <button
+          type="button"
+          className={`tool${tool === TOOLS.ERASER ? " tool--on" : ""}`}
+          aria-label="ยางลบ"
+          aria-pressed={tool === TOOLS.ERASER}
+          onClick={() => onTool(TOOLS.ERASER)}
+        >
+          <Icon name="eraser" size={30} />
+        </button>
+        {/* ถังสี — dont_lift_pen ซ่อนไปเลย เพราะกติกาคือ "ห้ามยกปากกา"
+            การเทสีทั้งพื้นที่ในคลิกเดียวไม่ใช่การวาดเส้นต่อเนื่อง และ server ก็ทิ้ง fill ทุกครั้งอยู่แล้ว */}
+        {!hideBucket && (
+          <button
+            type="button"
+            className={`tool${tool === TOOLS.BUCKET ? " tool--on" : ""}`}
+            aria-label="ถังสี"
+            aria-pressed={tool === TOOLS.BUCKET}
+            onClick={() => onTool(TOOLS.BUCKET)}
+          >
+            <Icon name="bucket" size={30} />
+          </button>
+        )}
+        {/* ล้างจอทำทันที ไม่ใช่โหมด จึงไม่ได้ค้างสถานะกดไว้แบบสามปุ่มบน */}
+        <button type="button" className="tool tool--danger" aria-label="ล้างจอ" onClick={onClear}>
+          <Icon name="trash" size={30} />
+        </button>
       </div>
     </div>
   );

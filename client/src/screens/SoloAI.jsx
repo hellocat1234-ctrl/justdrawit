@@ -401,20 +401,6 @@ export default function SoloAI({ initialName = "", onBack }) {
           </span>
         </div>
 
-        <div className="topbar__word">
-          {phase === "watch" && watch ? (
-            <span className="topbar__idle" title="หมวดหมู่ของภาพ">
-              ภาพนี้คืออะไร? {watch.category && <>หมวด: <b>{watch.category}</b></>}
-            </span>
-          ) : round && phase !== "starting" ? (
-            <span className="topbar__real-word" title="คำที่คุณต้องวาด">
-              {round.word}
-            </span>
-          ) : (
-            <span className="topbar__idle">กำลังเริ่มเกม...</span>
-          )}
-        </div>
-
         <div className="topbar__meta">
           <Timer timeLeft={live ? timeLeft : null} />
         </div>
@@ -424,12 +410,31 @@ export default function SoloAI({ initialName = "", onBack }) {
 
       <main className="game game--solo">
         <section className="game__stage">
-          {/* ป้ายบอกช่วง: ช่วง 1 ขึ้นเฉพาะด่านที่มีช่วง 2 ต่อท้าย */}
+          {/* แถบคำเหนือกระดาน เหมือนหน้าเกมปกติ: ซ้าย = ป้ายบอกช่วง · กลาง = คำที่ต้องวาด (หรือหมวดของภาพในช่วง 2) */}
+          <div className="wordbar">
+            <div className="wordbar__side">
+              {/* ป้ายบอกช่วง: ช่วง 1 ขึ้นเฉพาะด่านที่มีช่วง 2 ต่อท้าย */}
           {phase === "watch" ? (
             <div className="solo-stage solo-stage--watch">ช่วง 2/2 · ดูภาพแล้วพิมพ์ทาย</div>
           ) : (phase === "playing" || (phase === "rest" && result?.kind === "draw")) && round?.drawNext ? (
             <div className="solo-stage">ช่วง 1/2 · คุณวาด AI ทาย</div>
           ) : null}
+            </div>
+          <div className="wordbar__word">
+            {phase === "watch" && watch ? (
+              <span className="topbar__idle" title="หมวดหมู่ของภาพ">
+                ภาพนี้คืออะไร? {watch.category && <>หมวด: <b>{watch.category}</b></>}
+              </span>
+            ) : round && phase !== "starting" ? (
+              <span className="topbar__real-word" title="คำที่คุณต้องวาด">
+                {round.word}
+              </span>
+            ) : (
+              <span className="topbar__idle">กำลังเริ่มเกม...</span>
+            )}
+          </div>
+            <div className="wordbar__side wordbar__side--end" />
+          </div>
           <Canvas
             ref={canvasRef}
             canDraw={canDraw}
