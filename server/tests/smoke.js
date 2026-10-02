@@ -2281,6 +2281,118 @@ async function main() {
     }
   });
 
+  // ══════════════════════════════════════════════════════════════════
+  // ข้อ 30 — เตรียมให้เพื่อนเล่น: server เสิร์ฟหน้าเว็บ (client/dist) · ไม่ทับ /api /socket.io /test.html · CORS จำกัดเฉพาะที่จำเป็น
+  // เปิด server ตัวที่สองบนพอร์ต 3001 สองแบบ: (ก) มีโฟลเดอร์หน้าเว็บ (ปลอมใน tmp) + ALLOWED_ORIGINS  (ข) ไม่มีโฟลเดอร์หน้าเว็บ
+  // ══════════════════════════════════════════════════════════════════
+  await runPart("30. เสิร์ฟหน้าเว็บ · ไม่ทับ /api /socket.io /test.html · CORS จำกัด · ไม่พิมพ์คำตอบ", async () => {
+    const http = require("http");
+    const fakeDist = fs.mkdtempSync(path.join(os.tmpdir(), "jdi-dist-"));
+    fs.writeFileSync(path.join(fakeDist, "index.html"), "<!doctype html><div id=root>JDI-FAKE-CLIENT</div>");
+    const waitUp = async () => {
+      for (let i = 0; i < 100; i++) {
+        if (await fetch("http://localhost:3001/test.html").then((r) => r.ok).catch(() => false)) return true;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      return false;
+    };
+    const baseEnv = { ...process.env, SCORES_FILE, PORT: "3001", AI_MODE: "mock" };
+    // ส่งคำขอดิบ (ตั้ง Origin / Host เองได้ — fetch ของ Node ตั้ง Host ไม่ได้)
+    const req = (reqPath, { origin, host } = {}) =>
+      new Promise((resolve, reject) => {
+        const headers = {};
+        if (origin) headers.Origin = origin;
+        if (host) headers.Host = host;
+        http
+          .get({ host: "127.0.0.1", port: 3001, path: encodeURI(reqPath), headers }, (res) => {
+            let body = "";
+            res.on("data", (d) => (body += d));
+            res.on("end", () => resolve({ status: res.statusCode, headers: res.headers, body }));
+          })
+          .on("error", reject);
+      });
+    const POLL = "/socket.io/?EIO=4&transport=polling";
+
+    // ---------- (ก) มีหน้าเว็บ ----------
+    const srvA = spawn(process.execPath, ["index.js"], {
+      cwd: SERVER_DIR, stdio: "ignore",
+      env: { ...baseEnv, CLIENT_DIST: fakeDist, ALLOWED_ORIGINS: "https://game.example.com" },
+    });
+    try {
+      checkOk("server (ก) เปิดได้", await waitUp());
+      let r = await req("/");
+      check("GET / → หน้าเว็บของเกม", [r.status, r.body.includes("JDI-FAKE-CLIENT")], [200, true]);
+      r = await req("/?room=12345");
+      check("GET /?room=12345 (ลิงก์เชิญ) → หน้าเว็บ", r.body.includes("JDI-FAKE-CLIENT"), true);
+      r = await req("/ที่ไหนสักแห่ง/ลึกๆ");
+      check("เส้นทางแปลก → หน้าเว็บ (รีเฟรชหน้าแล้วไม่ 404)", r.body.includes("JDI-FAKE-CLIENT"), true);
+      r = await req("/test.html");
+      check("/test.html ยังเป็นหน้าทดสอบเดิม ไม่ถูกทับ", [r.status, r.body.includes("JDI-FAKE-CLIENT"), r.body.includes("socket")], [200, false, true]);
+      r = await req("/api/leaderboard");
+      check("/api/leaderboard ยังตอบ JSON", [r.status, r.headers["content-type"].includes("json")], [200, true]);
+      r = await req("/api/ไม่มีอันนี้");
+      check("/api/… ที่ไม่มี → ไม่ตอบหน้าเว็บ (ไม่ใช่ 200 + html)", [r.status !== 200, r.body.includes("JDI-FAKE-CLIENT")], [true, false]);
+      r = await req(POLL);
+      check("/socket.io จับมือได้ (ไม่ถูกหน้าเว็บทับ)", [r.status, r.body.startsWith("0{")], [200, true]);
+
+      // CORS: ผ่าน = ได้ header Access-Control-Allow-Origin ตรงกับ origin · ไม่ผ่าน = 403 (ปฏิเสธตั้งแต่จับมือ) ไม่มี header
+      for (const o of ["http://localhost:5173", "http://127.0.0.1:3000", "http://192.168.1.50:3000", "http://10.0.0.5:3000", "http://172.16.0.9:3000", "http://172.31.255.1:3000",
+                       "http://macbook.local:3000", "https://abc-def-123.trycloudflare.com", "https://game.example.com"]) {
+        r = await req(POLL, { origin: o });
+        check(`CORS ผ่าน: ${o}`, [r.status, r.headers["access-control-allow-origin"]], [200, o]);
+      }
+      for (const o of ["https://evil.example.com", "http://172.32.0.1:3000", "http://172.15.0.1:3000", "http://192.169.0.1:3000", "http://11.0.0.1:3000",
+                       "http://abc.trycloudflare.com", "https://evil.trycloudflare.com.evil.io", "https://trycloudflare.com.evil.io", "null", "file://x", "http://localhost.evil.com"]) {
+        r = await req(POLL, { origin: o });
+        check(`CORS ไม่ผ่าน (ปฏิเสธ): ${o}`, [r.status, r.headers["access-control-allow-origin"]], [403, undefined]);
+      }
+      r = await req(POLL, { origin: "http://my-domain.test:3001", host: "my-domain.test:3001" });
+      check("same-origin (Origin ตรง Host) ผ่านเสมอ แม้ชื่อโดเมนไม่อยู่ในรายการ", r.status, 200);
+
+      // websocket จริง (ใช้ไลบรารี ws ตรงๆ เพราะตั้ง Origin ได้แน่นอน — socket.io-client ฝั่ง Node ไม่ส่ง Origin ตามที่ตั้ง)
+      // เบราว์เซอร์ส่ง Origin ของหน้าเว็บเสมอ: origin แปลกหน้าต้องถูกปฏิเสธตั้งแต่ตอนอัปเกรด · origin วงแลนต้องต่อติด
+      const WebSocket = require("ws");
+      const wsTry = (origin) =>
+        new Promise((resolve) => {
+          const w = new WebSocket("ws://127.0.0.1:3001/socket.io/?EIO=4&transport=websocket", { origin });
+          const t = setTimeout(() => { w.terminate(); resolve("timeout"); }, 4000);
+          w.on("open", () => { clearTimeout(t); w.close(); resolve("connected"); });
+          w.on("unexpected-response", (q, res) => { clearTimeout(t); resolve(`refused ${res.statusCode}`); });
+          w.on("error", () => { clearTimeout(t); resolve("refused"); });
+        });
+      check("websocket จาก origin วงแลน → ต่อติด", await wsTry("http://192.168.0.20:3000"), "connected");
+      check("websocket จาก origin แปลกหน้า → ถูกปฏิเสธ", (await wsTry("https://evil.example.com")).startsWith("refused"), true);
+      check("websocket จาก *.trycloudflare.com → ต่อติด", await wsTry("https://my-game-1.trycloudflare.com"), "connected");
+    } finally {
+      srvA.kill();
+    }
+
+    // ---------- (ข) ไม่มีหน้าเว็บ (ยังไม่ได้ build) ----------
+    await new Promise((r) => setTimeout(r, 400));
+    const srvB = spawn(process.execPath, ["index.js"], {
+      cwd: SERVER_DIR, stdio: "ignore",
+      env: { ...baseEnv, CLIENT_DIST: path.join(fakeDist, "ไม่มีโฟลเดอร์นี้") },
+    });
+    try {
+      checkOk("server (ข) ที่ยังไม่ได้ build เปิดได้ ไม่ล่ม", await waitUp());
+      const r = await req("/");
+      check("ยังไม่ได้ build → / บอกวิธีแก้ (503 + npm run setup)", [r.status, r.body.includes("npm run setup")], [503, true]);
+      const t = await req("/test.html");
+      check("ยังไม่ได้ build → /test.html ยังใช้ได้", t.status, 200);
+      const g = await req(POLL);
+      check("ยังไม่ได้ build → socket.io ยังใช้ได้", g.status, 200);
+    } finally {
+      srvB.kill();
+      fs.rmSync(fakeDist, { recursive: true, force: true });
+    }
+
+    // ---------- ไม่พิมพ์คำตอบลง log ของ server เลย (เช็คกับ server หลักที่เล่นมาทั้งชุดเทส) ----------
+    const logText = serverLog.join("\n");
+    check("log ไม่มีบรรทัด \"คำตานี้\" (ทั้งโหมดปกติและทีม)", logText.includes("คำตานี้"), false);
+    const leaked = [word, ...drawnOptions].filter((w) => w && logText.includes(w));
+    check("log ไม่มีคำที่ใช้เป็นคำตอบในตาที่เล่นจริง", leaked, []);
+  });
+
   // ปิดทุก socket เพื่อให้โปรเซสจบได้
   for (const rec of [A, B, C, ...others]) rec.socket.disconnect();
 }

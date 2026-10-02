@@ -3,6 +3,8 @@ require("dotenv").config({ path: __dirname + "/.env", quiet: true });
 const express = require("express");
 const http = require("http");
 const fs = require("fs");
+const os = require("os");
+const path = require("path");
 const { Server } = require("socket.io");
 const { cleanName } = require("./clean");
 const leaderboard = require("./leaderboard");
@@ -11,7 +13,52 @@ const aiDrawings = require("./ai-drawings");
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: "*" } });
+// ── CORS: อนุญาตเฉพาะที่จำเป็น (แทน origin "*") ──
+// เกมปกติเสิร์ฟหน้าเว็บกับ socket จาก server ตัวเดียวกัน (origin เดียวกัน) จึงไม่ต้องใช้ CORS เลย
+// ที่ต้องอนุญาตคือตอนที่หน้าเว็บมาจาก "ที่อยู่อื่น" ของ server เรา:
+//   - localhost / 127.x / ::1                  (เปิดเองในเครื่อง · vite dev พอร์ต 5173)
+//   - IP วงส่วนตัว 10.x · 172.16–31.x · 192.168.x · 169.254.x  (เพื่อนในวง Wi-Fi/hotspot เดียวกัน)
+//   - ชื่อ *.local                              (mDNS เช่น macbook.local)
+//   - *.trycloudflare.com                       (ลิงก์ Cloudflare quick tunnel จาก npm run share)
+//   - ที่เพิ่มเองใน env ALLOWED_ORIGINS (คั่นด้วยจุลภาค เช่น https://game.example.com)
+// เว็บอื่นบนอินเทอร์เน็ตจะไม่ได้ header CORS · ไม่มี Origin เลย (แอปที่ไม่ใช่เบราว์เซอร์ / เทส) ผ่านตามปกติ
+const EXTRA_ORIGINS = String(process.env.ALLOWED_ORIGINS || "")
+  .split(",")
+  .map((o) => o.trim().replace(/\/$/, ""))
+  .filter(Boolean);
+function isAllowedOrigin(origin) {
+  if (!origin) return true;
+  if (EXTRA_ORIGINS.includes(String(origin).replace(/\/$/, ""))) return true;
+  let url;
+  try {
+    url = new URL(origin);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return false;
+  const host = url.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  if (host === "localhost" || host === "::1" || host.endsWith(".local")) return true;
+  if (host.endsWith(".trycloudflare.com") && url.protocol === "https:") return true;
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+  if (!m) return false;
+  const [a, b] = [Number(m[1]), Number(m[2])];
+  return a === 127 || a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 169 && b === 254);
+}
+// same-origin (Origin ตรงกับ Host ที่เรียกมา เช่นผ่านโดเมนอื่นที่ชี้มาที่ server เรา) ผ่านเสมอ · cross-site ที่ไม่อยู่ในรายการข้างบนถูกปฏิเสธตั้งแต่ตอนจับมือ
+// (กัน "เว็บแปลกหน้าให้เบราว์เซอร์ของเพื่อนแอบต่อ socket เข้า server เรา" ซึ่ง CORS อย่างเดียวไม่กัน websocket)
+function originOk(req) {
+  const origin = req.headers.origin;
+  if (isAllowedOrigin(origin)) return true;
+  try {
+    return new URL(origin).host === req.headers.host;
+  } catch {
+    return false;
+  }
+}
+const io = new Server(server, {
+  cors: { origin: (origin, cb) => cb(null, isAllowedOrigin(origin)) },
+  allowRequest: (req, cb) => cb(null, originOk(req)),
+});
 
 app.use(express.static(__dirname + "/public"));
 
@@ -30,6 +77,36 @@ app.get("/api/leaderboard", (req, res) => {
     res.status(500).json({ error: "SERVER_ERROR" });
   }
 });
+
+// ---------- เสิร์ฟหน้าเว็บของเกม (client ที่ build แล้ว) ----------
+// เปิด http://localhost:3000 แล้วเล่นได้เลย ไม่ต้องรัน vite · สร้างไฟล์ด้วย npm run setup (หรือ cd client && npm run build)
+// ลำดับสำคัญ: /api, /socket.io, /test.html ถูกจัดการไปแล้วข้างบน/ที่ socket.io จึงไม่โดนทับ
+// ที่เหลือที่ไม่ใช่ /api และ /socket.io ตอบ index.html (เผื่อลิงก์เชิญ ?room=... และรีเฟรชหน้า)
+const CLIENT_DIST = process.env.CLIENT_DIST || path.join(__dirname, "..", "client", "dist");
+const HAS_CLIENT = fs.existsSync(path.join(CLIENT_DIST, "index.html"));
+if (HAS_CLIENT) {
+  app.use(express.static(CLIENT_DIST));
+  app.get(/^\/(?!api(\/|$)|socket\.io(\/|$)).*/, (req, res) => res.sendFile(path.join(CLIENT_DIST, "index.html")));
+} else {
+  app.get("/", (req, res) =>
+    res
+      .status(503)
+      .type("html")
+      .send(
+        "<meta charset=utf-8><title>Just Drawit</title><body style='font-family:sans-serif;padding:2em'>" +
+          "<h2>ยังไม่ได้ build หน้าเว็บของเกม</h2><p>รัน <code>npm run setup</code> (หรือ <code>cd client &amp;&amp; npm run build</code>) แล้วเปิด server ใหม่</p></body>",
+      ),
+  );
+}
+
+// ที่อยู่ IPv4 ของเครื่องนี้ในวงแลน (ไว้พิมพ์ให้เพื่อนพิมพ์ตาม)
+function lanAddresses() {
+  const out = [];
+  for (const list of Object.values(os.networkInterfaces())) {
+    for (const i of list || []) if (i.family === "IPv4" && !i.internal) out.push(i.address);
+  }
+  return out;
+}
 
 // ---------- ที่เก็บข้อมูลห้อง ----------
 const rooms = new Map(); // key = รหัสห้อง, value = ข้อมูลห้อง
@@ -197,7 +274,6 @@ function startTeamDrawing(room, word) {
   clearTimeout(room.chooseTimeout);
   room.phase = "drawing";
   room.word = word;
-  console.log("คำตานี้ (ทีม):", word);
   room.roundGains = {};
   room.solveCount = 0;
   room.challenge = room.nextChallenge ?? { type: "none" }; // สุ่มไว้ตั้งแต่ขึ้นตา (rollChallenge) เดียวกันทั้งสองทีม
@@ -724,7 +800,6 @@ function startDrawing(room, word) {
   clearTimeout(room.chooseTimeout);
   room.phase = "drawing";
   room.word = word;
-  console.log("คำตานี้:", word);
   room.guessedIds = new Set();
   room.roundGains = {};
   // ตาใหม่ = คำใบ้ยังไม่เปิด (ต้องรีเซ็ตก่อนส่ง round_start เสมอ ไม่งั้นตาถัดไปจะได้คำใบ้ฟรี)
@@ -1437,8 +1512,17 @@ const PORT = Number(process.env.PORT) || 3000; // เทสเปิด server �
 // โหลดคลังคำ/โมเดลของ Solo ให้เสร็จก่อนเปิดรับคน (ไม่ throw โหลดไม่ได้ก็ใช้สมองอื่น)
 ai.init().then(() => {
   aiDrawings.load();
+  // ไม่ระบุ host = รับทุกการเชื่อมต่อ (เครื่องอื่นในวง Wi-Fi เดียวกันเข้าได้)
   server.listen(PORT, () => {
     console.log(`server พร้อมแล้ว ที่ http://localhost:${PORT}`);
+    const ips = lanAddresses();
+    if (ips.length) {
+      console.log("ให้เพื่อนในวง Wi-Fi เดียวกันพิมพ์ที่อยู่นี้ในเบราว์เซอร์:");
+      for (const ip of ips) console.log(`   http://${ip}:${PORT}`);
+    } else {
+      console.log("ไม่พบ IP ในวงแลน (ยังไม่ได้ต่อ Wi-Fi?) — เล่นเครื่องเดียวหรือใช้ npm run share ก็ได้");
+    }
+    if (!HAS_CLIENT) console.log("⚠️  ยังไม่ได้ build หน้าเว็บ (client/dist) — รัน npm run setup ก่อน");
     console.log(`AI Solo: โหมด ${ai.aiMode()}`);
   });
 });
