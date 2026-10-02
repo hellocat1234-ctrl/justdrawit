@@ -872,6 +872,15 @@ server แยกฟังก์ชัน `applySettings(room, data)` ใช้�
 - ⚠️ **ขั้นตอน `npm install` ของ server จากศูนย์ ยังไม่ได้ลองสำเร็จครบ**: ดิสก์เครื่องผู้พัฒนาเต็ม (เหลือ ~390 MB) ตอนลอง install server (~320 MB) ตก `ENOSPC` — setup.js แสดงข้อความผิดพลาดและวิธีลองใหม่ถูกต้อง · จึงทดสอบส่วนที่เหลือโดยโคลน `server/node_modules` แบบ APFS clone เข้าไปแทน · ถ้าจะเดโม่บนเครื่องใหม่ ต้องมีที่ว่างอย่างน้อย ~500 MB
 - ข้อจำกัด: `cloudflared` ต้องติดตั้งเอง (`brew install cloudflared`) · quick tunnel ไม่รับประกันความเสถียร · หน้าเว็บโหลดฟอนต์จาก Google Fonts ต้องมีเน็ต (ไม่มีเน็ตใช้ฟอนต์สำรอง) · แก้โค้ด client แล้วต้อง `cd client && npm run build` ถ้าเล่นผ่านพอร์ต 3000
 
+### เสร็จแล้ว (deploy ขึ้นออนไลน์ถาวร: Render + Upstash Redis — ขั้นตอนที่ 2 · ผู้ใช้เลือกแล้ว repo `pokadot-kiki/justdrawit` (Private) ยอมรับการหลับ 15 นาที)
+ผู้ใช้ต้องกดเองบนเว็บ (ดู **`DEPLOY.md`** ทีละขั้นสำหรับมือใหม่): สร้าง Upstash DB → สร้าง Render Web Service ผูก GitHub → ใส่ env → Deploy · **ผมยังไม่ได้ push และยังไม่ได้ deploy จริง** (ต้องการสิทธิ์ผู้ใช้) จึง **ยังไม่ได้ทดสอบบน Render จริง** มีแต่ทดสอบในเครื่อง
+- **Leaderboard ใน Upstash** (`server/leaderboard.js`): ตั้ง `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` = เก็บคะแนนใน Redis คีย์เดียว `jdi:scores:v1` (JSON ทั้งก้อน) · ตอนสตาร์ท `init()` โหลดทั้งหมดไว้ในหน่วยความจำ → API เดิม (`saveScore`/`getLeaderboard`/`rankOf`) ยังเป็นฟังก์ชันปกติไม่ async · บันทึกใหม่อัปเดตหน่วยความจำทันทีแล้วเขียนกลับเบื้องหลัง (คิวเดียว ล้มแล้วลองใหม่ทุก 5 วิ) · `flush()` ตอนได้ SIGTERM/SIGINT ไม่ให้เสียคะแนนล่าสุดตอน deploy ใหม่ · ไม่ตั้ง env / ต่อไม่ได้ / ข้อมูลเสีย = ใช้ไฟล์เหมือนเดิม ไม่ล่ม ไม่ทับของใน Upstash · ใช้ `fetch` ล้วน **ไม่เพิ่ม library** · token ไม่อยู่ใน log/คำตอบ
+- **`server/index.js`**: `/healthz` · `FORCE_HTTPS=1` เด้ง http→https ตาม `x-forwarded-proto` (ยกเว้น `/healthz`) · `HOST` (ตั้ง `0.0.0.0` บน Render) · `RENDER_EXTERNAL_URL` เข้ารายการ origin อัตโนมัติ (ยังเพิ่มได้ด้วย `ALLOWED_ORIGINS`) · `Promise.all([ai.init(), leaderboard.init()])` ก่อน listen
+- **เทสข้อ 31** (Upstash ปลอมเป็น http server): เริ่มว่าง → บันทึก → เขียนลง Upstash → "รีสตาร์ท" แล้วคะแนนกลับมา · เขียนล้ม (500) แล้วลองใหม่สำเร็จ · token ผิด/ไม่มีใครฟัง/ไม่ตั้ง env/ตั้งไม่ครบ/ข้อมูลเสีย → ถอยไปใช้ไฟล์ · server จริงโหลดคะแนนจาก Upstash ตอนสตาร์ท · `/healthz` · FORCE_HTTPS · HOST · origin ของ Render · SIGTERM ปิดเรียบร้อย
+- **ค่าตั้งบน Render** (ใน DEPLOY.md): Build `npm run setup` · Start `npm start` · Node 22 (`NODE_VERSION`) · Free · Region Singapore · Branch `deploy` · Health Check `/healthz` · Auto-Deploy On Commit · env: `HOST=0.0.0.0` `FORCE_HTTPS=1` `UPSTASH_REDIS_REST_URL` `UPSTASH_REDIS_REST_TOKEN` (ไม่ใช้ render.yaml/Blueprint เพราะไม่ได้ยืนยันว่าแพ็กเกจฟรีไม่ขอบัตร)
+- วัดแล้ว: server โหลดโมเดลใช้ RSS ~150–160 MB (เพดานฟรี 512 MB) · ทายภาพ 20–37 ms ในเครื่อง (Render 0.1 CPU จะช้ากว่า)
+- ข้อจำกัด: ก่อนเดโม่ต้องเปิดลิงก์ปลุก ~1 นาที · ข้อมูลข้อ 1 (ข้อมูลฟรีของ Render/Upstash) มาจากเอกสาร/เว็บรีวิว เงื่อนไขอาจเปลี่ยน · ชื่อเมนูบนเว็บ Render/Upstash ใน DEPLOY.md อาจต่างเล็กน้อย
+
 ### ยังไม่ได้ทำ (ตามลำดับใน PROMPTS.md)
 - (ไม่มีแล้ว — ข้อ 8 เสร็จ)
 

@@ -2393,19 +2393,178 @@ async function main() {
     check("log ไม่มีคำที่ใช้เป็นคำตอบในตาที่เล่นจริง", leaked, []);
   });
 
+  // ══════════════════════════════════════════════════════════════════
+  // ข้อ 31 — เตรียม deploy บน Render: คะแนนเก็บใน Upstash Redis (ไม่หายตอนรีสตาร์ท) · /healthz · บังคับ https · HOST · origin ของ Render
+  // ใช้ "Upstash ปลอม" (http server เล็กๆ ที่พูด REST เหมือนของจริง: POST ["GET","key"] / ["SET","key",value] + Bearer token)
+  // ══════════════════════════════════════════════════════════════════
+  await runPart("31. Leaderboard ใน Upstash (ไม่หายตอนรีสตาร์ท) · ต่อไม่ได้ก็ถอยไปไฟล์ · /healthz · FORCE_HTTPS · HOST · RENDER_EXTERNAL_URL", async () => {
+    const http = require("http");
+    const TOKEN = "upstash-TEST-token-must-never-leak";
+    const store = new Map();
+    const commands = [];
+    let failSets = 0; // สั่งให้ SET ถัดไปล้มกี่ครั้ง (ทดสอบลองใหม่)
+    const stub = http.createServer((req, res) => {
+      let body = "";
+      req.on("data", (d) => (body += d));
+      req.on("end", () => {
+        const send = (code, obj) => { res.writeHead(code, { "Content-Type": "application/json" }); res.end(JSON.stringify(obj)); };
+        if (req.headers.authorization !== `Bearer ${TOKEN}`) return send(401, { error: "Unauthorized" });
+        let cmd;
+        try { cmd = JSON.parse(body); } catch { return send(400, { error: "bad json" }); }
+        commands.push(cmd[0]);
+        if (cmd[0] === "GET") return send(200, { result: store.has(cmd[1]) ? store.get(cmd[1]) : null });
+        if (cmd[0] === "SET") {
+          if (failSets > 0) { failSets--; return send(500, { error: "boom" }); }
+          store.set(cmd[1], cmd[2]);
+          return send(200, { result: "OK" });
+        }
+        send(400, { error: "unknown command" });
+      });
+    });
+    await new Promise((r) => stub.listen(0, "127.0.0.1", r));
+    const stubUrl = `http://127.0.0.1:${stub.address().port}`;
+    const tmpFile = path.join(os.tmpdir(), `jdi-lb-${process.pid}.json`);
+    const loadFresh = (env) => {
+      // โหลดโมดูลใหม่หมด จำลอง "server เพิ่งสตาร์ท" (ตั้ง env ก่อน require)
+      for (const k of ["UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN"]) delete process.env[k];
+      Object.assign(process.env, { SCORES_FILE: tmpFile }, env);
+      delete require.cache[require.resolve("../leaderboard")];
+      return require("../leaderboard");
+    };
+    const savedEnv = { ...process.env };
+    const origWarn = console.warn, origLog = console.log;
+    const quiet = async (fn) => { console.warn = () => {}; console.log = () => {}; try { return await fn(); } finally { console.warn = origWarn; console.log = origLog; } };
+    try {
+      // ---- 1) ครั้งแรก: ว่าง → บันทึกแล้วเขียนลง Upstash ----
+      let lb = loadFresh({ UPSTASH_REDIS_REST_URL: stubUrl, UPSTASH_REDIS_REST_TOKEN: TOKEN });
+      await quiet(() => lb.init());
+      check("โหมด Upstash: เริ่มต้นว่าง", lb.getLeaderboard().top, []);
+      const r1 = lb.saveScore({ name: "แมวขี้เซา", score: 700, levelReached: 3 });
+      check("saveScore ยังเป็นฟังก์ชันปกติ (ไม่ใช่ async) คืนแถวทันที", [typeof r1.then, r1.name, r1.score], ["undefined", "แมวขี้เซา", 700]);
+      check("อ่านได้ทันทีจากหน่วยความจำ (ยังไม่รอเขียน)", lb.getLeaderboard().top.map((r) => r.name), ["แมวขี้เซา"]);
+      lb.saveScore({ name: "หมีพุงกลม", score: 900, levelReached: 4 });
+      await lb.flush();
+      const saved = JSON.parse(store.get("jdi:scores:v1") ?? "[]");
+      check("Upstash ได้รับคะแนนทั้งสองแถวครบ", saved.map((r) => r.name).sort(), ["หมีพุงกลม", "แมวขี้เซา"]);
+      check("เขียนไฟล์ในเครื่องไม่เกิดขึ้นในโหมด Upstash", fs.existsSync(tmpFile), false);
+
+      // ---- 2) "รีสตาร์ท": โหลดโมดูลใหม่ → คะแนนกลับมาจาก Upstash ----
+      lb = loadFresh({ UPSTASH_REDIS_REST_URL: stubUrl, UPSTASH_REDIS_REST_TOKEN: TOKEN });
+      await quiet(() => lb.init());
+      check("รีสตาร์ทแล้วคะแนนไม่หาย เรียงถูก", lb.getLeaderboard().top.map((r) => [r.rank, r.name, r.score]), [[1, "หมีพุงกลม", 900], [2, "แมวขี้เซา", 700]]);
+      check("rankOf ทำงานกับข้อมูลที่โหลดมา", lb.rankOf({ name: "ใหม่", score: 800, levelReached: 3 }), 2);
+
+      // ---- 3) เขียนล้มเหลวชั่วคราว → ลองใหม่เองจนสำเร็จ ไม่เสียคะแนน ----
+      failSets = 1;
+      lb.saveScore({ name: "เพนกวินซ่า", score: 1000, levelReached: 5 });
+      const t0 = Date.now();
+      await quiet(() => lb.flush(9000));
+      const after = JSON.parse(store.get("jdi:scores:v1"));
+      check("เขียนล้มครั้งแรก (500) แล้วลองใหม่สำเร็จ ไม่เสียคะแนน", after.some((r) => r.name === "เพนกวินซ่า"), true);
+      checkOk(`ลองใหม่ภายในไม่กี่วินาที (${Date.now() - t0} ms)`, Date.now() - t0 < 9000);
+
+      // ---- 4) ต่อ Upstash ไม่ได้ → ถอยไปใช้ไฟล์ ไม่ล่ม ----
+      const fallbackCases = [
+        ["token ผิด (401)", { UPSTASH_REDIS_REST_URL: stubUrl, UPSTASH_REDIS_REST_TOKEN: "wrong" }],
+        ["ที่อยู่ไม่มีใครฟัง", { UPSTASH_REDIS_REST_URL: "http://127.0.0.1:9", UPSTASH_REDIS_REST_TOKEN: TOKEN }],
+        ["ไม่ตั้ง env เลย", {}],
+        ["ตั้งแค่ URL ไม่มี token", { UPSTASH_REDIS_REST_URL: stubUrl }],
+      ];
+      for (const [label, env] of fallbackCases) {
+        fs.rmSync(tmpFile, { force: true });
+        lb = loadFresh(env);
+        await quiet(() => lb.init());
+        const row = lb.saveScore({ name: "ไฟล์", score: 5, levelReached: 1 });
+        check(`ถอยไปใช้ไฟล์: ${label}`, [row?.name, fs.existsSync(tmpFile), lb.getLeaderboard().top[0]?.name], ["ไฟล์", true, "ไฟล์"]);
+      }
+
+      // ---- 5) ข้อมูลใน Upstash เสีย → ไม่ล่ม ใช้ไฟล์ และไม่ไปทับของเดิมใน Upstash ----
+      store.set("jdi:scores:v1", "{ไม่ใช่ array");
+      fs.rmSync(tmpFile, { force: true });
+      lb = loadFresh({ UPSTASH_REDIS_REST_URL: stubUrl, UPSTASH_REDIS_REST_TOKEN: TOKEN });
+      await quiet(() => lb.init());
+      lb.saveScore({ name: "ไฟล์2", score: 1, levelReached: 1 });
+      await lb.flush(500);
+      check("ข้อมูลใน Upstash เสีย → ใช้ไฟล์ และไม่ทับของเดิม", [fs.existsSync(tmpFile), store.get("jdi:scores:v1")], [true, "{ไม่ใช่ array"]);
+      store.delete("jdi:scores:v1");
+    } finally {
+      Object.keys(process.env).forEach((k) => !(k in savedEnv) && delete process.env[k]);
+      Object.assign(process.env, savedEnv);
+      delete require.cache[require.resolve("../leaderboard")];
+      fs.rmSync(tmpFile, { force: true });
+    }
+
+    // ---- 6) ตัว server จริง (พอร์ต 3001): โหลดคะแนนจาก Upstash ตอนสตาร์ท · /healthz · FORCE_HTTPS · HOST · origin ของ Render ----
+    store.set("jdi:scores:v1", JSON.stringify([
+      { id: 1, name: "จาก-Upstash", score: 4321, levelReached: 6, playedAt: "2026-10-05 20:14" },
+    ]));
+    const month = "2026-10";
+    const env = { ...process.env, PORT: "3001", HOST: "127.0.0.1", AI_MODE: "mock", FORCE_HTTPS: "1",
+      UPSTASH_REDIS_REST_URL: stubUrl, UPSTASH_REDIS_REST_TOKEN: TOKEN, RENDER_EXTERNAL_URL: "https://jdi-demo.onrender.com",
+      SCORES_FILE: path.join(os.tmpdir(), `jdi-unused-${process.pid}.json`) };
+    const srv = spawn(process.execPath, ["index.js"], { cwd: SERVER_DIR, stdio: ["ignore", "pipe", "pipe"], env });
+    let out = "";
+    srv.stdout.on("data", (d) => (out += d));
+    srv.stderr.on("data", (d) => (out += d));
+    const rawGet = (reqPath, headers = {}) =>
+      new Promise((resolve, reject) => {
+        http.get({ host: "127.0.0.1", port: 3001, path: reqPath, headers }, (res) => {
+          let b = "";
+          res.on("data", (d) => (b += d));
+          res.on("end", () => resolve({ status: res.statusCode, headers: res.headers, body: b }));
+        }).on("error", reject);
+      });
+    try {
+      let up = false;
+      for (let i = 0; i < 100 && !up; i++) {
+        up = await rawGet("/healthz").then((r) => r.status === 200).catch(() => false);
+        if (!up) await new Promise((r) => setTimeout(r, 100));
+      }
+      checkOk("server เปิดได้พร้อม env ของ Upstash + HOST=127.0.0.1 (ฟังเฉพาะที่ HOST ที่ตั้ง)", up);
+      check("/healthz ตอบ ok", (await rawGet("/healthz")).body, "ok");
+      const lbRes = await rawGet("/api/leaderboard");
+      check("server โหลดคะแนนจาก Upstash ตอนสตาร์ท → /api/leaderboard เห็น", JSON.parse(lbRes.body).top.map((r) => [r.name, r.score]), [["จาก-Upstash", 4321]]);
+      checkOk("log บอกว่าเก็บใน Upstash", out.includes("Upstash"));
+      check("token ของ Upstash ไม่โผล่ใน log ของ server เลย", out.includes(TOKEN), false);
+      check("token ไม่โผล่ในคำตอบ /api/leaderboard", lbRes.body.includes(TOKEN), false);
+      // FORCE_HTTPS
+      let r = await rawGet("/", { "x-forwarded-proto": "http", Host: "jdi-demo.onrender.com" });
+      check("เข้าด้วย http ผ่านพร็อกซี → เด้งไป https (301)", [r.status, r.headers.location], [301, "https://jdi-demo.onrender.com/"]);
+      r = await rawGet("/api/leaderboard?month=" + month, { "x-forwarded-proto": "http", Host: "jdi-demo.onrender.com" });
+      check("ลิงก์ที่มี query ก็เด้งพร้อม query", r.headers.location, `https://jdi-demo.onrender.com/api/leaderboard?month=${month}`);
+      r = await rawGet("/healthz", { "x-forwarded-proto": "http" });
+      check("/healthz ไม่เด้ง (Render เช็คตรงเข้าเครื่อง)", r.status, 200);
+      r = await rawGet("/healthz", { "x-forwarded-proto": "https" });
+      check("เข้าผ่าน https แล้วไม่เด้งวน", r.status, 200);
+      // origin ของ Render อนุญาตโดยอัตโนมัติ (ไม่ต้องตั้ง ALLOWED_ORIGINS) · โดเมนอื่นถูกปฏิเสธ
+      const POLL = "/socket.io/?EIO=4&transport=polling";
+      r = await rawGet(POLL, { Origin: "https://jdi-demo.onrender.com" });
+      check("RENDER_EXTERNAL_URL ผ่าน CORS อัตโนมัติ", [r.status, r.headers["access-control-allow-origin"]], [200, "https://jdi-demo.onrender.com"]);
+      r = await rawGet(POLL, { Origin: "https://other-demo.onrender.com" });
+      check("โดเมน onrender.com อื่นถูกปฏิเสธ", r.status, 403);
+    } finally {
+      srv.kill("SIGTERM");
+      await new Promise((resolve) => { srv.on("exit", resolve); setTimeout(resolve, 2000); });
+    }
+    // ปิดด้วย SIGTERM ต้องจบเอง (exit code 0) ไม่ค้าง
+    check("server ปิดตัวเรียบร้อยเมื่อได้ SIGTERM (exit 0)", srv.exitCode, 0);
+    stub.close();
+    check("คำสั่งที่ส่งไป Upstash มีแค่ GET/SET", [...new Set(commands)].sort(), ["GET", "SET"]);
+  });
+
   // ปิดทุก socket เพื่อให้โปรเซสจบได้
   for (const rec of [A, B, C, ...others]) rec.socket.disconnect();
 }
 
-// กันเทสค้าง: ถ้าเกิน 240 วิให้หยุด (ข้อ 29 เพิ่มราว 20 วิ) (ไม่หน่วงไม่ให้โปรเซสปิดตัว)
+// กันเทสค้าง: ถ้าเกิน 300 วิให้หยุด (ข้อ 29 เพิ่มราว 20 วิ) (ไม่หน่วงไม่ให้โปรเซสปิดตัว)
 // เดิมตั้งไว้ 90 วิ ตอนที่ชุดเทสทั้งชุดใช้ราว 35 วิ — ข้อ 5 เพิ่มการสร้างห้องจริง 30 ห้อง
 // กับการรอ "ต้องไม่มีอะไรมา" อีกหลายจุด รวมแล้วราว 50 วิ จึงขยับเพดานขึ้นให้ยังเหลือที่เผื่อเท่าของเดิม
 // (ข้อ 6 กับข้อ 15 กินเวลา 9 + 21 วิอยู่แล้ว เพราะเป็นการรอตัวจับเวลาจริงของเกม ลดไม่ได้)
 const watchdog = setTimeout(() => {
-  console.log("\n❌ เทสค้างเกิน 240 วินาที — ยกเลิก");
+  console.log("\n❌ เทสค้างเกิน 300 วินาที — ยกเลิก");
   stopServer();
   process.exit(1);
-}, 240000);
+}, 300000);
 watchdog.unref();
 
 main()

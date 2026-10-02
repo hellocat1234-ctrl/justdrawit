@@ -1,14 +1,110 @@
 // ---------- Leaderboard (ข้อ 6) ----------
 // เก็บคะแนนโหมด Solo ไว้ในไฟล์ JSON ไฟล์เดียว (ไม่ใช้ database เพื่อให้ทันเวลา)
 // ไฟล์นี้ไม่ผูกกับ socket หรือ express เลย จึง require ไปใช้ได้ทั้งจาก index.js สคริปต์ seed และเทส
+//
+// สองโหมดที่เก็บ (API ภายนอกเหมือนกันทุกตัวอักษร — saveScore/getLeaderboard/rankOf ยังเป็นฟังก์ชันปกติไม่ใช่ async):
+//   1) ไฟล์ server/data/scores.json  — ค่าเริ่มต้น ใช้ตอนเล่นในเครื่อง
+//   2) Upstash Redis (HTTP) — เปิดเมื่อตั้ง UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN ใช้ตอน deploy บน Render
+//      เพราะดิสก์ของ Render แพ็กเกจฟรีหายทุกครั้งที่รีสตาร์ท/หลับ/deploy ใหม่
+//      วิธีทำงาน: ตอนสตาร์ท (init) โหลดคะแนนทั้งหมดจาก Upstash มาไว้ในหน่วยความจำ → อ่านจากหน่วยความจำ (เร็ว ไม่ async)
+//      → ตอนบันทึกคะแนนใหม่ อัปเดตหน่วยความจำทันที แล้วเขียนทั้งก้อนกลับ Upstash เบื้องหลัง (คิวเดียว ล้มแล้วลองใหม่)
+//      ใช้ fetch ของ Node ล้วน ไม่เพิ่ม library · token อยู่ใน env เท่านั้น ไม่เคยอยู่ใน event/log
 const fs = require("fs");
 const path = require("path");
 const { cleanName } = require("./clean");
 
 // เทสตั้ง SCORES_FILE ชี้ไปไฟล์ชั่วคราว จะได้ไม่ไปทับคะแนนจริง
 const SCORES_FILE = process.env.SCORES_FILE || path.join(__dirname, "data", "scores.json");
+const REMOTE_KEY = "jdi:scores:v1";
+const REMOTE_TIMEOUT_MS = 5000;
+const REMOTE_RETRY_MS = 5000;
 const TOP_LIMIT = 20;
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/; // YYYY-MM เดือน 01-12 เท่านั้น
+
+// ---------- โหมด Upstash Redis ----------
+let cache = null; // null = โหมดไฟล์ · array = โหมด Upstash (คะแนนทั้งหมดในหน่วยความจำ)
+let remote = null; // { url, token } เมื่อเปิดโหมด Upstash
+let dirty = false; // มีของใหม่ที่ยังไม่ได้เขียนกลับ
+let flushing = null; // Promise ของรอบเขียนที่กำลังทำ
+let retryTimer = null;
+
+// ส่งคำสั่ง Redis หนึ่งคำสั่งผ่าน REST เช่น ["GET","key"] → คืน result · ผิดพลาดทุกกรณี throw
+async function redis(command) {
+  const res = await fetch(remote.url, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${remote.token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(command),
+    signal: AbortSignal.timeout(REMOTE_TIMEOUT_MS),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok || body.error) throw new Error(body.error || `HTTP ${res.status}`);
+  return body.result;
+}
+
+// เรียกครั้งเดียวตอนสตาร์ท (index.js รอให้เสร็จก่อนเปิดรับคน) · ไม่ได้ตั้ง env = ใช้ไฟล์ตามเดิม
+// ต่อ Upstash ไม่ได้/ข้อมูลเสีย = เตือนแล้วถอยไปใช้ไฟล์ ห้ามล่ม (คะแนนที่ยังอยู่ใน Upstash ไม่ถูกแตะ)
+async function init() {
+  const url = String(process.env.UPSTASH_REDIS_REST_URL || "").trim();
+  const token = String(process.env.UPSTASH_REDIS_REST_TOKEN || "").trim();
+  if (!url || !token) return;
+  remote = { url, token };
+  try {
+    const text = await redis(["GET", REMOTE_KEY]);
+    let rows = [];
+    if (text != null) {
+      const data = JSON.parse(text);
+      if (!Array.isArray(data)) throw new Error("ข้อมูลใน Upstash ไม่ใช่ array");
+      rows = data.filter(isValidRow);
+    }
+    cache = rows;
+    console.log(`Leaderboard: เก็บใน Upstash Redis (โหลดมา ${rows.length} แถว)`);
+  } catch (err) {
+    remote = null;
+    cache = null;
+    console.warn(`ต่อ Upstash ไม่สำเร็จ (${err.message}) — Leaderboard ใช้ไฟล์แทน (คะแนนจะหายเมื่อรีสตาร์ทบน Render)`);
+  }
+}
+
+// เขียนทั้งก้อนกลับ Upstash เบื้องหลัง · ถ้ามีรอบกำลังเขียนอยู่ ไม่เริ่มซ้อน แต่ทำเครื่องหมายว่ามีของใหม่ให้เขียนซ้ำอีกรอบ
+function persistSoon() {
+  dirty = true;
+  if (flushing) return;
+  flushing = (async () => {
+    while (dirty && remote) {
+      dirty = false;
+      try {
+        await redis(["SET", REMOTE_KEY, JSON.stringify(cache)]);
+      } catch (err) {
+        dirty = true;
+        console.warn(`เขียนคะแนนลง Upstash ไม่สำเร็จ (${err.message}) — จะลองใหม่`);
+        retryTimer = setTimeout(() => {
+          retryTimer = null;
+          flushing = null;
+          if (dirty) persistSoon();
+        }, REMOTE_RETRY_MS);
+        retryTimer.unref?.();
+        return; // flushing ยังไม่ว่างจนกว่าตัวจับเวลาจะปล่อย กันเขียนถี่ตอนล่ม
+      }
+    }
+    flushing = null;
+  })();
+}
+
+// รอให้เขียนค้างเสร็จ (ใช้ตอน server โดนสั่งปิด เช่น deploy ใหม่บน Render เพื่อไม่ให้คะแนนล่าสุดหาย · และใช้ในเทส)
+async function flush(timeoutMs = 4000) {
+  const until = Date.now() + timeoutMs;
+  while (remote && (dirty || flushing) && Date.now() < until) {
+    if (dirty && (retryTimer || !flushing)) {
+      // กำลังรอลองใหม่หรือยังไม่มีรอบเขียน → เขียนเดี๋ยวนี้เลย ไม่รอตัวจับเวลา (ใกล้ปิด server แล้ว)
+      clearTimeout(retryTimer);
+      retryTimer = null;
+      flushing = null;
+      persistSoon();
+    }
+    await (flushing || Promise.resolve());
+    await new Promise((r) => setTimeout(r, 25));
+  }
+}
 
 // แถวที่หน้าตาไม่ถูก (มีคนไปแก้ไฟล์มือ) ทิ้งไป ไม่ให้ทำให้หน้า Leaderboard พัง
 function isValidRow(row) {
@@ -23,6 +119,7 @@ function isValidRow(row) {
 // อ่านไฟล์ทุกครั้งที่ต้องใช้ (ไฟล์เล็ก อ่านเร็ว) จะได้เห็นของล่าสุดเสมอ
 // ไฟล์ยังไม่มี / JSON เสีย / ไม่ใช่ array → ถือว่ายังไม่มีคะแนน ห้ามล่ม
 function loadScores() {
+  if (cache) return [...cache]; // โหมด Upstash: อ่านจากหน่วยความจำ
   let data;
   try {
     data = JSON.parse(fs.readFileSync(SCORES_FILE, "utf8"));
@@ -36,6 +133,11 @@ function loadScores() {
 // เขียนแบบปลอดภัย: เขียนลงไฟล์ชั่วคราวก่อน แล้วค่อยเปลี่ยนชื่อทับของเดิม
 // การเปลี่ยนชื่อเกิดในจังหวะเดียว ถ้าไฟดับกลางทาง ไฟล์จริงยังเป็นของเดิมครบ ไม่ใช่ครึ่งๆ กลางๆ
 function writeScores(rows) {
+  if (cache) {
+    cache = rows;
+    persistSoon();
+    return;
+  }
   fs.mkdirSync(path.dirname(SCORES_FILE), { recursive: true });
   const tmp = `${SCORES_FILE}.${process.pid}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(rows, null, 2));
@@ -44,6 +146,7 @@ function writeScores(rows) {
 
 // ไฟล์เสียแต่ยังมีของอยู่ → เก็บสำรองไว้ก่อนเขียนทับ เผื่อต้องกู้คะแนนด้วยมือ
 function backupIfBroken() {
+  if (cache) return; // โหมด Upstash ไม่มีไฟล์ให้สำรอง
   let text;
   try {
     text = fs.readFileSync(SCORES_FILE, "utf8");
@@ -143,4 +246,4 @@ function rankOf({ name, score, levelReached }) {
   return ahead.length + 1;
 }
 
-module.exports = { SCORES_FILE, saveScore, getLeaderboard, rankOf, isValidMonth, loadScores, writeScores, formatPlayedAt };
+module.exports = { init, flush, SCORES_FILE, saveScore, getLeaderboard, rankOf, isValidMonth, loadScores, writeScores, formatPlayedAt };

@@ -22,7 +22,9 @@ const server = http.createServer(app);
 //   - *.trycloudflare.com                       (ลิงก์ Cloudflare quick tunnel จาก npm run share)
 //   - ที่เพิ่มเองใน env ALLOWED_ORIGINS (คั่นด้วยจุลภาค เช่น https://game.example.com)
 // เว็บอื่นบนอินเทอร์เน็ตจะไม่ได้ header CORS · ไม่มี Origin เลย (แอปที่ไม่ใช่เบราว์เซอร์ / เทส) ผ่านตามปกติ
-const EXTRA_ORIGINS = String(process.env.ALLOWED_ORIGINS || "")
+// บน Render: RENDER_EXTERNAL_URL (เช่น https://justdrawit.onrender.com) ถูกตั้งให้เองและเพิ่มเข้ารายการอัตโนมัติ
+const EXTRA_ORIGINS = [String(process.env.ALLOWED_ORIGINS || ""), String(process.env.RENDER_EXTERNAL_URL || "")]
+  .join(",")
   .split(",")
   .map((o) => o.trim().replace(/\/$/, ""))
   .filter(Boolean);
@@ -59,6 +61,19 @@ const io = new Server(server, {
   cors: { origin: (origin, cb) => cb(null, isAllowedOrigin(origin)) },
   allowRequest: (req, cb) => cb(null, originOk(req)),
 });
+
+// ตอน deploy หลังพร็อกซีของ Render: ใครเข้าด้วย http ให้เด้งไป https (ตั้ง FORCE_HTTPS=1) · /healthz ยกเว้น (Render เช็คตรงเข้าเครื่อง)
+if (process.env.FORCE_HTTPS === "1") {
+  app.use((req, res, next) => {
+    if (req.path !== "/healthz" && req.headers["x-forwarded-proto"] === "http") {
+      return res.redirect(301, `https://${req.headers.host}${req.originalUrl}`);
+    }
+    next();
+  });
+}
+
+// เช็คสุขภาพ: ตอบเร็วที่สุด ไม่แตะข้อมูลใดๆ (Render ใช้ดูว่า server พร้อมรับคนหรือยัง)
+app.get("/healthz", (req, res) => res.type("text").send("ok"));
 
 app.use(express.static(__dirname + "/public"));
 
@@ -1510,10 +1525,13 @@ io.on("connection", (socket) => {
 
 const PORT = Number(process.env.PORT) || 3000; // เทสเปิด server ตัวที่สองบนพอร์ตอื่นได้
 // โหลดคลังคำ/โมเดลของ Solo ให้เสร็จก่อนเปิดรับคน (ไม่ throw โหลดไม่ได้ก็ใช้สมองอื่น)
-ai.init().then(() => {
+// leaderboard.init() = โหลดคะแนนจาก Upstash ถ้าตั้ง env ไว้ (ไม่ตั้ง = ใช้ไฟล์ ไม่ทำอะไร) · ไม่ throw
+Promise.all([ai.init(), leaderboard.init()]).then(() => {
   aiDrawings.load();
   // ไม่ระบุ host = รับทุกการเชื่อมต่อ (เครื่องอื่นในวง Wi-Fi เดียวกันเข้าได้)
-  server.listen(PORT, () => {
+  // HOST=0.0.0.0 ไว้ให้ตอน deploy บน Render (ต้องฟังที่ 0.0.0.0 ตามที่ Render ต้องการ)
+  const listenArgs = process.env.HOST ? [PORT, process.env.HOST] : [PORT];
+  server.listen(...listenArgs, () => {
     console.log(`server พร้อมแล้ว ที่ http://localhost:${PORT}`);
     const ips = lanAddresses();
     if (ips.length) {
@@ -1526,3 +1544,11 @@ ai.init().then(() => {
     console.log(`AI Solo: โหมด ${ai.aiMode()}`);
   });
 });
+
+// ถูกสั่งปิด (deploy ใหม่/รีสตาร์ทบน Render ส่ง SIGTERM): เขียนคะแนนที่ค้างลง Upstash ให้เสร็จก่อนค่อยดับ จะได้ไม่เสียคะแนนล่าสุด
+for (const sig of ["SIGTERM", "SIGINT"]) {
+  process.on(sig, async () => {
+    await leaderboard.flush();
+    process.exit(0);
+  });
+}
