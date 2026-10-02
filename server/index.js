@@ -167,6 +167,7 @@ function teamRoundInfo(room, lane) {
     hintAt: hintAt(room),
     time: room.timeLeft,
     challenge: room.challenge ?? { type: "none" },
+    intro: Boolean(room.intro),
     guessedIds: [...lane.guessedIds],
     solvedTeams: TEAMS.filter((t) => room.teams[t].solved), // ชื่อทีมเท่านั้น ไม่มีชื่อคน/คำ
   };
@@ -185,8 +186,9 @@ function nextTeamTurn(room) {
   room.teamTurn++;
   room.phase = "choosing";
   room.wordOptions = pickWords(3); // สองทีมได้ตัวเลือกชุดเดียวกัน คนวาดคนไหนเลือกก่อน คำนั้นใช้กับทั้งสองทีม
+  const challenge = rollChallenge(room); // Mini Challenge เดียวกันทั้งสองทีม
   for (const lane of laneList(room)) {
-    if (lane.drawerId) io.to(lane.drawerId).emit("choose_word", { options: room.wordOptions, time: 10 });
+    if (lane.drawerId) io.to(lane.drawerId).emit("choose_word", { options: room.wordOptions, time: 10, challenge });
   }
   room.chooseTimeout = setTimeout(() => startTeamDrawing(room, room.wordOptions[0]), 10000);
 }
@@ -198,7 +200,9 @@ function startTeamDrawing(room, word) {
   console.log("คำตานี้ (ทีม):", word);
   room.roundGains = {};
   room.solveCount = 0;
-  room.challenge = pickChallenge(); // Mini Challenge เดียวกันทั้งสองทีม
+  room.challenge = room.nextChallenge ?? { type: "none" }; // สุ่มไว้ตั้งแต่ขึ้นตา (rollChallenge) เดียวกันทั้งสองทีม
+  const introMs = introMsFor(room.challenge);
+  room.intro = introMs > 0; // ตั้งก่อน emit เพราะ teamRoundInfo อ่านค่านี้
   room.timeLeft = room.settings.drawTime;
   for (const t of TEAMS) {
     const lane = room.teams[t];
@@ -211,7 +215,7 @@ function startTeamDrawing(room, word) {
     io.to(lane.code).emit("round_start", teamRoundInfo(room, lane));
     if (lane.drawerId) io.to(lane.drawerId).emit("your_word", { word });
   }
-  startTimer(room, room.settings.drawTime, () => endRound(room));
+  beginDrawing(room, introMs, () => endRound(room));
 }
 
 // ทายในโหมดทีม — ทุกอย่างผ่านเลนของทีมผู้ทาย (แชทผิด/ถูก คำใบ้ ✅) ไม่รั่วไปทีมอื่น
@@ -220,7 +224,7 @@ function handleTeamGuess(socket, room, player, text) {
   if (!lane) return;
   const msg = { playerId: socket.id, name: player.name, text };
   // ไม่ได้อยู่ช่วงวาด หรือทีมนี้ถูกข้าม: คุยได้แต่ในทีมตัวเอง
-  if (room.phase !== "drawing" || lane.skipped) return void io.to(lane.code).emit("chat_message", msg);
+  if (room.phase !== "drawing" || room.intro || lane.skipped) return void io.to(lane.code).emit("chat_message", msg);
   if (socket.id === lane.drawerId) return; // คนวาดพิมพ์ไม่ได้
   if (lane.guessedIds.has(socket.id)) {
     for (const id of [lane.drawerId, ...lane.guessedIds]) io.to(id).emit("chat_message", msg);
@@ -366,8 +370,15 @@ function revealHint(room, by) {
 // ทุกกติกาตัดสินที่ server เท่านั้น client แค่ปิดปุ่มให้ใช้ง่าย ไม่ใช่ตัวกันโกง
 // และเหมือนการวาดทุกอย่าง: ไม่ผ่านกติกา = ทิ้งเงียบ ๆ ไม่ตอบ error กลับไป
 // (ถ้าตอบ error กลับ เท่ากับบอกคนที่กำลังลองโกงว่าเราดักตรงไหนอยู่)
-const CHALLENGE_NONE = 40;
-const CHALLENGE_COLOUR_FIX = 30; // ที่เหลือ 30 = dont_lift_pen
+// จังหวะของ Mini Challenge (รอบ 3C):
+//   - ตาแรกของเกมไม่มีเสมอ ให้ทุกคนเล่นแบบปกติก่อน
+//   - ตาถัดไปสุ่ม โอกาส 1 ใน 3 และ "ไม่ติดกันสองตา" (ตาที่แล้วมีกติกา ตานี้ปกติเสมอ)
+//   - สุ่มตอนขึ้นตา (ก่อนเลือกคำ) เพื่อบอกคนวาดในกล่องเลือกคำ ไม่ใช่ตอนเริ่มวาด
+//   - ตาที่มีกติกา: ขึ้นป้ายใหญ่ CHALLENGE_INTRO_MS ก่อน ช่วงนั้นห้ามวาดและยังไม่เริ่มนับเวลา (เวลาวาดเท่าเดิม)
+// env 3 ตัวนี้ไว้ให้เทสเท่านั้น (ไม่ตั้ง = กติกาจริง): ODDS ปรับโอกาส · NO_PACING=1 ปิดกฎตาแรก/ไม่ติดกัน · INTRO_MS=0 ข้ามป้าย
+const CHALLENGE_CHANCE = process.env.CHALLENGE_ODDS !== undefined ? Number(process.env.CHALLENGE_ODDS) : 1 / 3;
+const CHALLENGE_NO_PACING = process.env.CHALLENGE_NO_PACING === "1";
+const CHALLENGE_INTRO_MS = process.env.CHALLENGE_INTRO_MS !== undefined ? Number(process.env.CHALLENGE_INTRO_MS) : 2000;
 
 // 8 สีหลักของพาเลต — ต้องตรงกับ PAINT_COLORS ใน client/src/canvas/palette.js
 // คนละโปรเซส import กันไม่ได้จึงประกาศซ้ำ เหมือน SIZE_MIN/SIZE_MAX ข้างบน
@@ -382,13 +393,39 @@ const BOARD_COLOR = "#ffffff";
 // เหลือ 7 สี ทุกสียัง "เป็นสีที่ตาเห็นได้" ทั้งหมด
 const COLOUR_FIX_COLORS = CHALLENGE_COLORS.filter((c) => c !== BOARD_COLOR);
 
+// เลือก "ชนิด" ของกติกา (ไม่รวม none) · colour_fix กับ dont_lift_pen อย่างละครึ่ง
 function pickChallenge() {
-  const roll = Math.random() * 100;
-  if (roll < CHALLENGE_NONE) return { type: "none" };
-  if (roll < CHALLENGE_NONE + CHALLENGE_COLOUR_FIX) {
+  if (Math.random() < 0.5) {
     return { type: "colour_fix", color: COLOUR_FIX_COLORS[Math.floor(Math.random() * COLOUR_FIX_COLORS.length)] };
   }
   return { type: "dont_lift_pen" };
+}
+
+// สุ่ม Mini Challenge ของตาที่กำลังจะเริ่ม → room.nextChallenge (ใช้ทั้งบอกคนวาดตอนเลือกคำ และตอนเริ่มวาดจริง)
+// challengeHistory = ชนิดของทุกตาในเกมนี้ (ล้างตอน start_game) ไว้ดูตาแรกกับตาที่แล้ว
+function rollChallenge(room) {
+  const history = room.challengeHistory ?? (room.challengeHistory = []);
+  const allowed = CHALLENGE_NO_PACING || (history.length > 0 && history[history.length - 1] === "none");
+  const ch = allowed && Math.random() < CHALLENGE_CHANCE ? pickChallenge() : { type: "none" };
+  history.push(ch.type);
+  room.nextChallenge = ch;
+  return ch;
+}
+
+// ช่วงป้ายใหญ่ของตาที่มีกติกา (ms) · ตาปกติ = 0
+const introMsFor = (challenge) => (challenge && challenge.type !== "none" ? CHALLENGE_INTRO_MS : 0);
+
+// เริ่มนับเวลาวาดจริง: ตาปกติเริ่มทันที · ตามี intro รอป้ายหายก่อน แล้วบอกทุกคนด้วย intro_end (คนวาดเริ่มวาดได้ตอนนี้)
+// ช่วง intro: room.intro = true → drawRoom() ทิ้งการวาดทุกชนิด และการทายถูกนับเป็นแชทธรรมดา
+function beginDrawing(room, introMs, onEnd) {
+  room.intro = introMs > 0;
+  if (!room.intro) return startTimer(room, room.settings.drawTime, onEnd);
+  room.timeLeft = room.settings.drawTime;
+  room.introTimer = setTimeout(() => {
+    room.intro = false;
+    io.to(room.code).emit("intro_end", {});
+    startTimer(room, room.settings.drawTime, onEnd);
+  }, introMs);
 }
 
 // เทียบสีแบบไม่สนตัวพิมพ์เล็กใหญ่ เพราะ COLOR_RE ยอมรับทั้ง #E8553F และ #e8553f
@@ -479,7 +516,7 @@ const isSize = (v) => typeof v === "number" && Number.isFinite(v) && v >= SIZE_M
 // รวมการเช็คสิทธิ์และช่วงเวลาไว้ที่เดียว ทุก handler ของการวาดเรียกฟังก์ชันนี้
 function drawRoom(socket) {
   const room = rooms.get(socket.data.roomCode);
-  if (!room || room.phase !== "drawing") return null;
+  if (!room || room.phase !== "drawing" || room.intro) return null; // ช่วงป้ายใหญ่ห้ามวาด
   // โหมดทีม: คืน "เลน" ของทีมที่คนนี้เป็นคนวาด — ทุก handler จึงเขียน/ส่งต่อเฉพาะในทีมนั้น (lane.code = 48213:A)
   if (isTeamMode(room)) {
     const lane = laneOfDrawer(room, socket.id);
@@ -637,6 +674,9 @@ function resetCanvas(room) {
 function stopTimer(room) {
   clearInterval(room.timer);
   room.timer = null;
+  clearTimeout(room.introTimer); // ตาจบ/ห้องว่างระหว่างป้ายใหญ่ → เลิกรอ ไม่ให้ไปเริ่มเวลาตาที่จบแล้ว
+  room.introTimer = null;
+  room.intro = false;
 }
 
 function startTimer(room, seconds, onEnd) {
@@ -675,7 +715,8 @@ function nextTurn(room) {
 
   room.phase = "choosing";
   room.wordOptions = pickWords(3);
-  io.to(room.drawerId).emit("choose_word", { options: room.wordOptions, time: 10 });
+  // บอกคนวาดก่อนเลือกคำว่าตานี้มี Mini Challenge อะไร (ส่งถึงคนวาดคนเดียว)
+  io.to(room.drawerId).emit("choose_word", { options: room.wordOptions, time: 10, challenge: rollChallenge(room) });
   room.chooseTimeout = setTimeout(() => startDrawing(room, room.wordOptions[0]), 10000);
 }
 
@@ -690,7 +731,9 @@ function startDrawing(room, word) {
   room.hintOpen = false;
   // ตาใหม่ = สุ่ม Mini Challenge ใหม่ และปลดล็อกปากกากลับเป็นปกติ
   // (ต้องตั้งก่อน emit round_start เสมอ เพราะค่านี้ติดไปกับ round_start ของตานี้เลย)
-  room.challenge = pickChallenge();
+  room.challenge = room.nextChallenge ?? { type: "none" }; // สุ่มไว้ตั้งแต่ขึ้นตา (rollChallenge) คนวาดรู้แล้วตอนเลือกคำ
+  const introMs = introMsFor(room.challenge);
+  room.intro = introMs > 0; // ตั้งก่อน emit เพราะ roundInfo อ่านค่านี้
   room.penUsed = false;
   resetCanvas(room); // ขึ้นตาใหม่ = กระดานว่าง ประวัติตาที่แล้วทิ้งทั้งหมด
 
@@ -698,7 +741,7 @@ function startDrawing(room, word) {
   io.to(room.code).emit("round_start", roundInfo(room));
   io.to(room.drawerId).emit("your_word", { word });
 
-  startTimer(room, room.settings.drawTime, () => endRound(room));
+  beginDrawing(room, introMs, () => endRound(room));
 }
 
 // คนที่จะวาดต่อจากตานี้ — ให้ client โชว์ป้าย "วาดคนถัดไป" (client เดาเองไม่ได้ เพราะ turnOrder อยู่ที่ server)
@@ -726,6 +769,8 @@ function roundInfo(room) {
     // Mini Challenge ของตานี้ (ข้อ 5) — ติดไปกับ round_start ด้วย
     // คนที่เข้าห้องกลางตาจึงเห็นป้ายเหมือนคนที่อยู่ในห้องตั้งแต่แรก โดยไม่ต้องมีโค้ดพิเศษ
     challenge: room.challenge ?? { type: "none" },
+    // true = ตอนนี้อยู่ช่วงป้ายใหญ่ (ยังห้ามวาด เวลายังไม่เดิน) จนกว่าจะได้ intro_end
+    intro: Boolean(room.intro),
     // ส่งแค่ "id" ของคนที่ทายถูกแล้ว ไม่มีคำตอบหรืออะไรที่บอกคำปนมาด้วย
     // มีไว้ให้คนที่เข้าห้องกลางตาเห็นติ๊กถูกของคนที่ทายไปก่อนหน้า (งานค้างจากข้อ 2)
     guessedIds: [...room.guessedIds],
@@ -1145,6 +1190,7 @@ io.on("connection", (socket) => {
     room.round = 1;
     room.turnOrder = room.players.map((p) => p.id);
     room.turnIndex = 0;
+    room.challengeHistory = []; // เกมใหม่ (รวมเล่นอีกรอบ) = ตาแรกไม่มี Mini Challenge อีกครั้ง
     if (isTeamMode(room)) {
       // หนึ่งรอบ = ทีมที่ใหญ่กว่าวาดครบทุกคนหนึ่งรอบ (ทีมเล็กหมุนวนซ้ำ) · จำนวนตาทั้งเกมล็อกตอนเริ่ม
       room.teams = { A: newLane(room, "A"), B: newLane(room, "B") };
@@ -1178,7 +1224,7 @@ io.on("connection", (socket) => {
     const msg = { playerId: socket.id, name: player.name, text };
 
     // ไม่ได้อยู่ช่วงวาด คุยเล่นได้ปกติ
-    if (room.phase !== "drawing") return io.to(room.code).emit("chat_message", msg);
+    if (room.phase !== "drawing" || room.intro) return io.to(room.code).emit("chat_message", msg);
 
     // ช่องโกง 1: คนวาดห้ามพิมพ์ระหว่างวาด
     if (socket.id === room.drawerId) return;

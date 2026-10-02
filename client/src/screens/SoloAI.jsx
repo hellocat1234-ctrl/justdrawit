@@ -49,7 +49,7 @@ function lastOpIndex(actions) {
  * กติกาทุกอย่างอยู่ที่ server: เวลา ชีวิต คะแนน การขึ้นด่าน การบันทึก leaderboard
  * หน้านี้แค่แสดงผลและส่งภาพ — นับเวลาถอยหลังเองเพื่อโชว์เท่านั้น server เป็นคนปิดด่าน
  */
-export default function SoloAI({ initialName = "", onBack }) {
+export default function SoloAI({ initialName = "", onName, onBack }) {
   // intro = กรอกชื่อ · starting = ส่ง ai_start แล้วรอด่านแรก · playing = ช่วง 1 เราวาด AI ทาย
   // watch = ช่วง 2 ดูภาพที่เล่นซ้ำแล้วพิมพ์ทาย · rest = พักระหว่างช่วง · over = จบเกม
   const [phase, setPhase] = useState("intro");
@@ -295,6 +295,7 @@ export default function SoloAI({ initialName = "", onBack }) {
   function start(e) {
     e?.preventDefault();
     if (!name.trim()) return;
+    onName?.(name.trim()); // จำชื่อที่ใช้ไว้ (ชื่อเดียวกับหน้าแรก)
     setScore(0);
     setLives(3);
     setFinal(null);

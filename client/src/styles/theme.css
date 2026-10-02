@@ -3815,3 +3815,130 @@ select[class] {
     grid-column: auto;
   }
 }
+
+/* ---- ช่องชื่อ + ปุ่มลูกเต๋าสุ่มชื่อ ---- */
+.name-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+.name-row .input {
+  flex: 1;
+  min-width: 0;
+}
+.name-row__dice {
+  flex: none;
+  min-height: 0;
+  height: auto;
+  min-width: 52px;
+}
+
+/* ============================ Mini Challenge แบบมีจังหวะ ============================ */
+
+/* ป้ายใหญ่กลางกระดานตอนเริ่มตา (อยู่ใน .board ไม่ดันเลย์เอาต์ · ไม่รับเมาส์/นิ้ว) */
+.challenge-intro {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  background: rgba(43, 43, 43, 0.55);
+  pointer-events: none;
+  animation: challenge-intro-fade 0.2s ease-out;
+}
+.challenge-intro__card {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 14px 28px 18px;
+  max-width: 94%;
+  border: var(--border-thick);
+  box-shadow: var(--shadow);
+  background: var(--purple);
+  color: var(--white);
+  text-align: center;
+  animation: challenge-intro-pop 0.35s cubic-bezier(0.2, 1.6, 0.4, 1);
+}
+.challenge-intro__mascot {
+  width: clamp(54px, 11vw, 96px);
+  animation: challenge-intro-shake 0.5s steps(2, end) 3;
+}
+.challenge-intro__kicker {
+  margin: 0;
+  font-family: var(--font-pixel);
+  font-size: clamp(16px, 2.6vw, 22px);
+  letter-spacing: 3px;
+  color: var(--yellow);
+  text-shadow: 2px 2px 0 var(--ink);
+}
+.challenge-intro__title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0;
+  font-family: var(--font-pixel);
+  font-weight: 400;
+  font-size: clamp(30px, 5.4vw, 52px);
+  letter-spacing: 2px;
+  line-height: 1.05;
+  text-shadow: 3px 3px 0 var(--ink);
+}
+.challenge-intro__swatch {
+  width: 36px;
+  height: 36px;
+  border: var(--border);
+  box-shadow: var(--shadow-xs);
+}
+.challenge-intro__desc {
+  margin: 0;
+  font-size: clamp(15px, 2.2vw, 19px);
+  text-shadow: 1px 1px 0 var(--ink);
+}
+@keyframes challenge-intro-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes challenge-intro-pop {
+  from { transform: scale(0.4); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+@keyframes challenge-intro-shake {
+  0%, 100% { transform: translateX(-3px) rotate(-3deg); }
+  50% { transform: translateX(3px) rotate(3deg); }
+}
+
+/* บอกในกล่องเลือกคำว่าตานี้มี Mini Challenge อะไร */
+.choose-challenge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0;
+  padding: 8px 12px;
+  border: var(--border);
+  background: var(--purple);
+  color: var(--white);
+  text-align: left;
+}
+.choose-challenge > span:nth-child(2) {
+  display: grid;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.choose-challenge b {
+  font-family: var(--font-head);
+  font-size: 16px;
+}
+.choose-challenge small {
+  font-size: 14px;
+}
+
+/* ตัวอย่างสีของ colour_fix บนพื้นม่วง: ขอบขาวซ้อนขอบดำ กันกลืนกับพื้นเมื่อสีที่ล็อกเป็นม่วง/น้ำเงิน */
+.challenge-intro__swatch,
+.choose-challenge .challenge__swatch {
+  box-shadow: 0 0 0 3px var(--white), 0 0 0 6px var(--ink);
+  margin: 0 6px;
+}

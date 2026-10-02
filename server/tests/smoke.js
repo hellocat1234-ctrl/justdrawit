@@ -63,9 +63,9 @@ async function runPart(label, fn) {
 }
 
 // ---------- ตัวช่วยคุยกับ server ----------
-function connect() {
+function connect(url = URL) {
   return new Promise((resolve, reject) => {
-    const socket = io(URL, { transports: ["websocket"] });
+    const socket = io(url, { transports: ["websocket"] });
     const timer = setTimeout(() => reject(new Error("ต่อ server ไม่ติด")), 8000);
     socket.on("connect", () => { clearTimeout(timer); resolve(socket); });
     socket.on("connect_error", (e) => { clearTimeout(timer); reject(e); });
@@ -192,7 +192,10 @@ async function startServer() {
     stdio: ["ignore", "pipe", "pipe"],
     // ข้อ 21-24 (Solo): บังคับ AI โหมดจำลอง ทายถูกเสมอ · ย่อเวลาด่านเหลือ 2 วิ · พักก่อนด่านถัดไป 0.3 วิ
     // ใส่ key ปลอมไว้ด้วย เพื่อเช็คว่า key ไม่หลุดถึง client เลย
-    env: { ...process.env, SCORES_FILE, AI_MODE: "mock", AI_MOCK_CHANCE: "1", AI_TIME_OVERRIDE: "2", AI_NEXT_DELAY_MS: "300", ANTHROPIC_API_KEY: SECRET_KEY },
+    env: { ...process.env, SCORES_FILE, AI_MODE: "mock", AI_MOCK_CHANCE: "1", AI_TIME_OVERRIDE: "2", AI_NEXT_DELAY_MS: "300", ANTHROPIC_API_KEY: SECRET_KEY,
+      // Mini Challenge: ปิดกฎตาแรก/ไม่ติดกัน + โอกาส 60% + ข้ามป้ายใหญ่ เพื่อให้ข้อ 16–18 สุ่มชนิดที่ต้องการได้เร็วและวาดได้ทันที
+      // (จังหวะจริงของกติกาเทสในข้อ 29 กับ server ตัวที่สองที่ไม่ตั้งสามค่านี้)
+      CHALLENGE_NO_PACING: "1", CHALLENGE_ODDS: "0.6", CHALLENGE_INTRO_MS: "0" },
   });
   const collect = (buf) => serverLog.push(buf.toString().trimEnd());
   child.stdout.on("data", collect);
@@ -2142,19 +2145,155 @@ async function main() {
     for (const P of socks) P.socket.disconnect();
   });
 
+  // ══════════════════════════════════════════════════════════════════
+  // ข้อ 29 — จังหวะ Mini Challenge: ตาแรกไม่มี · ไม่ติดกันสองตา · บอกคนวาดก่อนเลือกคำ · ป้ายใหญ่ก่อนเริ่มนับเวลา
+  // ใช้ server ตัวที่สองบนพอร์ต 3001 ที่ "ไม่ปิดกฎจังหวะ" และตั้ง CHALLENGE_ODDS=1 (เมื่อกฎอนุญาต จะมีกติกาเสมอ)
+  // จึงเดาลำดับได้แน่นอน: ตา 1 ไม่มี → ตา 2 มี → ตา 3 ไม่มี (ติดกันไม่ได้) → ตา 4 มี
+  // ══════════════════════════════════════════════════════════════════
+  await runPart("29. Mini Challenge มีจังหวะ — ตาแรกไม่มี · ไม่ติดกัน · บอกคนวาดก่อนเลือกคำ · ป้ายใหญ่ 2 วิก่อนเริ่มนับเวลา (classic และทีม)", async () => {
+    const URL2 = "http://localhost:3001";
+    const env = { ...process.env, SCORES_FILE, PORT: "3001", AI_MODE: "mock", CHALLENGE_ODDS: "1" };
+    for (const k of ["CHALLENGE_NO_PACING", "CHALLENGE_INTRO_MS"]) delete env[k];
+    const srv = spawn(process.execPath, ["index.js"], { cwd: SERVER_DIR, stdio: "ignore", env });
+    const socks = [];
+    try {
+      let up = false;
+      for (let i = 0; i < 100 && !up; i++) {
+        up = await fetch(`${URL2}/test.html`).then((r) => r.ok).catch(() => false);
+        if (!up) await new Promise((r) => setTimeout(r, 100));
+      }
+      checkOk("server ตัวที่สอง (กฎจังหวะจริง) เปิดได้", up);
+      const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+      const mk = async () => { const P = track(await connect(URL2)); socks.push(P); return P; };
+      const isCh = (c) => c && c.type !== "none";
+
+      // ---------- classic: 2 คน 2 รอบ = 4 ตา ----------
+      const H = await mk();
+      const created = await emitAck(H.socket, "create_room", { name: "PaceH", avatar: 0, rounds: 2, drawTime: 30 });
+      const G = await mk();
+      await emitAck(G.socket, "join_room", { code: created.code, name: "PaceG", avatar: 1 });
+      await wait(200);
+      const who = (rec) => (rec === H ? "หัวห้อง" : "คนเข้า");
+
+      // เล่นหนึ่งตา: คนวาดเลือกคำตัวแรก แล้วอีกคนทายถูกเพื่อจบตา · คืนข้อมูลที่เกี่ยวข้อง
+      async function turn(drawer, guesser, { checkIntro = false } = {}) {
+        const cw = await drawer.wait("choose_word", null, 9000);
+        check(`${who(drawer)} วาด: คนทายไม่ได้ choose_word`, (await guesser.quiet("choose_word", 100)).length, 0);
+        drawer.socket.emit("word_chosen", { word: cw.options[0] });
+        const rs = await drawer.wait("round_start", null, 3000);
+        const rsG = await guesser.wait("round_start", null, 3000);
+        const word = (await drawer.wait("your_word", null, 3000)).word;
+        const out = { cw, rs, rsG, word };
+        if (checkIntro) {
+          const t0 = Date.now();
+          drawer.socket.emit("stroke_start", { x: 0.1, y: 0.1, color: out.rs.challenge.type === "colour_fix" ? out.rs.challenge.color : "#000000", size: 5, tool: "pen" });
+          drawer.socket.emit("fill", { x: 0.5, y: 0.5, color: out.rs.challenge.type === "colour_fix" ? out.rs.challenge.color : "#000000" });
+          check("ช่วงป้ายใหญ่: คนวาดวาดแล้วไม่ถึงคนทาย (server ทิ้ง)", (await guesser.quiet("stroke_start", 300)).length + (await guesser.quiet("fill", 1)).length, 0);
+          guesser.socket.emit("guess", { text: word });
+          check("ช่วงป้ายใหญ่: ทายถูกก็ไม่นับ (เป็นแชทธรรมดา)", (await guesser.quiet("correct_guess", 400)).length, 0);
+          check("ช่วงป้ายใหญ่: ยังไม่มี timer เดิน", (await guesser.quiet("timer", 500)).length, 0);
+          await guesser.wait("intro_end", null, 3000);
+          const waited = Date.now() - t0;
+          checkOk(`intro_end มาหลังเริ่มตาราว 2 วิ (ได้ ${waited} ms)`, waited >= 1700 && waited <= 3200);
+          const tm = await guesser.wait("timer", null, 3000);
+          check("เวลาวาดเท่าเดิม: tick แรกหลังป้ายหายเหลือ 29 จาก 30", tm.timeLeft, 29);
+          drawer.socket.emit("stroke_start", { x: 0.2, y: 0.2, color: out.rs.challenge.type === "colour_fix" ? out.rs.challenge.color : "#000000", size: 5, tool: "pen" });
+          checkOk("หลังป้ายหาย: คนวาดวาดได้ ส่งถึงคนทาย", (await guesser.tryWait("stroke_start", null, 2000)) !== null);
+          drawer.socket.emit("stroke_end");
+        }
+        if (!checkIntro && rs.intro) await guesser.wait("intro_end", null, 4000); // ตาที่มีป้ายใหญ่ ต้องรอป้ายหายก่อนทายถึงจะนับ
+        guesser.socket.emit("guess", { text: word });
+        await guesser.wait("round_end", null, 5000);
+        drawer.clear(); guesser.clear();
+        return out;
+      }
+
+      H.clear(); G.clear();
+      H.socket.emit("start_game");
+      const t1 = await turn(H, G);
+      check("ตา 1: ไม่มี Mini Challenge (choose_word / round_start)", [t1.cw.challenge, t1.rs.challenge, t1.rs.intro], [{ type: "none" }, { type: "none" }, false]);
+
+      const t2 = await turn(G, H, { checkIntro: true });
+      checkOk("ตา 2: choose_word บอกคนวาดว่ามี Mini Challenge", isCh(t2.cw.challenge));
+      check("ตา 2: round_start ตรงกับที่บอกตอนเลือกคำ ทั้งคนวาดและคนทาย", [t2.rs.challenge, t2.rsG.challenge], [t2.cw.challenge, t2.cw.challenge]);
+      check("ตา 2: round_start บอกว่าอยู่ช่วงป้ายใหญ่ (intro)", [t2.rs.intro, t2.rsG.intro], [true, true]);
+
+      const t3 = await turn(H, G);
+      check("ตา 3: ไม่ติดกันสองตา → ไม่มี Mini Challenge", [t3.cw.challenge.type, t3.rs.intro], ["none", false]);
+
+      const t4 = await turn(G, H);
+      checkOk("ตา 4: กลับมามีได้อีก", isCh(t4.cw.challenge));
+      await H.wait("game_end", null, 6000);
+
+      // เล่นอีกรอบ → ตาแรกไม่มีอีกครั้ง
+      H.clear(); G.clear();
+      H.socket.emit("start_game");
+      const r1 = await H.wait("choose_word", null, 4000);
+      check("เล่นอีกรอบ: ตาแรกไม่มี Mini Challenge อีกครั้ง", r1.challenge.type, "none");
+      for (const P of [H, G]) P.socket.disconnect();
+
+      // ---------- โหมดทีม: 4 คน (ทีมละ 2) 1 รอบ = 2 ตา ----------
+      const T1 = await mk();
+      const tc = await emitAck(T1.socket, "create_room", { name: "TpA1", avatar: 0, mode: "team", rounds: 1, drawTime: 30 });
+      const T2 = await mk(), T3 = await mk(), T4 = await mk();
+      for (const [i, P] of [T2, T3, T4].entries()) await emitAck(P.socket, "join_room", { code: tc.code, name: `Tp${i + 2}`, avatar: i });
+      await wait(250);
+      const all4 = [T1, T2, T3, T4];
+      all4.forEach((P) => P.clear());
+      T1.socket.emit("start_game");
+      // ทีม A = T1,T3 · ทีม B = T2,T4 · ตาแรกคนวาด = T1 (A) กับ T2 (B)
+      const c1a = await T1.wait("choose_word", null, 5000);
+      const c1b = await T2.wait("choose_word", null, 5000);
+      check("ทีม ตา 1: ไม่มี Mini Challenge ทั้งสองทีม", [c1a.challenge.type, c1b.challenge.type], ["none", "none"]);
+      T1.socket.emit("word_chosen", { word: c1a.options[0] });
+      const rsA = await T3.wait("round_start", null, 3000);
+      const rsB = await T4.wait("round_start", null, 3000);
+      check("ทีม ตา 1: round_start ไม่มี intro", [rsA.intro, rsB.intro], [false, false]);
+      const w1 = (await T1.wait("your_word", null, 3000)).word;
+      T3.socket.emit("guess", { text: w1 }); T4.socket.emit("guess", { text: w1 });
+      await T3.wait("round_end", null, 5000);
+      all4.forEach((P) => P.clear());
+
+      // ตา 2: คนวาด = T3 (A) กับ T4 (B)
+      const c2a = await T3.wait("choose_word", null, 8000);
+      const c2b = await T4.wait("choose_word", null, 3000);
+      checkOk("ทีม ตา 2: คนวาดทั้งสองทีมรู้ Mini Challenge ก่อนเลือกคำ เป็นอันเดียวกัน", isCh(c2a.challenge) && JSON.stringify(c2a.challenge) === JSON.stringify(c2b.challenge));
+      T3.socket.emit("word_chosen", { word: c2a.options[0] });
+      const rsA2 = await T1.wait("round_start", null, 3000);
+      const rsB2 = await T2.wait("round_start", null, 3000);
+      check("ทีม ตา 2: ทั้งสองทีมอยู่ช่วงป้ายใหญ่ และ challenge ตรงกับที่บอก", [rsA2.intro, rsB2.intro, rsA2.challenge, rsB2.challenge], [true, true, c2a.challenge, c2a.challenge]);
+      const col = c2a.challenge.type === "colour_fix" ? c2a.challenge.color : "#000000";
+      T3.socket.emit("stroke_start", { x: 0.1, y: 0.1, color: col, size: 5, tool: "pen" });
+      T4.socket.emit("stroke_start", { x: 0.1, y: 0.1, color: col, size: 5, tool: "pen" });
+      check("ทีม ช่วงป้ายใหญ่: ทั้งสองเลนวาดไม่ติด", (await T1.quiet("stroke_start", 300)).length + (await T2.quiet("stroke_start", 1)).length, 0);
+      await T1.wait("intro_end", null, 3000);
+      checkOk("ทีม intro_end ถึงทุกคน", (await T2.tryWait("intro_end", null, 1000)) !== null && (await T4.tryWait("intro_end", null, 1000)) !== null);
+      T4.socket.emit("stroke_start", { x: 0.2, y: 0.2, color: col, size: 5, tool: "pen" });
+      checkOk("ทีม หลังป้ายหาย: เลน B วาดได้ ถึงเพื่อนในทีม B", (await T2.tryWait("stroke_start", null, 2000)) !== null);
+      check("ทีม หลังป้ายหาย: ภาพเลน B ไม่รั่วไปทีม A", (await T1.quiet("stroke_start", 300)).length, 0);
+      T4.socket.emit("stroke_end");
+      const w2 = (await T3.wait("your_word", null, 3000)).word;
+      T1.socket.emit("guess", { text: w2 }); T2.socket.emit("guess", { text: w2 });
+      await T1.wait("game_end", null, 9000);
+    } finally {
+      for (const P of socks) P.socket.disconnect();
+      srv.kill();
+    }
+  });
+
   // ปิดทุก socket เพื่อให้โปรเซสจบได้
   for (const rec of [A, B, C, ...others]) rec.socket.disconnect();
 }
 
-// กันเทสค้าง: ถ้าเกิน 180 วิให้หยุด (ไม่หน่วงไม่ให้โปรเซสปิดตัว)
+// กันเทสค้าง: ถ้าเกิน 240 วิให้หยุด (ข้อ 29 เพิ่มราว 20 วิ) (ไม่หน่วงไม่ให้โปรเซสปิดตัว)
 // เดิมตั้งไว้ 90 วิ ตอนที่ชุดเทสทั้งชุดใช้ราว 35 วิ — ข้อ 5 เพิ่มการสร้างห้องจริง 30 ห้อง
 // กับการรอ "ต้องไม่มีอะไรมา" อีกหลายจุด รวมแล้วราว 50 วิ จึงขยับเพดานขึ้นให้ยังเหลือที่เผื่อเท่าของเดิม
 // (ข้อ 6 กับข้อ 15 กินเวลา 9 + 21 วิอยู่แล้ว เพราะเป็นการรอตัวจับเวลาจริงของเกม ลดไม่ได้)
 const watchdog = setTimeout(() => {
-  console.log("\n❌ เทสค้างเกิน 180 วินาที — ยกเลิก");
+  console.log("\n❌ เทสค้างเกิน 240 วินาที — ยกเลิก");
   stopServer();
   process.exit(1);
-}, 180000);
+}, 240000);
 watchdog.unref();
 
 main()

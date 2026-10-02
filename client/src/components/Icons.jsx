@@ -280,20 +280,77 @@ const ART = {
     "wwwwk.......",
     "kkkk........",
   ],
-  // ถังสี: ถังเอียงน้ำสีหยดลงด้านข้าง (หยดสีแดงให้อ่านออกแม้ตัวเล็ก)
-  bucket: [
-    "..kkkkkk....",
-    ".kRRRRRRkk..",
-    "kkrrrrrrrrk.",
-    "k.kkkkkkkkrk",
-    "k.kBBBBBBkrk",
-    "k.kBwBBBBkrk",
-    ".kkBwBBBBkkk",
-    "..kBBBBBBk.r",
-    "...kBBBBBk.r",
-    "...kBBBBBk..",
-    "....kkkkkk..",
+  // ลูกเต๋าพิกเซล (ปุ่มสุ่มชื่อ)
+  dice: [
     "............",
+    ".kkkkkkkkkk.",
+    ".kwwwwwwwwk.",
+    ".kwkkwwkkwk.",
+    ".kwkkwwkkwk.",
+    ".kwwwkkwwwk.",
+    ".kwwwkkwwwk.",
+    ".kwkkwwkkwk.",
+    ".kwkkwwkkwk.",
+    ".kwwwwwwwwk.",
+    ".kkkkkkkkkk.",
+    "............",
+  ],
+  // ถังสี แบบ A: ถังน้ำสีฟ้าเอียง 45° มีหูหิ้ว สีไหลออกปากถังเป็นหยด (16×16 ช่อง C = สีที่เลือกอยู่ ส่งผ่าน prop accent)
+  bucket: [
+    "........kkk.....",
+    ".......kk.kk....",
+    "......kk....k...",
+    ".....kCCk...kk..",
+    ".....kCCCk...k..",
+    "....kwBCCCk..k..",
+    "...kwBBBCCCkkk..",
+    "..kwBBBBBCCCkk..",
+    "...kwBBBBBCCkk..",
+    "....kwBBBBkkCCk.",
+    ".....kwBBk..kk..",
+    "......kwk...kCk.",
+    ".......k...kCCk.",
+    "............kk..",
+    "................",
+    "................",
+  ],
+  // ถังสี แบบ B: กระป๋องสีเอียง 45° (ตัวโลหะ แถบป้ายเหลือง) ตัวเลือกชั่วคราวให้เลือก
+  bucketB: [
+    "................",
+    ".......kkkkk....",
+    "......kk...kk...",
+    ".....kCCk...k...",
+    "....kaCCCk..k...",
+    "....kyaCCCk.k...",
+    "...kyyyaCCCkk...",
+    "..kAayyyaCCCk...",
+    "..kaaayyyaCCkk..",
+    "...kaaayyyakCCk.",
+    "....kaaaykk.kk..",
+    ".....kaak...kCk.",
+    "......kk...kCCk.",
+    "............kk..",
+    "................",
+    "................",
+  ],
+  // ถังสี แบบ C: ถังแดงอ้วนๆ แบบการ์ตูน ตัวเลือกชั่วคราวให้เลือก
+  bucketC: [
+    "................",
+    ".......kkkkk....",
+    "......kk...k....",
+    ".....kCCk...k...",
+    ".....kCCCk..k...",
+    "....kRRCCCk.k...",
+    "...kRrrRCCCkk...",
+    "...krrrrRCCCk...",
+    "...kRrrrrRCCk...",
+    "....kRrrrrkkCk..",
+    ".....kRrrk..kCk.",
+    "......kkk...kCk.",
+    "...........kCCk.",
+    "............kk..",
+    "................",
+    "................",
   ],
   // เครื่องมือรูปทรง: เส้นตรง สี่เหลี่ยม วงกลม
   "shape-line": [
@@ -507,7 +564,7 @@ function medalRows(n, face, dark) {
 }
 
 // รวมช่องสีเดียวกันติดกันในแถวเดียวกันเป็น <rect> เดียว
-export function toRects(rows, mirror) {
+export function toRects(rows, mirror, accent = "#e8553f") {
   const full = mirror ? rows.map((r) => r + [...r].reverse().join("")) : rows;
   const rects = [];
   full.forEach((row, y) => {
@@ -516,15 +573,16 @@ export function toRects(rows, mirror) {
       const ch = row[x];
       let end = x + 1;
       while (end < row.length && row[end] === ch) end++;
-      if (ch !== "." && PAL[ch]) rects.push({ x, y, w: end - x, fill: PAL[ch] });
+      const fill = ch === "C" ? accent : PAL[ch]; // C = สีเน้น (เช่น สีที่เลือกอยู่ในหยดของถังสี)
+      if (ch !== "." && fill) rects.push({ x, y, w: end - x, fill });
       x = end;
     }
   });
   return { rects, w: full[0].length, h: full.length };
 }
 
-function Pix({ rows, mirror = false, size = 20, className = "", label }) {
-  const { rects, w, h } = toRects(rows, mirror);
+function Pix({ rows, mirror = false, size = 20, className = "", label, accent }) {
+  const { rects, w, h } = toRects(rows, mirror, accent);
   return (
     <svg
       className={`pix ${className}`.trim()}
@@ -681,7 +739,7 @@ export const ICON_NAMES = [...new Set([...Object.keys(ART), ...Object.keys(HALF)
 
 // <Icon name="trophy" size={20} /> — size คือความกว้างเป็นพิกเซลหน้าจอ
 // label ใส่เมื่อไอคอนสื่อความหมายเองโดยไม่มีข้อความอยู่ข้างๆ (ไม่ใส่ = ซ่อนจากโปรแกรมอ่านหน้าจอ)
-export function Icon({ name, size = 20, className = "", label }) {
+export function Icon({ name, size = 20, className = "", label, accent }) {
   let rows;
   let mirror = false;
   if (name === "medal1") rows = medalRows(1, "y", "O");
@@ -694,7 +752,7 @@ export function Icon({ name, size = 20, className = "", label }) {
   // ทุกแถวต้องกว้างเท่ากัน (กันพิมพ์พลาดแล้วรูปเบี้ยว)
   const w = rows[0].length;
   const fixed = rows.map((r) => r.padEnd(w, ".").slice(0, w));
-  return <Pix rows={fixed} mirror={mirror} size={size} className={`icon icon--${name} ${className}`.trim()} label={label} />;
+  return <Pix rows={fixed} mirror={mirror} size={size} className={`icon icon--${name} ${className}`.trim()} label={label} accent={accent} />;
 }
 
 export const AVATAR_COUNT = AVATAR_ART.length;

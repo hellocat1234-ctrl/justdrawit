@@ -1,6 +1,7 @@
 import { useState } from "react";
 import Ribbon from "../components/Ribbon";
 import Critter from "../components/Critter";
+import { randomName } from "../playerName";
 import { AvatarArt, Icon } from "../components/Icons";
 import { useEnterRoom } from "../hooks/useEnterRoom";
 
@@ -17,7 +18,8 @@ export default function SetUp({ connected, profile, onBack, onEntered, onError }
   const { name, avatar } = profile;
 
   function create() {
-    enter("create_room", { name, avatar, mode, rounds, drawTime }, { name, avatar });
+    const who = name.trim() || randomName(); // กันกรณีชื่อว่าง
+    enter("create_room", { name: who, avatar, mode, rounds, drawTime }, { name: who, avatar });
   }
 
   return (

@@ -43,6 +43,9 @@ function emptyGame() {
     // dont_lift_pen — true เมื่อ server บอกว่า "คนวาดยกปากกาแล้ว" (event pen_locked)
     // client ไม่เดาเองจาก "วาดไปกี่เส้น" เพราะคนวาดอาจกดค้างไม่ยอมปล่อยก็ได้
     penLocked: false,
+    // Mini Challenge ที่คนวาดรู้ก่อนเลือกคำ (จาก choose_word) · intro = ช่วงป้ายใหญ่ (ห้ามวาด เวลายังไม่เดิน) จนกว่าจะได้ intro_end
+    chooseChallenge: null,
+    intro: false,
   };
 }
 
@@ -63,6 +66,7 @@ export function useGame() {
   // ปลายทางของ action ที่มาจากคนอื่น — หน้า Game เป็นคนตั้งให้ เพราะมันถือ ref ของกระดานอยู่
   // (กระดานอยู่ลึกกว่านี้ เจ้านี้จึงไม่ถือ ref เอง เหมือนที่หน้านี้ไม่ถือ socket ของหน้า Game)
   const canvasApiRef = useRef(null);
+  const introTimerRef = useRef(null); // กันเหนียว: ถ้าไม่ได้ intro_end (หลุด) ปลดล็อกเองหลัง 5 วิ — server ยังทิ้งการวาดที่มาก่อนเวลาอยู่ดี
   // คำสั่งวาดที่มาถึง "ก่อนกระดานจะเกิด" — ต้องพักไว้ก่อนแล้วค่อยวาดตอนกระดานพร้อม
   // จำเป็นจริงๆ ไม่ใช่กันเหนียว: ตอนเข้าห้องกลางตา server ส่ง game_started ต่อด้วย round_start
   // แล้วต่อด้วย canvas_history มาพร้อมกันในจังหวะเดียว แต่ตอนนั้น React ยังไม่ทันวาดหน้า Game
@@ -88,7 +92,13 @@ export function useGame() {
     // มาถึงตอนนี้แปลว่าตาเก่าจบไป 3 วิแล้ว (server หน่วงก่อนขึ้นตาใหม่)
     // ต้องปิด modal สรุปตาไปพร้อมกัน ไม่งั้นคนวาดจะเห็นสอง modal ซ้อนกัน
     const onChooseWord = (data) =>
-      patch({ options: data.options, chooseTime: data.time, summary: null });
+      patch({ options: data.options, chooseTime: data.time, summary: null, chooseChallenge: data.challenge ?? null });
+
+    // ป้ายใหญ่หายแล้ว: คนวาดเริ่มวาดได้ เวลาเริ่มเดิน (server เป็นคนบอก)
+    const onIntroEnd = () => {
+      clearTimeout(introTimerRef.current);
+      patch({ intro: false });
+    };
 
     // ตาใหม่มาแล้ว ล้างของตาที่แล้วทั้งหมด (ตัวเลือกคำ สรุปตา คำจริง คนที่ทายถูก)
     // roundKey ต้องบวกจากค่าเดิม (ไม่ใช้ค่าคงที่) ไม่งั้นกล่องแชทจะไม่รู้ว่าขึ้นตาใหม่แล้วต้องโฟกัสช่องพิมพ์
@@ -100,6 +110,8 @@ export function useGame() {
       // ใครเข้าห้องกลางตาจะเห็นกระดานว่างเปล่า บางรอบเป็นบางรอบไม่เป็น (แล้วแต่ใครถึงก่อน)
       // เรียงในคิวเดียวกันแล้วไม่มีทางสลับ เพราะ socket ส่ง round_start มาก่อน canvas_history เสมอ
       toCanvas({ apply: (api) => api.resetBoard() });
+      clearTimeout(introTimerRef.current);
+      if (data.intro) introTimerRef.current = setTimeout(() => patch({ intro: false }), 5000);
       setGame((g) => ({
         ...g,
         round: data,
@@ -108,6 +120,8 @@ export function useGame() {
         drawerId: data.drawerId,
         timeLeft: data.time,
         options: null,
+        chooseChallenge: null,
+        intro: Boolean(data.intro),
         summary: null,
         word: null,
         // คนที่ทายถูกไปก่อนเราเข้าห้อง server บอกมาพร้อม round_start (guessedIds)
@@ -287,6 +301,7 @@ export function useGame() {
     socket.on("game_started", onGameStarted);
     socket.on("choose_word", onChooseWord);
     socket.on("round_start", onRoundStart);
+    socket.on("intro_end", onIntroEnd);
     socket.on("your_word", onYourWord);
     socket.on("hint_reveal", onHintReveal);
     socket.on("pen_locked", onPenLocked);
@@ -304,6 +319,8 @@ export function useGame() {
       socket.off("game_started", onGameStarted);
       socket.off("choose_word", onChooseWord);
       socket.off("round_start", onRoundStart);
+      socket.off("intro_end", onIntroEnd);
+      clearTimeout(introTimerRef.current);
       socket.off("your_word", onYourWord);
       socket.off("hint_reveal", onHintReveal);
       socket.off("pen_locked", onPenLocked);

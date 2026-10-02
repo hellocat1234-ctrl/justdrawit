@@ -6,6 +6,7 @@ import RankTable from "../components/RankTable";
 import AvatarPicker from "../components/AvatarPicker";
 import JoinModal from "../components/JoinModal";
 import { Icon } from "../components/Icons";
+import { randomName, NAME_MAX_LEN } from "../playerName";
 import { useEnterRoom } from "../hooks/useEnterRoom";
 import { monthKey, useLeaderboard } from "../hooks/useLeaderboard";
 
@@ -34,7 +35,8 @@ export default function Lobby({
   const name = profile.name;
 
   function join(code) {
-    enter("join_room", { code, name, avatar: profile.avatar }, { name, avatar: profile.avatar });
+    const who = name.trim() || randomName(); // กันกรณีชื่อว่าง
+    enter("join_room", { code, name: who, avatar: profile.avatar }, { name: who, avatar: profile.avatar });
   }
 
   return (
@@ -56,15 +58,28 @@ export default function Lobby({
           <label className="field__label" htmlFor="player-name">
             CHOOSE YOUR NAME
           </label>
-          <input
-            id="player-name"
-            className="input"
-            value={name}
-            onChange={(e) => onProfile({ ...profile, name: e.target.value })}
-            maxLength={20}
-            placeholder="ชื่อเล่นของคุณ"
-            autoComplete="off"
-          />
+          {/* ช่องชื่อมีชื่อสุ่มใส่ไว้ให้แล้ว (ไม่ต้องพิมพ์ก็เล่นได้) · ปุ่มลูกเต๋า = สุ่มชื่อใหม่ · ปล่อยช่องว่างไว้ = สุ่มให้เองตอนออกจากช่อง */}
+          <div className="name-row">
+            <input
+              id="player-name"
+              className="input"
+              value={name}
+              onChange={(e) => onProfile({ ...profile, name: e.target.value })}
+              onBlur={() => !name.trim() && onProfile({ ...profile, name: randomName() })}
+              maxLength={NAME_MAX_LEN}
+              placeholder="ชื่อเล่นของคุณ"
+              autoComplete="off"
+            />
+            <button
+              type="button"
+              className="icon-btn name-row__dice"
+              onClick={() => onProfile({ ...profile, name: randomName() })}
+              aria-label="สุ่มชื่อใหม่"
+              title="สุ่มชื่อใหม่"
+            >
+              <Icon name="dice" size={30} />
+            </button>
+          </div>
 
           <div className="home__buttons">
             <button type="button" className="big-btn big-btn--green" disabled={!connected} onClick={onOpenSetup}>

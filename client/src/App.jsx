@@ -3,6 +3,7 @@ import { socket } from "./socket";
 import { errorText } from "./messages";
 import { useGame } from "./hooks/useGame";
 import Lobby from "./screens/Lobby";
+import { initialName, saveName } from "./playerName";
 import WaitingRoom from "./screens/WaitingRoom";
 import Game from "./screens/Game";
 import Leaderboard from "./screens/Leaderboard";
@@ -20,7 +21,7 @@ export default function App() {
   const [room, setRoom] = useState(null); // RoomState ก้อนล่าสุดจาก server
   const [me, setMe] = useState(null); // { playerId, name, avatar } ของเครื่องนี้
   // ชื่อ + อวตารที่เลือกในหน้าแรก อยู่ที่นี่เพื่อให้ติดไปหน้า SET UP / Solo ได้ ไม่ต้องกรอกซ้ำ
-  const [profile, setProfile] = useState({ name: "", avatar: 0 });
+  const [profile, setProfile] = useState(() => ({ name: initialName(), avatar: 0 })); // ชื่อ: ที่จำไว้ ไม่งั้นสุ่มให้ (playerName.js)
   // เปิดจากลิงก์เชิญ ?room=12345 → หน้าแรกเปิดกล่องใส่รหัสให้เอง (อ่านครั้งเดียวตอนเปิดเว็บ)
   const [inviteCode, setInviteCode] = useState(() => roomCodeFromUrl());
   const [toast, setToast] = useState(null);
@@ -80,7 +81,12 @@ export default function App() {
 
   useEffect(() => () => clearTimeout(toastTimer.current), []);
 
+  // จำชื่อล่าสุดที่ใช้ไว้ในเบราว์เซอร์ (พิมพ์เองก็จำ) เปิดครั้งหน้าใช้ชื่อเดิม
+  useEffect(() => saveName(profile.name), [profile.name]);
+
   function handleEntered(info) {
+    // เข้าห้องสำเร็จด้วยชื่อนี้ (อาจเป็นชื่อที่ต่อเลขให้หลังชื่อซ้ำ) → ใช้ชื่อนี้ต่อไป
+    setProfile((p) => (p.name === info.name ? p : { ...p, name: info.name }));
     // เข้าห้องแล้ว ลบ ?room= ออกจากที่อยู่เว็บ กันรีโหลดแล้วกล่องเด้งซ้ำ
     if (inviteCode) window.history.replaceState(null, "", window.location.pathname);
     setInviteCode(null);
@@ -130,7 +136,7 @@ export default function App() {
       {screen === "leaderboard" && <Leaderboard onBack={() => setScreen("lobby")} />}
 
       {/* Solo ผูก socket event ของตัวเองในหน้านั้น (ไม่เกี่ยวกับห้อง) */}
-      {screen === "solo" && <SoloAI initialName={profile.name} onBack={() => setScreen("lobby")} />}
+      {screen === "solo" && <SoloAI initialName={profile.name} onName={(name) => setProfile((p) => ({ ...p, name }))} onBack={() => setScreen("lobby")} />}
 
       {/* room ยังมาไม่ถึงก็มีให้เห็นว่ากำลังทำอะไรอยู่ ไม่ใช่จอเปล่า */}
       {screen === "waiting" &&

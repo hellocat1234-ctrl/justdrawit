@@ -11,6 +11,12 @@ const CHALLENGES = {
   dont_lift_pen: ["pen", "DON'T LIFT PEN", "ห้ามยกปากกา"],
 };
 
+// คำอธิบายสั้นหนึ่งบรรทัด ใช้ในป้ายใหญ่ตอนเริ่มตา และกล่องเลือกคำ (ที่เดียวกันทุกที่ ไม่ให้ข้อความไม่ตรงกัน)
+export const CHALLENGE_INFO = {
+  colour_fix: { icon: "palette", title: "COLOUR FIX", desc: "ตานี้วาดได้แค่สีเดียว ใช้สีที่ล็อกไว้เท่านั้น" },
+  dont_lift_pen: { icon: "pen", title: "DON'T LIFT PEN", desc: "ลากเส้นเดียวต่อเนื่อง ห้ามยกปากกา ย้อนกลับไม่ได้" },
+};
+
 export default function ChallengeBanner({ challenge }) {
   const found = CHALLENGES[challenge?.type];
   if (!found) return null;

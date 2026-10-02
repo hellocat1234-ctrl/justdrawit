@@ -10,6 +10,7 @@ import ChallengeBanner from "../components/ChallengeBanner";
 import Canvas from "../components/Canvas";
 import Toolbar from "../components/Toolbar";
 import WordChoiceModal from "../components/WordChoiceModal";
+import ChallengeIntro from "../components/ChallengeIntro";
 import RoundSummaryModal from "../components/RoundSummaryModal";
 import GameOverModal from "../components/GameOverModal";
 import { TopIcons, InfoModal, ExitModal } from "../components/TopIcons";
@@ -55,7 +56,9 @@ export default function Game({
   // มาสคอตกลางกระดานตอนยังไม่มีเส้น (หายเองเมื่อมีเส้นแรก) — เลือกอารมณ์ตามสถานะของตา
   // ถ้ามีหน้าต่างสรุปตา/จบเกมเปิดอยู่ ภาพของตาที่แล้วยังค้างบนกระดาน มาสคอตจึงไปอยู่ในหน้าต่างนั้นแทน
   let boardMascot = null;
-  if (teamSkipped) {
+  if (game.intro) {
+    boardMascot = null; // ช่วงป้ายใหญ่: ป้ายใหญ่ขึ้นแทน ไม่ซ้อนกับมาสคอตกลางกระดาน
+  } else if (teamSkipped) {
     boardMascot = <MascotNote mood="shock">ตานี้ทีมเราไม่มีคนวาด รอตาหน้านะ</MascotNote>;
   } else if (drawing) {
     boardMascot = isDrawer ? (
@@ -81,7 +84,8 @@ export default function Game({
   // วาดได้เฉพาะคนวาด และเฉพาะช่วงกำลังวาด (โจทย์ข้อ 6)
   // ช่วงเลือกคำ game.round ยังเป็น null จึงวาดไม่ได้ ซึ่งถูกต้อง — ยังไม่รู้คำด้วยซ้ำ
   // ยกปากกาแล้ว (penLocked) ก็วาดต่อไม่ได้อีกทั้งตา
-  const canDraw = isDrawer && drawing && !game.penLocked;
+  // ช่วงป้ายใหญ่ (game.intro) ยังวาดไม่ได้ — server ทิ้งการวาดที่มาก่อนเวลาอยู่แล้ว ตรงนี้แค่ปิดเครื่องมือให้เห็นชัด
+  const canDraw = isDrawer && drawing && !game.penLocked && !game.intro;
 
   // เครื่องมือที่เลือกอยู่ — เป็นสถานะของหน้าจอ ไม่เกี่ยวกับ server
   const [toolChoice, setToolChoice] = useState(TOOLS.PEN);
@@ -107,7 +111,7 @@ export default function Game({
   // ทุกเสียงขับจากสถานะที่ server ส่งมา ไม่ได้ผูกกับ event ตรงๆ (หน้านี้ไม่ได้ผูก socket เอง)
   // เริ่มตา: roundKey เพิ่มทุกครั้งที่ได้ round_start
   useEffect(() => {
-    if (game.round) play("roundStart");
+    if (game.round) play(game.round.intro ? "alert" : "roundStart"); // ตาที่มี Mini Challenge: เสียงเตือนแทนเสียงเริ่มตา
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [game.roundKey]);
 
@@ -292,6 +296,7 @@ export default function Game({
             // แล้ว server เป็นคนส่งให้คนอื่น (ไม่ส่งกลับมาหาเรา จึงไม่มีภาพซ้อน)
             onAction={sendAction}
             empty={boardMascot}
+            overlay={game.intro ? <ChallengeIntro challenge={game.round?.challenge} /> : null}
             // โหมดทีม: ทีมเราถูกข้ามกลางตา (คนวาดหลุด) — แถบแจ้งบนกระดาน อยู่ใน .board ไม่เพิ่มความสูง
             notice={teamSkipped ? "ตานี้ทีมเราไม่มีคนวาด (คนวาดของทีมหลุด) รอตาหน้านะ" : null}
           />
@@ -341,7 +346,7 @@ export default function Game({
 
       {/* Modal ทั้งสามแบบ ไม่มีทางเปิดพร้อมกัน จึงเขียนเรียงกันได้ */}
       {game.options && (
-        <WordChoiceModal options={game.options} secondsLeft={chooseLeft} onChoose={chooseWord} />
+        <WordChoiceModal options={game.options} secondsLeft={chooseLeft} onChoose={chooseWord} challenge={game.chooseChallenge} />
       )}
       {game.summary && <RoundSummaryModal summary={game.summary} players={players} myTeam={myTeam} meId={meId} />}
       {game.ranking && (
