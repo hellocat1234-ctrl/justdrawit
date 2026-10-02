@@ -3,7 +3,8 @@ import { useEffect, useState } from "react";
 // ดึงอันดับจาก GET /api/leaderboard — ใช้ร่วมกันทั้งกล่องในหน้าแรกและหน้า Leaderboard
 // month = "YYYY-MM" หรือ "" (ตลอดกาล = ไม่ส่ง month)
 // ขอใหม่ทุกครั้งที่ month เปลี่ยน หรือคอมโพเนนต์ถูกสร้างใหม่ (เช่นกลับมาหน้าแรก) จึงเห็นคะแนนล่าสุดเสมอ
-export function useLeaderboard(month) {
+// board = "solo" (แข่งกับ AI) | "multi" (เล่นกับเพื่อน) — สองกระดานแยกกันที่ server
+export function useLeaderboard(month, board = "solo") {
   const [state, setState] = useState({ status: "loading", top: [] }); // loading | ready | error
   const [retryKey, setRetryKey] = useState(0);
 
@@ -11,7 +12,7 @@ export function useLeaderboard(month) {
     // เปลี่ยนเดือนเร็วๆ คำขอเก่าอาจตอบมาทีหลังแล้วทับของใหม่ → ยกเลิกคำขอเก่าทิ้งทุกครั้ง
     const controller = new AbortController();
     setState((s) => ({ ...s, status: "loading" }));
-    const query = month ? `?month=${month}` : "";
+    const query = `?board=${board}` + (month ? `&month=${month}` : "");
 
     fetch(`/api/leaderboard${query}`, { signal: controller.signal })
       .then((res) => {
@@ -24,7 +25,7 @@ export function useLeaderboard(month) {
       });
 
     return () => controller.abort();
-  }, [month, retryKey]);
+  }, [month, board, retryKey]);
 
   return { ...state, retry: () => setRetryKey((n) => n + 1) };
 }

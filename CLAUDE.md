@@ -35,7 +35,7 @@ Just Drawit (ชื่อทีม TATA.IO) เป็นเว็บเกมว
 | ส่วน | ใช้อะไร |
 |---|---|
 | server | Node.js + Express + Socket.IO (CommonJS, `require`) พอร์ต 3000 |
-| client | React + Vite, CSS ธรรมดา (ไม่ใช้ Tailwind), HTML5 Canvas, `socket.io-client` |
+| client | React + Vite, `react-router-dom` (URL ต่อหน้า), CSS ธรรมดา (ไม่ใช้ Tailwind), HTML5 Canvas, `socket.io-client` |
 | เก็บคะแนน | ไฟล์ `server/data/scores.json` (ไม่ใช้ database เพื่อให้ทันเวลา) |
 | AI ทายภาพ | ลำดับ **โมเดลในเครื่อง** (Quick, Draw! MobileViT ผ่าน `onnxruntime-node` + `sharp` แปลงภาพ) → Claude (vision) เรียกจาก server เท่านั้น ผ่าน `fetch` ของ Node (ไม่ใช้ SDK) key อยู่ใน `server/.env` → โหมดจำลอง |
 
@@ -880,6 +880,36 @@ server แยกฟังก์ชัน `applySettings(room, data)` ใช้�
 - **ค่าตั้งบน Render** (ใน DEPLOY.md): Build `npm run setup` · Start `npm start` · Node 22 (`NODE_VERSION`) · Free · Region Singapore · Branch `deploy` · Health Check `/healthz` · Auto-Deploy On Commit · env: `HOST=0.0.0.0` `FORCE_HTTPS=1` `UPSTASH_REDIS_REST_URL` `UPSTASH_REDIS_REST_TOKEN` (ไม่ใช้ render.yaml/Blueprint เพราะไม่ได้ยืนยันว่าแพ็กเกจฟรีไม่ขอบัตร)
 - วัดแล้ว: server โหลดโมเดลใช้ RSS ~150–160 MB (เพดานฟรี 512 MB) · ทายภาพ 20–37 ms ในเครื่อง (Render 0.1 CPU จะช้ากว่า)
 - ข้อจำกัด: ก่อนเดโม่ต้องเปิดลิงก์ปลุก ~1 นาที · ข้อมูลข้อ 1 (ข้อมูลฟรีของ Render/Upstash) มาจากเอกสาร/เว็บรีวิว เงื่อนไขอาจเปลี่ยน · ชื่อเมนูบนเว็บ Render/Upstash ใน DEPLOY.md อาจต่างเล็กน้อย
+
+### เสร็จแล้ว (รีเฟรชได้ · URL ต่อหน้า · ตัวเลือกห้อง · Leaderboard สองกระดาน · แชททางขวา · ธีม Neo-Arcade — แตะ server + client + `events.md` + DESIGN.md)
+**สัญญากลางถูกแก้** (`events.md` §1 §5 §6 §7 §9 + 4 บรรทัดในตาราง "บันทึกการแก้ไข") · **เพิ่ม library `react-router-dom`** (client · ผู้ใช้สั่งให้ใช้) ฝั่ง server ไม่เพิ่ม library
+- **playerId ถาวร** (`server/index.js` `io.use`): client ส่งกุญแจลับ `handshake.auth.playerKey` (`client/src/socket.js` เก็บใน **sessionStorage**) → server แปลงเป็น `playerId` ด้วย SHA-256 · ทุก socket เข้า room ชื่อ playerId ของตัวเอง `io.to(playerId)` จึงใช้ได้เหมือนเดิม · ไม่ส่งกุญแจ = ใช้ `socket.id` (เทสเดิมทั้งหมดจึงไม่ต้องแก้)
+  ⚠️ ผู้ใช้ขอ localStorage แต่ทำเป็น sessionStorage เพราะ localStorage ใช้ร่วมกันทุกแท็บ เปิดสองแท็บ = ผู้เล่นคนเดียวกัน (ทดสอบหลายคนในเครื่องเดียวไม่ได้) · ข้อแลก: ปิดแท็บแล้วเปิดใหม่ = คนใหม่
+- **rejoin + รอ 30 วิ**: `handleDisconnect` (ตั้ง `connected: false` + `room.dropTimers`) · `removePlayer` (ตรรกะเดิมของ leaveRoom) · `rejoinRoom` · `sendGameState` (ใช้ร่วมกับคนเข้ากลางเกม) · env สำหรับเทส `REJOIN_GRACE_MS` · คนที่หลุดอยู่ถูกข้ามคิววาดและไม่ถูกรอทาย
+- **URL ต่อหน้า** (`App.jsx` `parseRoute`): `/` `/setup` `/room/:code` `/leaderboard` `/solo` · effect เดียวคุม "URL กับห้องต้องตรงกัน" (ออกจาก URL ห้อง = `leave_room` · อยู่ URL ห้องแต่ socket ยังไม่อยู่ในห้อง = `rejoin`) · server ตอบ `index.html` ให้ทุก URL อยู่แล้วตั้งแต่ข้อ 8
+- **ตัวเลือกห้อง**: `settings.difficulty` (ชุดคำ **ไม่เกี่ยวกับเวลา** ผู้ใช้ย้ำ) `visibility` `challenge` · `pickWords(n, difficulty)` · `GET /api/rooms` · `client/src/roomOptions.js` `components/OptionRow.jsx` `components/OpenRooms.jsx`
+- **Leaderboard**: แถวมีช่อง `board` (`multi` · ไม่มี = solo) · `endGame` บันทึกคะแนนทุกคนที่ > 0 ลง `multi` · หน้า Leaderboard 2 แท็บ (หน้าแรก Top 10 ยังเป็นกระดาน Solo)
+- **Layout**: จอ ≥ 1001px กล่อง "คำตอบ" อยู่คอลัมน์ขวา ใต้เครื่องมือ (`.game__answers` เป็น `display: contents`) · กล่อง "ในห้อง" ใต้กระดานเต็มความกว้าง · กระดานขนาดเท่าเดิม · มือถือไม่เปลี่ยน
+- **AI วาดเร็วขึ้น 2 เท่า**: `DRAW_BUDGET_RATIO` ใน `server/index.js` 1/3 → 1/6 · Solo เลือกความยากของคำได้ (`ai_start.difficulty`)
+- **ธีม Neo-Arcade**: `client/src/styles/arcade.css` เป็นชั้นทับของ `theme.css` (สี ฟอนต์ มุมโค้ง เงา พื้นหลัง) ไม่แตะ layout/JS · ลบ `import "./styles/arcade.css"` ใน `main.jsx` = กลับธีมพิกเซลเดิม · ฟอนต์ Space Grotesk + Rubik (ไทยตกไปที่ Chakra Petch / Prompt)
+- **ข้อจำกัดที่รู้อยู่**: Solo รีเฟรชกลางเกม = กลับหน้าเริ่ม ไม่ต่อเกมเดิม · rejoin ไม่ได้ประวัติแชทคืน · rejoin ช่วงพักระหว่างตาไม่เห็นหน้าต่างสรุปตา (รอตาใหม่ ≤ 3 วิ) · คนที่ออกก่อนจบเกมไม่ได้ขึ้นกระดาน multi · กระดาน Solo ไม่แยกตามความยากที่เลือก · หน้าแรกยาวขึ้น (มีกล่องห้อง Public ใต้สองกล่องบน ต้องเลื่อนลง) · ยังไม่ได้ลองบนไอแพด/มือถือจริง
+- บทเรียน: (1) bash heredoc บนเครื่อง Windows นี้กิน backslash และพังกับเครื่องหมาย `'` บางรูปแบบ — เขียนสคริปต์เป็นไฟล์แล้วรันแทน (2) แท็บเบื้องหลังใน headless Chrome ไม่อัปเดตตัวเลขที่ขับด้วย requestAnimationFrame (คะแนนวิ่ง) ต้อง `Target.activateTarget` ก่อนอ่านค่า (3) `SIGTERM` ไม่มีจริงบน Windows เทสข้อนั้นจึงข้ามบน win32
+
+ทดสอบแล้ว (เครื่อง Windows): **server `npm test` 560/560** (เพิ่มข้อ 32 รวม 37 เช็ค · ข้ามเทสโมเดลเพราะยังไม่ได้ `get-model` · ข้ามเช็ค SIGTERM บน Windows)
+· **browser 50/50** (Chrome จริง headless ผ่าน CDP 3 แท็บ · server ทดสอบพอร์ต 3001 เสิร์ฟ `client/dist`): URL ทุกหน้า · สร้างห้อง Public · เข้าจากรายการห้อง · รีเฟรชในห้องรอ/กลางเกม (คนวาดได้คำ ภาพ เวลาที่เหลือ รอบ คืน และวาดต่อได้ · คนทายได้ภาพและคะแนนคืน) · ปุ่มย้อนกลับ/ไปข้างหน้า · Leaderboard 2 แท็บ รีเฟรชแล้วคะแนนยังอยู่ · เปิด URL ตรงๆ ไม่ 404 · layout ที่ 1440×900 / 1366×768 / 1024×768 / 420×800 · Solo · ไม่มี exception · `npm run build` ผ่าน
+
+### เสร็จแล้ว (เตรียมสอบ: ตัวดักข้อผิดพลาด · rate limit · สคริปต์สาธิตโจมตี · ฟอนต์หัวข้อ — แตะ server + client + `events.md`)
+**สัญญากลางถูกแก้** (`events.md` §9 + 1 บรรทัดในตาราง) เพิ่ม error `TOO_MANY_ATTEMPTS` `SERVER_ERROR` · **ไม่เพิ่ม library** · **เพิ่มฟอนต์ Google Press Start 2P** (เฉพาะโลโก้)
+- **สคริปต์สาธิตโจมตี** `server/demo-attacks/` (รัน localhost เท่านั้น): `attack-guess-flood.js` (ยิงคำทั้งคลังใส่ guess) · `attack-room-scan.js` (ไล่เดารหัสห้องด้วย rejoin เป็นออราเคิล NOT_IN_ROOM vs ROOM_NOT_FOUND) · `_lib.js` · `README.md` · `before.txt`/`after.txt` (หลักฐานก่อน/หลัง — commit ไว้)
+  ก่อนแก้: guess ชนะใน 34 คำ/0.5 วิ · สแกนเจอห้อง Private ใน 276 รหัส/~6700 ต่อวิ · หลังแก้: guess ยิง 130 คำไม่ถูกเลย · สแกนถูกบล็อกหลัง ~95 รหัส (TOO_MANY_ATTEMPTS)
+- **ตัวดักข้อผิดพลาด** (`index.js`): ห่อ `socket.on` ต่อ socket ด้วย try/catch (async ดัก `.catch`) ตอบ `SERVER_ERROR` ผ่าน callback ถ้ามี · `process.on("uncaughtException"/"unhandledRejection")` log แล้วไม่ดับ · ไม่พิมพ์เนื้อข้อมูลลง log (กันคำตอบ/กุญแจหลุด)
+- **rate limit** (`index.js` `rateOk` sliding window ต่อ socket): `guess` 10 ครั้ง/5 วิ (`GUESS_MAX`/`GUESS_WINDOW_MS`) เกิน=ทิ้งเงียบ · `join_room`+`rejoin` รวม 15 ครั้ง/10 วิ (`LOOKUP_MAX`/`LOOKUP_WINDOW_MS`) เกิน=`TOO_MANY_ATTEMPTS` · ตั้งให้สูงกว่าที่คนเล่นจริงทำได้
+- **ฟอนต์หัวข้อ** "JUST DRAW IT" = Press Start 2P (`theme.css` `.logo` + `index.html`) คงสีฟ้า/เหลืองและขอบดำเดิม · ลดขนาด `clamp(18px, 6.2vw, 46px)` ช่องไฟ 0 กันล้นจอมือถือ · ที่อื่นใช้ฟอนต์เดิม
+- **ข้อจำกัด/หมายเหตุ**: client rejoin effect ยิงไม่ถี่จึงไม่ชนเพดาน lookup · guess flood "หลังแก้" มีโอกาส ~8% ที่คำจริงอยู่ใน 10 คำแรกแล้วยังถูก (ธรรมชาติของ rate limit ไม่ใช่บล็อกทั้งหมด) · ยังไม่ได้ทำ log อ่านง่าย (ข้อ 6) และ ping (ข้อ 7) ตามที่ผู้ใช้สั่งเลื่อน
+- บทเรียน: ผู้ใช้เปิด server เองบนพอร์ต 3000 (`npm start` PID อื่น) `npm test` จึงฟ้องพอร์ตไม่ว่าง — รันจากสำเนา `tests/smoke.port3055.js` (sed เปลี่ยน URL+PORT เป็น 3055) แล้วลบทิ้ง ไม่แตะ server ผู้ใช้
+
+ทดสอบแล้ว: **server `npm test` 592/592** (เพิ่มข้อ 33: guess รัวถูกปัดทิ้ง · ไล่เดารหัสถูกบล็อก · join_room ใช้โควตาเดียวกัน · รันบนพอร์ต 3055)
+· สคริปต์โจมตีรันจริงทั้งก่อน/หลัง (ดู before.txt/after.txt) · โลโก้ไม่ล้นจอที่ 1440/390/320 (คงสี+ขอบ ยืนยันด้วย screenshot) · `npm run build` ผ่าน
 
 ### ยังไม่ได้ทำ (ตามลำดับใน PROMPTS.md)
 - (ไม่มีแล้ว — ข้อ 8 เสร็จ)

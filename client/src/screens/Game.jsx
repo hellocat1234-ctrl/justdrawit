@@ -77,6 +77,7 @@ export default function Game({
   const challenge = game.round?.challenge ?? null;
   const colourFix = challenge?.type === "colour_fix" ? challenge.color : null;
   const noLift = challenge?.type === "dont_lift_pen";
+  const shapesOnly = challenge?.type === "shapes_only"; // วาดได้แต่รูปทรง (ซ่อนปากกา/ยางลบ)
   // dont_lift_pen ห้ามย้อน/ทำซ้ำ **ที่หน้าจอด้วย** ไม่ใช่แค่ที่ server
   // (server ก็ปฏิเสธอยู่แล้ว ตรงนี้ทำเพื่อไม่ให้ผู้เล่นเสียเวลากดปุ่มที่ไม่ทำอะไร)
   const historyLocked = noLift;
@@ -105,7 +106,10 @@ export default function Game({
   //   colour_fix → ใช้สีที่ล็อกไว้ ไม่สนใจสีที่ผู้ใช้เลือก (สีที่เลือกไว้ยังอยู่ครบ กลับมาใช้ได้ตาถัดไป)
   //   dont_lift_pen → ถังสีหายไป ถ้าเลือกถังสีค้างไว้ก็ถอยไปใช้ปากกา
   const drawColor = colourFix ?? color;
-  const tool = noLift && (toolChoice === TOOLS.BUCKET || isShapeTool(toolChoice)) ? TOOLS.PEN : toolChoice;
+  //   dont_lift_pen → ถังสี/รูปทรงหายไป ถอยไปใช้ปากกา
+  //   shapes_only → ปากกา/ยางลบหายไป ถ้าเลือกค้างไว้ก็ถอยไปใช้รูปทรงเส้นตรง
+  let tool = noLift && (toolChoice === TOOLS.BUCKET || isShapeTool(toolChoice)) ? TOOLS.PEN : toolChoice;
+  if (shapesOnly && (tool === TOOLS.PEN || tool === TOOLS.ERASER)) tool = TOOLS.LINE;
 
   // ── เสียงเอฟเฟกต์ (ข้อ 1 ของรอบตกแต่งที่ 2) ──
   // ทุกเสียงขับจากสถานะที่ server ส่งมา ไม่ได้ผูกกับ event ตรงๆ (หน้านี้ไม่ได้ผูก socket เอง)
@@ -339,6 +343,7 @@ export default function Game({
             lockedColor={colourFix}
             hideBucket={noLift}
             hideShapes={noLift}
+            hidePen={shapesOnly}
             locked={!canDraw}
           />
         </aside>

@@ -20,6 +20,11 @@ const REMOTE_TIMEOUT_MS = 5000;
 const REMOTE_RETRY_MS = 5000;
 const TOP_LIMIT = 20;
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/; // YYYY-MM เดือน 01-12 เท่านั้น
+// สองกระดานแยกกัน: "solo" = แข่งกับ AI · "multi" = เล่นกับเพื่อนในห้อง
+// เก็บในที่เดียวกัน (ไฟล์/Upstash ก้อนเดิม) แยกด้วยช่อง board ของแต่ละแถว · แถวเก่าที่ไม่มีช่องนี้ = solo
+const BOARDS = ["solo", "multi"];
+const isValidBoard = (board) => BOARDS.includes(board);
+const boardOf = (row) => (row.board === "multi" ? "multi" : "solo");
 
 // ---------- โหมด Upstash Redis ----------
 let cache = null; // null = โหมดไฟล์ · array = โหมด Upstash (คะแนนทั้งหมดในหน่วยความจำ)
@@ -176,7 +181,8 @@ function cleanCount(value) {
 // บันทึกคะแนนหนึ่งเกม — ข้อ 7 (Solo) เรียกตอนจบเกม **server เป็นคนเรียกเท่านั้น** client ส่งคะแนนเองไม่ได้
 // เวลาเล่น (playedAt) server ใส่เอง ไม่รับจากข้างนอก
 // คืนแถวที่บันทึก หรือ null ถ้าชื่อว่าง/บันทึกไม่สำเร็จ (ไม่ throw ให้เกมล่ม)
-function saveScore({ name, score, levelReached } = {}, playedAt = new Date()) {
+// board: "multi" = คะแนนจากเกมห้อง (index.js เรียกตอน endGame) · ไม่ใส่ = solo
+function saveScore({ name, score, levelReached, board } = {}, playedAt = new Date()) {
   const cleanedName = cleanName(name);
   if (!cleanedName) return null;
   try {
@@ -189,6 +195,7 @@ function saveScore({ name, score, levelReached } = {}, playedAt = new Date()) {
       levelReached: cleanCount(levelReached),
       playedAt: formatPlayedAt(playedAt),
     };
+    if (board === "multi") row.board = "multi"; // solo ไม่ใส่ช่องนี้ แถวจึงหน้าตาเหมือนเดิมทุกตัวอักษร
     rows.push(row);
     writeScores(rows);
     return row;
@@ -215,9 +222,10 @@ function compareRows(a, b) {
 // หนึ่งชื่อหนึ่งแถว: เอาเกมที่ดีที่สุดของแต่ละชื่อ (ชื่อตรงกันทุกตัวอักษรนับเป็นคนเดียวกัน)
 // เรียงตามกติกาเดียวกับ compareRows · month = "YYYY-MM" หรือ null (ตลอดกาล)
 // ถ้าใส่ month จะเลือก "เกมที่ดีที่สุดในเดือนนั้น" ไม่ใช่ของตลอดกาล
-function bestPerName(month = null) {
+function bestPerName(month = null, board = "solo") {
   const best = new Map();
   for (const r of loadScores()) {
+    if (boardOf(r) !== board) continue; // คนละกระดาน ไม่เอามาปนกัน
     if (month && !r.playedAt.startsWith(month + "-")) continue;
     const cur = best.get(r.name);
     if (!cur || compareRows(r, cur) < 0) best.set(r.name, r);
@@ -226,11 +234,12 @@ function bestPerName(month = null) {
 }
 
 // 20 อันดับแรก · อันดับไม่ซ้ำกัน นับ 1, 2, 3...
-function getLeaderboard(month = null) {
+function getLeaderboard(month = null, board = "solo") {
   return {
     month,
+    board,
     // ส่งเฉพาะ 4 ช่องที่หน้าจอใช้ ไม่ส่ง id กับเวลาเล่น
-    top: bestPerName(month)
+    top: bestPerName(month, board)
       .slice(0, TOP_LIMIT)
       .map((r, i) => ({ rank: i + 1, name: r.name, score: r.score, levelReached: r.levelReached })),
   };
@@ -246,4 +255,4 @@ function rankOf({ name, score, levelReached }) {
   return ahead.length + 1;
 }
 
-module.exports = { init, flush, SCORES_FILE, saveScore, getLeaderboard, rankOf, isValidMonth, loadScores, writeScores, formatPlayedAt };
+module.exports = { init, flush, SCORES_FILE, saveScore, getLeaderboard, rankOf, isValidMonth, isValidBoard, loadScores, writeScores, formatPlayedAt };

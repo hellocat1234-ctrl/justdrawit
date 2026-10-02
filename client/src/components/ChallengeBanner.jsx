@@ -9,12 +9,14 @@ import { Icon } from "./Icons";
 const CHALLENGES = {
   colour_fix: ["palette", "COLOUR FIX", "วาดได้สีเดียว"],
   dont_lift_pen: ["pen", "DON'T LIFT PEN", "ห้ามยกปากกา"],
+  shapes_only: ["shape-rect", "SHAPES ONLY", "ใช้ได้แต่รูปทรง"],
 };
 
 // คำอธิบายสั้นหนึ่งบรรทัด ใช้ในป้ายใหญ่ตอนเริ่มตา และกล่องเลือกคำ (ที่เดียวกันทุกที่ ไม่ให้ข้อความไม่ตรงกัน)
 export const CHALLENGE_INFO = {
   colour_fix: { icon: "palette", title: "COLOUR FIX", desc: "ตานี้วาดได้แค่สีเดียว ใช้สีที่ล็อกไว้เท่านั้น" },
   dont_lift_pen: { icon: "pen", title: "DON'T LIFT PEN", desc: "ลากเส้นเดียวต่อเนื่อง ห้ามยกปากกา ย้อนกลับไม่ได้" },
+  shapes_only: { icon: "shape-rect", title: "SHAPES ONLY", desc: "ตานี้วาดด้วยรูปทรงเท่านั้น (เส้น สี่เหลี่ยม วงกลม) ห้ามวาดมือเปล่า" },
 };
 
 export default function ChallengeBanner({ challenge }) {

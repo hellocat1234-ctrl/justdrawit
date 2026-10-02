@@ -256,7 +256,11 @@ export function useGame() {
       const notes = [];
       if (prev) {
         for (const p of next.players) {
-          if (!prev.has(p.id)) notes.push({ system: true, kind: "join", text: `${p.name} เข้าห้อง` });
+          const old = prev.get(p.id);
+          if (!old) notes.push({ system: true, kind: "join", text: `${p.name} เข้าห้อง` });
+          // หลุดชั่วคราว / กลับมาทันเวลา (server ยังเก็บที่ไว้ให้ 30 วิ ดูช่อง connected)
+          else if (old.connected !== false && p.connected === false) notes.push({ system: true, kind: "leave", text: `${p.name} หลุด (รอกลับมา 30 วิ)` });
+          else if (old.connected === false && p.connected !== false) notes.push({ system: true, kind: "join", text: `${p.name} กลับมาแล้ว` });
         }
         for (const p of prev.values()) {
           if (!next.players.some((x) => x.id === p.id)) notes.push({ system: true, kind: "leave", text: `${p.name} ออกจากห้อง` });
