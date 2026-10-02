@@ -1,7 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
-import { createPainter } from "../canvas/painter";
-import { beginStroke, extendStroke, endStroke, applyFill, clearBoard } from "../canvas/actions";
-import { TOOLS } from "../canvas/palette";
+import { createPainter, strokeShape } from "../canvas/painter";
+import { beginStroke, extendStroke, endStroke, applyFill, clearBoard, drawShape } from "../canvas/actions";
+import { TOOLS, isShapeTool } from "../canvas/palette";
 import { reduceMotion } from "../prefs";
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -95,6 +95,8 @@ const Canvas = forwardRef(function Canvas({ canDraw, tool, color, size, onAction
   };
   const wrapRef = useRef(null);
   const canvasRef = useRef(null);
+  const previewRef = useRef(null); // ชั้นโปร่งใสทับกระดาน ไว้วาดเงารูปทรงตอนลาก (ไม่ใช่ภาพจริง ไม่เข้าลิสต์ action)
+  const shapeRef = useRef(null); // รูปทรงที่กำลังลากอยู่ { shape, start, x1, y1, x2, y2 } · null = ไม่ได้ลากรูปทรง
   const painterRef = useRef(null);
   const actionsRef = useRef([]); // ทุก action ของตานี้ เรียงตามลำดับ
 
@@ -212,6 +214,11 @@ const Canvas = forwardRef(function Canvas({ canDraw, tool, color, size, onAction
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const w = Math.round(cssW * dpr);
     const h = Math.round(cssH * dpr);
+    const pv = previewRef.current;
+    if (pv && (pv.width !== w || pv.height !== h)) {
+      pv.width = w;
+      pv.height = h;
+    }
 
     // ตั้ง canvas.width เฉพาะตอนขนาดเปลี่ยนจริง เพราะการตั้งมันจะล้างภาพทิ้งทั้งใบ
     // (ถ้าตั้งทุกครั้ง ภาพจะหายวูบทุกครั้งที่จอขยับเล็กๆ)
@@ -251,6 +258,8 @@ const Canvas = forwardRef(function Canvas({ canDraw, tool, color, size, onAction
   //   จับได้ด้วยการวัด "วาดเสร็จแล้วมีสีกี่พิกเซล" ไม่ใช่ด้วยการอ่านโค้ด
   // ย้ายมาเป็นคำสั่งที่ useGame เรียกผ่าน ref แทน → วิ่งในคิวเดียวกับ canvas_history จึงเรียงลำดับแน่นอน
   function resetBoard() {
+    shapeRef.current = null; // ตาใหม่ ทิ้งรูปทรงที่ลากค้าง (ถ้ามี)
+    drawPreview();
     actionsRef.current = [];
     pendingRef.current = [];
     painterRef.current?.replay([]);
@@ -267,6 +276,70 @@ const Canvas = forwardRef(function Canvas({ canDraw, tool, color, size, onAction
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ── เงารูปทรงตอนลาก: วาดลงชั้นโปร่งใสด้านบน จางลงให้รู้ว่ายังไม่ได้วาดจริง ──
+  // ปล่อยมือแล้วค่อย dispatch(drawShape) ลงกระดานจริง ชั้นนี้ถูกล้างทิ้งทันที
+  function drawPreview() {
+    const pv = previewRef.current;
+    const wrap = wrapRef.current;
+    if (!pv || !wrap) return;
+    const ctx = pv.getContext("2d");
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, pv.width, pv.height);
+    const s = shapeRef.current;
+    if (!s || wrap.clientWidth <= 0) return;
+    const k = pv.width / wrap.clientWidth;
+    ctx.setTransform(k, 0, 0, k, 0, 0);
+    ctx.globalAlpha = 0.6;
+    strokeShape(ctx, { ...s, color, size }, wrap.clientWidth, wrap.clientHeight);
+    ctx.globalAlpha = 1;
+  }
+
+  // ปลายอีกด้านของรูปทรงจากตำแหน่งนิ้ว — วงกลมบังคับกรอบเป็นจัตุรัส "ตามพิกเซลจริง" (กระดานเป็น 4:3
+  // จัตุรัสในพิกัด 0–1 จะกลายเป็นวงรี) แล้วไม่ให้ล้นขอบกระดาน · สัญญา draw_shape ส่งวงรีในกรอบอยู่แล้ว จึงไม่ต้องแก้ server
+  function shapeEnd(s, p, rect) {
+    if (s.shape !== "circle") return p;
+    const dx = (p.x - s.start.x) * rect.width;
+    const dy = (p.y - s.start.y) * rect.height;
+    const sx = dx >= 0 ? 1 : -1;
+    const sy = dy >= 0 ? 1 : -1;
+    const roomX = (sx > 0 ? 1 - s.start.x : s.start.x) * rect.width;
+    const roomY = (sy > 0 ? 1 - s.start.y : s.start.y) * rect.height;
+    const side = Math.min(Math.max(Math.abs(dx), Math.abs(dy)), roomX, roomY);
+    return {
+      x: round4(s.start.x + (sx * side) / rect.width),
+      y: round4(s.start.y + (sy * side) / rect.height),
+    };
+  }
+
+  function moveShape(e) {
+    const s = shapeRef.current;
+    const rect = canvasRef.current.getBoundingClientRect();
+    const end = shapeEnd(s, toNorm(e.nativeEvent, rect), rect);
+    s.x2 = end.x;
+    s.y2 = end.y;
+    drawPreview();
+  }
+
+  // ปล่อยมือ: commit=true วาดจริง (ถ้าลากไกลพอ ไม่ใช่แค่แตะ) · commit=false ยกเลิก (นิ้วถูกแย่ง/ตาใหม่)
+  function finishShape(commit) {
+    const s = shapeRef.current;
+    const id = pointerRef.current;
+    shapeRef.current = null;
+    pointerRef.current = null;
+    if (id !== null) {
+      try {
+        canvasRef.current?.releasePointerCapture(id);
+      } catch {
+        /* ไม่ได้จับอยู่ ก็ไม่เป็นไร */
+      }
+    }
+    drawPreview();
+    if (!s || !commit) return;
+    const rect = canvasRef.current.getBoundingClientRect();
+    if (Math.hypot((s.x2 - s.x1) * rect.width, (s.y2 - s.y1) * rect.height) < 4) return; // แค่แตะ ไม่นับ
+    dispatch(drawShape({ shape: s.shape, x1: s.x1, y1: s.y1, x2: s.x2, y2: s.y2, color, size }));
+  }
 
   // ── ทางเข้า/ออกของกระดาน ให้คนนอก (ปุ่มล้างจอบนแถบเครื่องมือ และข้อ 4) เรียกใช้ ──
   useImperativeHandle(ref, () => ({
@@ -418,6 +491,19 @@ const Canvas = forwardRef(function Canvas({ canDraw, tool, color, size, onAction
       return;
     }
 
+    // รูปทรง: จับ pointer แล้วเริ่มเงา (ยังไม่ส่งอะไร จนกว่าจะปล่อยมือ)
+    if (isShapeTool(tool)) {
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      } catch {
+        /* จับไม่ได้ก็ยังลากได้ */
+      }
+      pointerRef.current = e.pointerId;
+      shapeRef.current = { shape: tool, start: p, x1: p.x, y1: p.y, x2: p.x, y2: p.y };
+      drawPreview();
+      return;
+    }
+
     // จับ pointer ไว้ ทำให้ลากออกนอกกระดานแล้วเส้นยังต่อได้ ไม่ขาดกลางคัน
     // ต้องครอบ try ไว้ เพราะเบราว์เซอร์โยน NotFoundError ถ้า pointerId ไม่ได้กดอยู่จริง
     // (เช่น event ที่สร้างขึ้นเอง หรือปากกาที่เบราว์เซอร์ปลดไปแล้ว) — โยนเมื่อไหร่เส้นจะเริ่มไม่ได้เลย
@@ -443,6 +529,7 @@ const Canvas = forwardRef(function Canvas({ canDraw, tool, color, size, onAction
 
   function handleMove(e) {
     if (pointerRef.current !== e.pointerId) return;
+    if (shapeRef.current) return moveShape(e);
 
     const rect = canvasRef.current.getBoundingClientRect();
 
@@ -531,7 +618,7 @@ const Canvas = forwardRef(function Canvas({ canDraw, tool, color, size, onAction
     // เพราะเบราว์เซอร์อาจไม่ส่ง pointerup ตามมาเลย ถ้าปล่อยไว้จะค้างวาดเส้นต่อไปไม่ได้
     if (e.pointerId !== pointerRef.current && e.type !== "lostpointercapture") return;
 
-    finishStroke();
+    finishStroke(e.type === "pointercancel");
   }
 
   // ปิดเส้นที่กำลังวาดอยู่ให้เรียบร้อย — ทางเดียวที่ใช้ปิดเส้น ทุกสาเหตุเรียกฟังก์ชันนี้
@@ -540,7 +627,8 @@ const Canvas = forwardRef(function Canvas({ canDraw, tool, color, size, onAction
   // เดิม guard ถูกเขียนไว้ "ก่อน" clearInterval/pointerRef.current = null
   // ถ้า pointerId ไม่ตรง (หรือ pointerup ไม่มาเลย) timer จะค้างและ pointerRef ไม่ถูกปลด
   // ผลคือกดวาดเส้นถัดไปไม่ได้อีกเลยทั้งตา — ย้ายการปลดทรัพยากรให้อยู่รวมที่นี่ที่เดียว
-  function finishStroke() {
+  function finishStroke(cancelled = false) {
+    if (shapeRef.current) return finishShape(!cancelled);
     const id = pointerRef.current;
     clearInterval(timerRef.current);
     timerRef.current = null;
@@ -570,7 +658,7 @@ const Canvas = forwardRef(function Canvas({ canDraw, tool, color, size, onAction
     // นับเฉพาะตอนที่ยังมีเส้นค้างอยู่จริง ซึ่งแปลว่าเบราว์เซอร์ปลดให้เองโดยเราไม่ได้สั่ง
     if (pointerRef.current === null) return;
     if (DEBUG) dbgRef.current.lostCaptures++;
-    finishStroke();
+    finishStroke(true);
   }
 
   // ข้อความในกล่องดีบัก (โหมดดีบักชั่วคราว) — ลบได้ทั้งก้อน
@@ -620,6 +708,7 @@ const Canvas = forwardRef(function Canvas({ canDraw, tool, color, size, onAction
         onPointerLeave={handleLeave}
         onLostPointerCapture={handleLostCapture}
       />
+      <canvas ref={previewRef} className="board__preview" aria-hidden="true" />
       {(mascotOn || fading) && (
         <div className={`board__empty${mascotOn ? "" : " board__empty--out"}`}>{empty || lastEmptyRef.current}</div>
       )}

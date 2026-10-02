@@ -1,5 +1,6 @@
 import { useState } from "react";
 import Ribbon from "../components/Ribbon";
+import Critter from "../components/Critter";
 import { AvatarArt, Icon } from "../components/Icons";
 import { useEnterRoom } from "../hooks/useEnterRoom";
 
@@ -27,7 +28,8 @@ export default function SetUp({ connected, profile, onBack, onEntered, onError }
       <Ribbon tone="red">SET UP</Ribbon>
 
       <div className="setup">
-        <section className="panel setup__opts" aria-label="ตั้งค่าห้อง">
+        <section className="panel setup__opts deco-host" aria-label="ตั้งค่าห้อง">
+          <Critter name="cat" className="crit crit--top-left" />
           <h2 className="panel__title setup__title">ตั้งค่า</h2>
           <div className="setup__opt">
             <h3 className="setup__head">
@@ -71,7 +73,8 @@ export default function SetUp({ connected, profile, onBack, onEntered, onError }
           </p>
         </section>
 
-        <div className="mode-cards" role="radiogroup" aria-label="โหมดเกม">
+        <div className="mode-cards deco-host" role="radiogroup" aria-label="โหมดเกม">
+          <Critter name="parrot" className="crit crit--top-right" />
           <button
             type="button"
             role="radio"

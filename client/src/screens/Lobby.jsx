@@ -1,5 +1,6 @@
 import { useState } from "react";
 import Logo from "../components/Logo";
+import Critter, { GrassStrip, Sparkles } from "../components/Critter";
 import Ribbon from "../components/Ribbon";
 import RankTable from "../components/RankTable";
 import AvatarPicker from "../components/AvatarPicker";
@@ -38,10 +39,16 @@ export default function Lobby({
 
   return (
     <div className="screen screen--home">
-      <Logo />
+      <GrassStrip />
+      <div className="logo-wrap">
+        <Logo />
+        <Sparkles spots={[[-8, 10, 3, 0], [104, 0, 4, 0.7], [-2, 78, 2, 1.4], [98, 82, 3, 0.35], [50, -22, 2, 1.1]]} />
+      </div>
 
       <div className="lobby">
-        <section className="panel home" aria-label="เริ่มเล่น">
+        <section className="panel home deco-host" aria-label="เริ่มเล่น">
+          <Critter name="cat" className="crit crit--top-left" />
+          <Critter name="star" className="crit crit--side-left" />
           <Ribbon tone="red">PLAY</Ribbon>
 
           <AvatarPicker value={profile.avatar} onChange={(avatar) => onProfile({ ...profile, avatar })} />
@@ -83,7 +90,9 @@ export default function Lobby({
           )}
         </section>
 
-        <section className="panel lobby__board" aria-labelledby="lobby-board-title">
+        <section className="panel lobby__board deco-host" aria-labelledby="lobby-board-title">
+          <Critter name="parrot" className="crit crit--top-right" />
+          <Critter name="trophy" className="crit crit--side-right" />
           <div className="lobby__board-head">
             <h2 className="panel__title lobby__board-title" id="lobby-board-title">
               <Icon name="trophy" size={26} /> Top 10

@@ -14,6 +14,7 @@ import { play } from "../sound/sfx";
 import { beginStroke, extendStroke, endStroke, clearBoard } from "../canvas/actions";
 import { PAINT_COLORS, SIZE_DEFAULT, TOOLS } from "../canvas/palette";
 import { Icon } from "../components/Icons";
+import { Sparkles, PAGE_SPARKLES } from "../components/Critter";
 
 // ส่งภาพให้ AI ดูทุก 5 วินาที (server รับห่างกันได้ไม่ต่ำกว่า 4 วิ)
 const SNAPSHOT_MS = 5000;
@@ -33,7 +34,7 @@ const MAX_GUESS_CHARS = 40; // ตรงกับเพดานที่ server
 const NEXT_DELAY_S = 4; // server พัก 4 วิก่อนด่านถัดไป (ใช้แสดงนับถอยหลังเฉยๆ)
 
 // การกระทำที่ "ย้อนได้ทีละหนึ่งอัน" — หนึ่งเส้น (start..end) หนึ่งครั้งเทสี หนึ่งครั้งล้างจอ
-const OP_START = new Set(["stroke_start", "fill", "clear_canvas"]);
+const OP_START = new Set(["stroke_start", "fill", "draw_shape", "clear_canvas"]);
 function lastOpIndex(actions) {
   for (let i = actions.length - 1; i >= 0; i--) if (OP_START.has(actions[i].type)) return i;
   return -1;
@@ -81,7 +82,8 @@ export default function SoloAI({ initialName = "", onBack }) {
   const thinkingRef = useRef(false);
   const thinkTimer = useRef(null);
   const watchRef = useRef(null);
-  const strokeTimers = useRef([]); // ตัวตั้งเวลาเล่นเส้นของช่วง 2 (เคลียร์ตอนจบช่วง/ออกจากหน้า)
+  const anims = useRef([]); // เส้นของช่วง 2 ที่กำลังถูกไล่จุดอยู่ (เคลียร์ตอนจบช่วง/ออกจากหน้า)
+  const rafRef = useRef(0);
   const redoRef = useRef([]); // กองทำซ้ำ (เก็บฝั่งเครื่องเรา ไม่มี server เก็บให้เหมือนห้องปกติ)
 
   function setThink(on) {
@@ -92,25 +94,53 @@ export default function SoloAI({ initialName = "", onBack }) {
   }
 
   function clearStrokes() {
-    strokeTimers.current.forEach(clearTimeout);
-    strokeTimers.current = [];
+    cancelAnimationFrame(rafRef.current);
+    rafRef.current = 0;
+    anims.current = [];
   }
 
-  // เล่นซ้ำหนึ่งเส้นที่ server ส่งมา: ค่อยๆ ต่อจุดตลอด ms (server เป็นคนกำหนดจังหวะ) ด้วย action ชุดเดียวกับการวาดจริง
-  // ใช้ applyRemote (วาด + เก็บ แต่ไม่ส่งออก) จึงได้เส้นเรียบเหมือนที่ผู้เล่นวาดเอง
+  // เล่นซ้ำหนึ่งเส้นที่ server ส่งมา — server ส่งเส้นเต็ม (ทุกจุด) มาครั้งเดียวพร้อม ms แล้ว "client ไล่จุดเอง" ทุกเฟรม
+  // ไม่รอข้อความเครือข่ายทีละจุด และไม่ใช้ setTimeout ที่ไม่ตรงเฟรม (ตัวทำให้กระตุกเดิม)
+  // ทุกเฟรม: คำนวณว่าเวลาผ่านไปกี่ % ของ ms → เดินตามความยาวเส้นไปถึงระยะนั้น → ต่อจุดที่ผ่านมา + จุดปลายหัวเส้นที่แทรกค่า
+  // ใช้ applyRemote (วาด + เก็บ แต่ไม่ส่งออก) กับ painter ตัวเดียวกับคนวาด เส้นจึงเรียบเหมือนที่ผู้เล่นวาดเอง
   function playStroke({ points, color, size, ms }) {
     const board = canvasRef.current;
     if (!board || !Array.isArray(points) || points.length === 0) return;
     board.applyRemote(beginStroke({ x: points[0].x, y: points[0].y, color, size, tool: TOOLS.PEN }));
-    const rest = points.slice(1);
-    const steps = Math.max(1, Math.min(rest.length, Math.round((ms || 0) / 40)));
-    const per = Math.ceil(rest.length / steps);
-    for (let i = 0; i < steps; i++) {
-      const chunk = rest.slice(i * per, (i + 1) * per);
-      if (chunk.length === 0) continue;
-      strokeTimers.current.push(setTimeout(() => canvasRef.current?.applyRemote(extendStroke(chunk)), ((i + 1) * ms) / steps));
+    // ความยาวสะสมตามสัดส่วนกระดาน 4:3 (แกน y คูณ 0.75) ให้ความเร็วบนจอสม่ำเสมอ
+    const cum = [0];
+    for (let i = 1; i < points.length; i++) {
+      cum.push(cum[i - 1] + Math.hypot(points[i].x - points[i - 1].x, (points[i].y - points[i - 1].y) * 0.75));
     }
-    strokeTimers.current.push(setTimeout(() => canvasRef.current?.applyRemote(endStroke()), ms));
+    anims.current.push({ points, cum, total: cum[cum.length - 1], ms: Math.max(ms || 0, 16), t0: performance.now(), next: 1 });
+    if (!rafRef.current) rafRef.current = requestAnimationFrame(frame);
+  }
+
+  function frame(now) {
+    rafRef.current = 0;
+    const board = canvasRef.current;
+    if (!board) return;
+    const alive = [];
+    for (const a of anims.current) {
+      const t = Math.min(1, (now - a.t0) / a.ms);
+      const dist = t * a.total;
+      const fresh = [];
+      while (a.next < a.points.length && (t >= 1 || a.cum[a.next] <= dist)) fresh.push(a.points[a.next++]);
+      if (t < 1 && a.next < a.points.length) {
+        // หัวเส้นอยู่กลางช่วงระหว่างจุด a.next-1 กับ a.next — แทรกค่าให้เห็นเส้นยืดลื่นทุกเฟรม
+        const i = a.next;
+        const f = a.cum[i] > a.cum[i - 1] ? (dist - a.cum[i - 1]) / (a.cum[i] - a.cum[i - 1]) : 1;
+        fresh.push({
+          x: a.points[i - 1].x + (a.points[i].x - a.points[i - 1].x) * f,
+          y: a.points[i - 1].y + (a.points[i].y - a.points[i - 1].y) * f,
+        });
+      }
+      if (fresh.length) board.applyRemote(extendStroke(fresh));
+      if (t >= 1) board.applyRemote(endStroke());
+      else alive.push(a);
+    }
+    anims.current = alive;
+    if (alive.length) rafRef.current = requestAnimationFrame(frame);
   }
 
   // ── ผูก event ของ Solo ครั้งเดียวตอนเปิดหน้า ──
@@ -383,22 +413,25 @@ export default function SoloAI({ initialName = "", onBack }) {
 
   return (
     <div className="screen screen--game">
+      <Sparkles className="sparkles--page" spots={PAGE_SPARKLES} />
       <header className="topbar">
-        <div className="topbar__who">
-          <span className="topbar__label">ด่าน</span>
-          <span className="topbar__name">{round?.level ?? "-"}</span>
-        </div>
-        <div className="topbar__who">
-          <span className="topbar__label">ชีวิต</span>
-          <span className="topbar__name" aria-label={`เหลือ ${lives} ชีวิต`}>
-            {hearts}
-          </span>
-        </div>
-        <div className="topbar__who">
-          <span className="topbar__label">คะแนน</span>
-          <span className="topbar__name">
-            <AnimatedNumber value={score} />
-          </span>
+        <div className="topbar__stats">
+          <div className="topbar__who">
+            <span className="topbar__label">ด่าน</span>
+            <span className="topbar__name">{round?.level ?? "-"}</span>
+          </div>
+          <div className="topbar__who">
+            <span className="topbar__label">ชีวิต</span>
+            <span className="topbar__name" aria-label={`เหลือ ${lives} ชีวิต`}>
+              {hearts}
+            </span>
+          </div>
+          <div className="topbar__who">
+            <span className="topbar__label">คะแนน</span>
+            <span className="topbar__name">
+              <AnimatedNumber value={score} />
+            </span>
+          </div>
         </div>
 
         <div className="topbar__meta">

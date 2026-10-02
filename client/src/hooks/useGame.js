@@ -4,7 +4,7 @@ import { socket } from "../socket";
 // event การวาดที่ server ส่งกลับมาให้เราวาดตาม (events.md หัวข้อ 4)
 // ทุกตัวมี payload ที่หน้าตาเหมือน action ใน canvas/actions.js เป๊ะ
 // ต่างกันแค่ไม่มีช่อง type เราเลยเติมกลับเข้าไปแล้วส่งเข้า applyRemote ได้ตรงๆ
-const DRAW_EVENTS = ["stroke_start", "stroke_points", "stroke_end", "fill", "clear_canvas"];
+const DRAW_EVENTS = ["stroke_start", "stroke_points", "stroke_end", "fill", "draw_shape", "clear_canvas"];
 
 // สถานะตั้งต้นของเกมหนึ่งเกม
 function emptyGame() {

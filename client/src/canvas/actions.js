@@ -8,6 +8,7 @@
 //   extendStroke →  stroke_points  { points: [ { x, y }, ... ] }
 //   endStroke    →  stroke_end     {}
 //   applyFill    →  fill           { x, y, color }
+//   drawShape    →  draw_shape     { shape, x1, y1, x2, y2, color, size }
 //   clearBoard   →  clear_canvas   {}
 //
 // ทุกฟังก์ชันเป็น pure function (คืน object ใหม่ ไม่แก้ของเดิม) จึงเอาไปเทสแยกได้
@@ -28,6 +29,11 @@ export function endStroke() {
 
 export function applyFill({ x, y, color }) {
   return { type: "fill", x, y, color };
+}
+
+// รูปทรง (line | rect | circle) ลากเสร็จแล้วส่งทีเดียว — ไม่มีสามจังหวะแบบเส้น
+export function drawShape({ shape, x1, y1, x2, y2, color, size }) {
+  return { type: "draw_shape", shape, x1, y1, x2, y2, color, size };
 }
 
 export function clearBoard() {

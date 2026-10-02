@@ -8,6 +8,7 @@ import Game from "./screens/Game";
 import Leaderboard from "./screens/Leaderboard";
 import SoloAI from "./screens/SoloAI";
 import SetUp from "./screens/SetUp";
+import AudioDock from "./components/AudioDock";
 import { roomCodeFromUrl } from "./invite";
 import Toast from "./components/Toast";
 
@@ -97,6 +98,8 @@ export default function App() {
 
   return (
     <>
+      {/* ปุ่มเพลง/เสียงเอฟเฟกต์: หน้าเกม/Solo อยู่ในแถบบน (TopIcons) หน้าอื่นลอยมุมขวาบนของหน้า */}
+      {screen !== "game" && screen !== "solo" && <AudioDock />}
       {screen === "lobby" && (
         <Lobby
           connected={connected}

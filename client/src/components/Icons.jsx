@@ -4,7 +4,7 @@
 // รูปสมมาตร (อวตาร มงกุฎ หัวใจ ...) เขียนแค่ครึ่งซ้าย แล้วสะท้อนอัตโนมัติ (mirror)
 
 // ตัวอักษร → สี (สีทุกตัวมาจากชุดสีของธีมใน theme.css)
-const PAL = {
+export const PAL = {
   k: "#2b2b2b", // ดำ (ขอบ)
   w: "#ffffff",
   c: "#fbf6e6", // ครีม
@@ -280,19 +280,63 @@ const ART = {
     "wwwwk.......",
     "kkkk........",
   ],
+  // ถังสี: ถังเอียงน้ำสีหยดลงด้านข้าง (หยดสีแดงให้อ่านออกแม้ตัวเล็ก)
   bucket: [
+    "..kkkkkk....",
+    ".kRRRRRRkk..",
+    "kkrrrrrrrrk.",
+    "k.kkkkkkkkrk",
+    "k.kBBBBBBkrk",
+    "k.kBwBBBBkrk",
+    ".kkBwBBBBkkk",
+    "..kBBBBBBk.r",
+    "...kBBBBBk.r",
+    "...kBBBBBk..",
+    "....kkkkkk..",
+    "............",
+  ],
+  // เครื่องมือรูปทรง: เส้นตรง สี่เหลี่ยม วงกลม
+  "shape-line": [
+    "............",
+    "..........kk",
+    ".........kkk",
+    "........kkk.",
+    ".......kkk..",
     "......kkk...",
-    ".....k...k..",
-    ".....k...k..",
-    "..kkkkkkkkk.",
-    ".kBBBBBBBBkk",
+    ".....kkk....",
+    "....kkk.....",
+    "...kkk......",
+    "..kkk.......",
+    "kkkk........",
+    "kk..........",
+  ],
+  "shape-rect": [
+    "............",
+    "............",
+    ".kkkkkkkkkk.",
+    ".kBBBBBBBBk.",
+    ".kBBBBBBBBk.",
+    ".kBBBBBBBBk.",
+    ".kBBBBBBBBk.",
+    ".kBBBBBBBBk.",
+    ".kBBBBBBBBk.",
+    ".kkkkkkkkkk.",
+    "............",
+    "............",
+  ],
+  "shape-circle": [
+    "............",
+    "....kkkk....",
+    "..kkBBBBkk..",
+    ".kBBBBBBBBk.",
+    ".kBBBBBBBBk.",
     "kBBBBBBBBBBk",
-    "kBwBBBBBBBBk",
-    ".kBBBBBBBBkk",
-    "..kBBBBBBkpk",
-    "...kBBBBk.pk",
-    "....kkkk..pk",
-    "...........k",
+    "kBBBBBBBBBBk",
+    ".kBBBBBBBBk.",
+    ".kBBBBBBBBk.",
+    "..kkBBBBkk..",
+    "....kkkk....",
+    "............",
   ],
   trash: [
     "....kkkk....",
@@ -463,7 +507,7 @@ function medalRows(n, face, dark) {
 }
 
 // รวมช่องสีเดียวกันติดกันในแถวเดียวกันเป็น <rect> เดียว
-function toRects(rows, mirror) {
+export function toRects(rows, mirror) {
   const full = mirror ? rows.map((r) => r + [...r].reverse().join("")) : rows;
   const rects = [];
   full.forEach((row, y) => {

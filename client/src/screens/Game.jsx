@@ -16,8 +16,9 @@ import { TopIcons, InfoModal, ExitModal } from "../components/TopIcons";
 import { markTeamRulesSeen, teamRulesSeen } from "../prefs";
 import { play } from "../sound/sfx";
 import { clearBoard } from "../canvas/actions";
-import { PAINT_COLORS, SIZE_DEFAULT, TOOLS } from "../canvas/palette";
+import { PAINT_COLORS, SIZE_DEFAULT, TOOLS, isShapeTool } from "../canvas/palette";
 import { Icon } from "../components/Icons";
+import { Sparkles, PAGE_SPARKLES } from "../components/Critter";
 
 /**
  * หน้าเกมทั้งหมด (ข้อ 2 + กระดานวาดข้อ 3)
@@ -100,7 +101,7 @@ export default function Game({
   //   colour_fix → ใช้สีที่ล็อกไว้ ไม่สนใจสีที่ผู้ใช้เลือก (สีที่เลือกไว้ยังอยู่ครบ กลับมาใช้ได้ตาถัดไป)
   //   dont_lift_pen → ถังสีหายไป ถ้าเลือกถังสีค้างไว้ก็ถอยไปใช้ปากกา
   const drawColor = colourFix ?? color;
-  const tool = noLift && toolChoice === TOOLS.BUCKET ? TOOLS.PEN : toolChoice;
+  const tool = noLift && (toolChoice === TOOLS.BUCKET || isShapeTool(toolChoice)) ? TOOLS.PEN : toolChoice;
 
   // ── เสียงเอฟเฟกต์ (ข้อ 1 ของรอบตกแต่งที่ 2) ──
   // ทุกเสียงขับจากสถานะที่ server ส่งมา ไม่ได้ผูกกับ event ตรงๆ (หน้านี้ไม่ได้ผูก socket เอง)
@@ -171,6 +172,7 @@ export default function Game({
 
   return (
     <div className="screen screen--game">
+      <Sparkles className="sparkles--page" spots={PAGE_SPARKLES} />
       <header className="topbar">
         <div className="topbar__who">
           {teamMode && myTeam ? (
@@ -331,6 +333,7 @@ export default function Game({
             historyLocked={historyLocked}
             lockedColor={colourFix}
             hideBucket={noLift}
+            hideShapes={noLift}
             locked={!canDraw}
           />
         </aside>

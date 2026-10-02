@@ -803,6 +803,69 @@ async function main() {
     check("ย้อนจนหมดแล้วยังทำซ้ำได้", h4.canRedo, true);
   });
 
+  await runPart("13.1 รูปทรง draw_shape — ส่งต่อ · ข้อมูลเพี้ยน · เข้าประวัติ ย้อน/ทำซ้ำ", async () => {
+    const SH = { shape: "rect", x1: 0.2, y1: 0.2, x2: 0.6, y2: 0.5, color: "#2d6cdf", size: 6 };
+    // เริ่มจากกระดานว่างให้นับประวัติได้ง่าย
+    D.socket.emit("clear_canvas");
+    await E.tryWait("clear_canvas", null, 1000);
+
+    for (const shape of ["line", "rect", "circle"]) {
+      clearAll(D, E, F);
+      D.socket.emit("draw_shape", { ...SH, shape });
+      check(`draw_shape ชนิด ${shape} ถึงคนอื่นครบทุกช่อง`, await E.wait("draw_shape", null, 2000), { ...SH, shape });
+      checkOk("รูปทรงถึงทุกคนในห้อง", (await F.tryWait("draw_shape", null, 500)) !== null);
+      check("คนวาดไม่ได้รับรูปทรงของตัวเองกลับมา", (await D.quiet("draw_shape", 200)).length, 0);
+    }
+
+    // ข้อมูลเพี้ยน: ทิ้งเงียบ ไม่ล่ม
+    const bad = [
+      { ...SH, shape: "triangle" }, { ...SH, shape: "star" }, { ...SH, shape: 5 }, { ...SH, shape: undefined },
+      { ...SH, x1: "0.2" }, { ...SH, y2: -0.1 }, { ...SH, x2: 1.01 }, { ...SH, y1: null }, { ...SH, x1: Infinity },
+      { ...SH, color: "blue" }, { ...SH, color: "#12345" }, { ...SH, size: 1 }, { ...SH, size: 41 }, { ...SH, size: "5" },
+      null, "x", 42, [], {},
+    ];
+    clearAll(D, E, F);
+    for (const b of bad) D.socket.emit("draw_shape", b);
+    check(`ข้อมูลรูปทรงเพี้ยน ${bad.length} แบบ ไม่มีอะไรถึงคนอื่น`, (await E.quiet("draw_shape", 700)).length, 0);
+    checkOk("ข้อมูลเพี้ยนแล้ว server ยังไม่ตาย", (await emitAck(F.socket, "create_room", { name: "ยังอยู่", avatar: 0 }))?.ok === true);
+
+    // คนที่ไม่ใช่คนวาดส่งไม่ได้
+    clearAll(D, E, F);
+    E.socket.emit("draw_shape", SH);
+    check("คนทายส่งรูปทรงแล้วไม่ถึงใคร", (await F.quiet("draw_shape", 500)).length + (await D.quiet("draw_shape", 1)).length, 0);
+
+    // ลากเส้นค้างอยู่ห้ามแทรกรูปทรง
+    clearAll(D, E, F);
+    D.socket.emit("stroke_start", { x: 0.1, y: 0.1, color: "#000000", size: 5, tool: "pen" });
+    D.socket.emit("draw_shape", SH);
+    await E.wait("stroke_start", null, 1500);
+    check("มีเส้นค้างอยู่ รูปทรงถูกทิ้ง", (await E.quiet("draw_shape", 400)).length, 0);
+    D.socket.emit("stroke_end");
+    await E.wait("stroke_end", null, 1500);
+
+    // เข้าประวัติ: ย้อนทีละอัน
+    D.socket.emit("draw_shape", { ...SH, shape: "circle" });
+    await E.wait("draw_shape", null, 1500);
+    clearAll(D, E, F);
+    D.socket.emit("undo");
+    const h1 = await E.wait("canvas_history", null, 2000);
+    check("ย้อนแล้วรูปทรงหายไปทั้งอัน (ท้ายลิสต์กลับเป็นเส้นก่อนหน้า)", h1.items.at(-1).type, "stroke_end");
+    check("ย้อนแล้วทำซ้ำได้", h1.canRedo, true);
+    D.socket.emit("redo");
+    const h2 = await E.wait("canvas_history", (h) => h.canRedo === false, 2000);
+    check("ทำซ้ำแล้วรูปทรงกลับมาในประวัติครบทุกช่อง", h2.items.at(-1), { type: "draw_shape", ...SH, shape: "circle" });
+    check("ประวัติมีรูปทรง 4 อัน (line rect circle + circle)", h2.items.filter((i) => i.type === "draw_shape").length, 4);
+
+    // คนเข้ากลางตาได้รูปทรงในภาพ
+    const Late = track(await connect());
+    others.push(Late);
+    await emitAck(Late.socket, "join_room", { code: dcode, name: "ShapeLate", avatar: 1 });
+    const lh = await Late.wait("canvas_history", null, 3000);
+    check("คนเข้ากลางตาได้รูปทรงในประวัติ", lh.items.filter((i) => i.type === "draw_shape").length, 4);
+    check("ไม่มีคำจริงหลุดในประวัติ", JSON.stringify(lh).includes('"word"'), false);
+    // คืนสถานะให้ข้อ 14: ย้อนรูปทรงทั้งหมดให้เหลือสถานะใกล้เดิม ไม่จำเป็น เพราะข้อ 14 เริ่มจาก redo แล้วยิงจุดทับ
+  });
+
   await runPart("14. เพดานประวัติต่อตา — กันหน่วยความจำบวม", async () => {
     // ย้อนกลับมาที่ของเดิมก่อน เพื่อไม่ให้เริ่มจากกระดานว่าง
     D.socket.emit("redo");
@@ -1101,6 +1164,17 @@ async function main() {
     drawer.socket.emit("fill", { x: 0.9, y: 0.9, color: locked });
     check("เทสีด้วยสีที่ล็อก ผ่าน", (await guesser.wait("fill", null, 2000)).color, locked);
 
+    // ── 5.1) รูปทรง: colour_fix บังคับสีเหมือนกัน ──
+    const shapeBase = { shape: "circle", x1: 0.2, y1: 0.2, x2: 0.4, y2: 0.4, size: 5 };
+    clearAll(drawer, guesser);
+    drawer.socket.emit("draw_shape", { ...shapeBase, color: wrong });
+    check("รูปทรงสีผิดกติกา ถูกทิ้ง", (await guesser.quiet("draw_shape", 400)).length, 0);
+    clearAll(drawer, guesser);
+    drawer.socket.emit("draw_shape", { ...shapeBase, color: locked });
+    check("รูปทรงสีที่ล็อก ผ่าน", (await guesser.wait("draw_shape", null, 2000)).color, locked);
+    drawer.socket.emit("undo"); // เอารูปทรงออก ไม่ให้กวนการนับประวัติด้านล่าง
+    await guesser.tryWait("canvas_history", null, 2000);
+
     // ── 6) คนที่เข้าห้องกลางตาต้องเห็น challenge เดียวกัน และประวัติมีแต่ของที่ผ่านกติกา ──
     const Late = track(await connect());
     others.push(Late);
@@ -1133,6 +1207,10 @@ async function main() {
     clearAll(drawer, guesser);
     drawer.socket.emit("fill", { x: 0.5, y: 0.5, color: "#000000" });
     check("dont_lift_pen ทิ้งถังสีทุกครั้ง แม้ยังไม่วาดอะไร", (await guesser.quiet("fill", 400)).length, 0);
+
+    clearAll(drawer, guesser);
+    drawer.socket.emit("draw_shape", { shape: "line", x1: 0.1, y1: 0.1, x2: 0.5, y2: 0.5, color: "#000000", size: 5 });
+    check("dont_lift_pen ทิ้งรูปทรงทุกครั้ง", (await guesser.quiet("draw_shape", 400)).length, 0);
 
     // ── 2) ยังไม่วาดอะไร กดย้อน/ทำซ้ำก็ต้องเงียบ ──
     clearAll(drawer, guesser);
@@ -1663,7 +1741,7 @@ async function main() {
     check("ภาพว่าง → ทิ้ง", drawLib.cleanDrawing([]), null);
     const plan = drawLib.schedule([[0.2, 0.2, 0.8, 0.2], [0.8, 0.3, 0.8, 0.9, 0.2, 0.9], [0.5, 0.5]], 30000);
     const lastEnd = plan[plan.length - 1].at + plan[plan.length - 1].ms;
-    checkOk("จังหวะ: ทุกเส้นเรียงตามเวลาและจบไม่เกินงบ (ครึ่งของ 60 วิ = 30 วิ)", plan.every((x, i) => i === 0 || x.at >= plan[i - 1].at + plan[i - 1].ms) && lastEnd <= 30000);
+    checkOk("จังหวะ: ทุกเส้นเรียงตามเวลาและจบไม่เกินงบ (งบ 30 วิที่ส่งเข้าไปเอง)", plan.every((x, i) => i === 0 || x.at >= plan[i - 1].at + plan[i - 1].ms) && lastEnd <= 30000);
     checkOk("จังหวะ: เส้นยาวใช้เวลานานกว่าเส้นสั้น", plan[1].ms > plan[0].ms && plan[0].ms > plan[2].ms);
 
     // --- ไฟล์ภาพจริง (ถ้าดาวน์โหลดไว้แล้ว) ต้องไม่มีชื่อคำ/ข้อมูลอื่นติดมา ---
@@ -1776,7 +1854,7 @@ async function main() {
       const end2 = await P.wait("ai_draw_end", null, 5000);
       check("หมดเวลาช่องสอง: ไม่ได้คะแนน เสียชีวิต เฉลยคำ", [end2.correct, end2.gained, end2.lives, end2.totalScore, end2.word], [false, 0, 0, end1.gained, "แมว"]);
       check("เส้นทั้ง 3 ถูกวาดครบก่อนหมดเวลา", strokeAt.length, 3);
-      checkOk(`เส้นสุดท้ายมาถึงภายในครึ่งหนึ่งของเวลา (1.5 วิ + เผื่อเครือข่าย) ได้ ${strokeAt.at(-1)} ms`, strokeAt.at(-1) <= 1500 + 400);
+      checkOk(`เส้นสุดท้ายมาถึงภายในหนึ่งในสามของเวลา (1 วิ + เผื่อเครือข่าย) ได้ ${strokeAt.at(-1)} ms`, strokeAt.at(-1) <= 1000 + 400);
       const over = await P.wait("ai_game_end", null, 3000);
       check("ชีวิตหมดในช่องสอง → จบเกม บันทึกคะแนน", [over.totalScore, over.levelReached], [end1.gained, 1]);
       check("ไม่มี key/ช่องแปลก ๆ ใน ai_game_end", Object.keys(over).sort(), ["levelReached", "rank", "totalScore"]);
@@ -1928,6 +2006,21 @@ async function main() {
       H.socket.emit("undo");
       await wait(300);
       check("undo ทีม A → canvas_history ถึงทีม A เท่านั้น", [count(H, "canvas_history", u0.H), count(P3, "canvas_history", u0.P3), count(P2, "canvas_history", u0.P2), count(P4, "canvas_history", u0.P4)], [1, 1, 0, 0]);
+      H.socket.emit("redo");
+      await wait(200);
+    }
+
+    // ---------- รูปทรงแยกทีม (เฉพาะตาที่ไม่มีกติกาพิเศษ) ----------
+    if (ch0.type === "none") {
+      const s0 = { H: H.dump().length, P2: P2.dump().length, P3: P3.dump().length, P4: P4.dump().length };
+      H.socket.emit("draw_shape", { shape: "rect", x1: 0.2, y1: 0.2, x2: 0.4, y2: 0.4, color: "#2d6cdf", size: 4 });
+      await wait(300);
+      check("draw_shape ทีม A ถึงทีม A เท่านั้น", [count(H, "draw_shape", s0.H), count(P3, "draw_shape", s0.P3), count(P2, "draw_shape", s0.P2), count(P4, "draw_shape", s0.P4)], [0, 1, 0, 0]);
+      P3.socket.emit("draw_shape", { shape: "line", x1: 0.2, y1: 0.2, x2: 0.4, y2: 0.4, color: "#2d6cdf", size: 4 });
+      await wait(200);
+      check("คนทายส่งรูปทรงไม่ได้ในโหมดทีม", count(H, "draw_shape", s0.H) + count(P4, "draw_shape", s0.P4), 0);
+      H.socket.emit("undo");
+      await wait(200);
       H.socket.emit("redo");
       await wait(200);
     }

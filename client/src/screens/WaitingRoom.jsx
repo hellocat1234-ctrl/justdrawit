@@ -2,6 +2,7 @@ import { useState } from "react";
 import { socket } from "../socket";
 import Avatar from "../components/Avatar";
 import Logo from "../components/Logo";
+import Critter from "../components/Critter";
 import Ribbon from "../components/Ribbon";
 import { MascotNote } from "../components/Mascot";
 import { InfoModal } from "../components/TopIcons";
@@ -83,7 +84,9 @@ export default function WaitingRoom({ room, me, onLeave }) {
       <Ribbon tone="teal">ห้องรอ</Ribbon>
 
       <div className="room">
-        <div className="panel">
+        <div className="panel deco-host">
+          <Critter name="cat" className="crit crit--top-left" />
+          <Critter name="parrot" className="crit crit--top-right" />
           <button
             type="button"
             className="code-badge"

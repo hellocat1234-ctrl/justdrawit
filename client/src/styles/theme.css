@@ -23,11 +23,14 @@
   /* เขียวอ่อนสำหรับ "ทายถูกแล้ว" ทั้งในแชทและแถบคะแนน (DESIGN.md สั่งให้เป็นเขียวอ่อน) */
   --green-soft: #d9f2e2;
 
-  /* ---- ฟอนต์ ----
-     Silkscreen ไม่มีภาษาไทย ใช้ได้เฉพาะข้อความอังกฤษและตัวเลข */
-  --font-pixel: "Silkscreen", "Courier New", monospace;
-  --font-head: "Mitr", "Sarabun", sans-serif;
-  --font-body: "Sarabun", "Thonburi", "Tahoma", sans-serif;
+  /* ---- ฟอนต์ (ผสมสองกลุ่ม) ----
+     กลุ่มหัวข้อ (--font-pixel / --font-head): หัวข้อ ป้ายริบบิ้น ชื่อโหมด ปุ่มใหญ่ ตัวเลข
+       ตัวอังกฤษ/ตัวเลข = Jersey 15 (พิกเซล) · ภาษาไทย = Chakra Petch (เหลี่ยม ฟีลเกม)
+       ฟอนต์พิกเซลไม่มีตัวไทย เบราว์เซอร์จึงหยิบตัวไทยจาก Chakra Petch ที่ต่อท้ายให้ทีละตัวอักษร
+     กลุ่มเนื้อความ (--font-body): คำอธิบาย ข้อความทั่วไป แชท ช่องกรอก = Prompt (ทั้งไทยและอังกฤษ อ่านง่ายกว่าฟอนต์พิกเซล) */
+  --font-pixel: "Jersey 15", "Chakra Petch", monospace;
+  --font-head: "Jersey 15", "Chakra Petch", sans-serif;
+  --font-body: "Prompt", "Chakra Petch", sans-serif;
 
   /* ---- ขอบและเงาแบบพิกเซล ---- */
   --border: 3px solid var(--ink);
@@ -35,6 +38,11 @@
   --shadow: 6px 6px 0 var(--ink); /* แผงใหญ่ */
   --shadow-sm: 4px 4px 0 var(--ink); /* ของเล็ก ปุ่ม */
   --shadow-xs: 2px 2px 0 var(--ink); /* ของจิ๋ว เช่น จุดเลือกสี */
+}
+
+/* ฟอนต์พิกเซลมีน้ำหนักเดียว — ห้ามให้เบราว์เซอร์ "ทำตัวหนา" เอง (ได้ตัวพิกเซลเบลอ/บวม) */
+html {
+  font-synthesis: none;
 }
 
 /* ============================ พื้นฐาน ============================ */
@@ -100,7 +108,7 @@ input {
   gap: 4px;
   justify-items: center;
   font-family: var(--font-pixel);
-  font-size: clamp(30px, 7vw, 54px);
+  font-size: clamp(40px, 9vw, 76px);
   line-height: 1;
   letter-spacing: 2px;
 }
@@ -195,7 +203,7 @@ input {
   display: block;
   margin: 0 0 6px;
   font-family: var(--font-pixel);
-  font-size: 11px;
+  font-size: 14px;
   letter-spacing: 0.5px;
 }
 
@@ -395,7 +403,7 @@ input {
   background: var(--white);
   color: var(--ink);
   font-family: var(--font-pixel);
-  font-size: 13px;
+  font-size: 14px;
   cursor: pointer;
 }
 
@@ -438,7 +446,7 @@ input {
 
 .topbar__label {
   font-family: var(--font-pixel);
-  font-size: 10px;
+  font-size: 14px;
   letter-spacing: 0.5px;
   color: var(--muted);
 }
@@ -825,6 +833,15 @@ input {
   height: 100%;
   /* ห้ามเบราว์เซอร์เอานิ้วไปเลื่อนจอ ไม่งั้นวาดด้วยนิ้วไม่ติด (DESIGN.md สั่งให้วาดด้วยนิ้วได้) */
   touch-action: none;
+}
+
+/* ชั้นเงารูปทรงตอนลาก — ทับกระดานเต็มใบ ไม่รับเมาส์/นิ้วเด็ดขาด ไม่งั้นลากไม่ติด */
+.board__preview {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
 }
 
 /* ── กล่องโหมดดีบักชั่วคราว (?debug=1) — ลบได้ทั้งบล็อกนี้ ──
@@ -2101,7 +2118,7 @@ select[class] {
   padding: 0 5px;
   border: 2px solid var(--ink);
   font-family: var(--font-head);
-  font-size: 11px;
+  font-size: 14px;
   line-height: 1.5;
   white-space: nowrap;
   color: var(--ink);
@@ -2399,7 +2416,7 @@ select[class] {
 
 .team-vs__sep {
   font-family: var(--font-pixel);
-  font-size: 11px;
+  font-size: 14px;
   color: var(--muted);
 }
 
@@ -2566,7 +2583,7 @@ select[class] {
   color: var(--white);
   font-family: var(--font-head);
   font-weight: 500;
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.3;
   vertical-align: middle;
   white-space: nowrap;
@@ -2636,7 +2653,7 @@ select[class] {
   border: 2px solid var(--ink);
   font-family: var(--font-head);
   font-weight: 600;
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.25;
   color: var(--white);
   white-space: nowrap;
@@ -3184,7 +3201,7 @@ select[class] {
 .challenge__text b {
   font-family: var(--font-pixel);
   font-weight: 400;
-  font-size: 11px;
+  font-size: 14px;
   letter-spacing: 0.5px;
 }
 
@@ -3377,9 +3394,10 @@ select[class] {
 }
 
 .toolbar__group--tools {
-  display: flex;
-  justify-content: space-around;
-  gap: 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  justify-items: center;
+  gap: 2px 0;
   padding-top: 6px;
   border-top: 3px dashed var(--ink);
 }
@@ -3590,4 +3608,183 @@ select[class] {
     max-width: max(320px, calc((100dvh - 402px) * 4 / 3));
     margin: 0 auto;
   }
+}
+
+/* ---- ปุ่มเพลง/เสียงของหน้าที่ไม่มีแถบบน: มุมขวาบนของหน้า (หน้าที่มีแถบบนใช้กลุ่มไอคอนในแถบแทน) ---- */
+.audio-dock {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 40;
+  display: flex;
+  gap: 6px;
+}
+
+
+/* ============================ รอบ 3C: ตกแต่ง (ตัวการ์ตูนพิกเซล หญ้า ประกาย) ============================
+   ทุกอย่างเป็นของตกแต่งล้วน: ไม่รับเมาส์/นิ้ว (pointer-events: none) และวางนอกพื้นที่ปุ่ม/ข้อความ
+   - ตัวที่ "นั่งบนขอบบน" ของแผง (--top-left / --top-right): ก้นตัวทับเส้นขอบบนพอดี อยู่ในช่องว่างเหนือแผง
+   - ตัวที่ "ยืนข้างแผง" (--side-*): อยู่ในพื้นที่ว่างสองข้างจอ ซ่อนเมื่อจอแคบกว่า 1180px */
+.deco-host {
+  position: relative;
+}
+
+.crit {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.crit--top-left {
+  left: 18px;
+  bottom: 100%;
+  margin-bottom: -4px; /* ซ่อนเส้นขอบบนหนา 4px ให้ตัวนั่งบนขอบ */
+}
+
+.crit--top-right {
+  right: 18px;
+  bottom: 100%;
+  margin-bottom: -4px;
+}
+
+.crit--side-left {
+  right: calc(100% + 22px);
+  top: 70px;
+}
+
+.crit--side-right {
+  left: calc(100% + 22px);
+  bottom: 40px;
+}
+
+@media (max-width: 1180px) {
+  .crit--side-left,
+  .crit--side-right {
+    display: none !important; /* .critter { display: block } อยู่ถัดลงไป ต้องชนะด้วย !important */
+  }
+}
+
+/* ท่า a/b: ท่า b ซ่อนอยู่ ขึ้นเฉพาะตอนมีอนิเมชัน (ปิดอนิเมชันเมื่อลดภาพเคลื่อนไหว = เห็นแค่ท่า a นิ่งๆ) */
+.critter {
+  display: block;
+  image-rendering: pixelated;
+}
+
+.critter__b {
+  opacity: 0;
+}
+
+.critter--wag .critter__a {
+  animation: crit-half-a 1.6s steps(1, end) infinite;
+}
+.critter--wag .critter__b {
+  animation: crit-half-b 1.6s steps(1, end) infinite;
+}
+.critter--blink .critter__a {
+  animation: crit-blink-a 4.2s steps(1, end) infinite;
+}
+.critter--blink .critter__b {
+  animation: crit-blink-b 4.2s steps(1, end) infinite;
+}
+.critter--star {
+  animation: crit-bob 2.4s ease-in-out infinite;
+}
+.critter--trophy {
+  animation: crit-bob 3.2s ease-in-out infinite;
+}
+
+@keyframes crit-half-a {
+  0%, 49.99% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+@keyframes crit-half-b {
+  0%, 49.99% { opacity: 0; }
+  50%, 100% { opacity: 1; }
+}
+@keyframes crit-blink-a {
+  0%, 93% { opacity: 1; }
+  93.01%, 100% { opacity: 0; }
+}
+@keyframes crit-blink-b {
+  0%, 93% { opacity: 0; }
+  93.01%, 100% { opacity: 1; }
+}
+@keyframes crit-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+/* ประกายรอบโลโก้ */
+.logo-wrap {
+  position: relative;
+  display: inline-block;
+}
+.sparkles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.sparkles__s {
+  position: absolute;
+  animation: sparkle-pop 2.2s ease-in-out infinite;
+}
+@keyframes sparkle-pop {
+  0%, 100% { opacity: 0.25; transform: scale(0.6); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+
+/* แถบหญ้าล่างหน้าแรก: อยู่หลังทุกอย่าง ไม่รับเมาส์ ไม่ทำให้เกิดแถบเลื่อน (fixed) */
+.grass {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  z-index: 0;
+  pointer-events: none;
+}
+.screen--home > :not(.grass) {
+  position: relative;
+  z-index: 1;
+}
+
+/* ประกายหน้าเกม: ติดขอบจอ ทับพื้นหลังเท่านั้น (กล่องเกมอยู่เหนือกว่า) ซ่อนเมื่อจอแคบกว่า 1380px */
+.sparkles--page {
+  position: fixed;
+  z-index: 0;
+}
+@media (max-width: 1380px) {
+  .sparkles--page {
+    display: none !important;
+  }
+}
+
+/* ============================ รอบ 3C (แก้ต่อ): แถบบน Solo · หัวข้อใหญ่ขึ้น ============================ */
+
+/* Solo: ด่าน ชีวิต คะแนน เป็นกลุ่มเดียวชิดซ้าย · เวลาและไอคอนชิดขวา (เดิมแต่ละอันยืดเต็มส่วนเลยกระจายห่างกัน) */
+.topbar__stats {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.topbar__stats .topbar__who {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+/* ฟอนต์ Jersey 15 ตัวเล็กกว่าฟอนต์เดิมที่ขนาดเท่ากัน หัวข้อจึงขยายขึ้นทุกหน้า */
+.ribbon__text {
+  padding: 8px 10px;
+  font-size: 34px;
+  letter-spacing: 4px;
+  line-height: 1.05;
+}
+.ribbon {
+  padding: 0 40px;
+}
+.panel__title {
+  font-size: 30px;
+  line-height: 1.1;
 }

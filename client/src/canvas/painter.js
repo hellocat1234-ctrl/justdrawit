@@ -187,6 +187,34 @@ export function floodFill(img, w, h, sx, sy, fill, tol = FILL_TOLERANCE) {
 }
 
 /**
+ * วาดเส้นขอบรูปทรงหนึ่งอัน (line | rect | circle) ลง ctx — ใช้ทั้งตอนวาดจริงและเงาตัวอย่างตอนลาก
+ * พิกัดเป็นสัดส่วน 0–1 คูณด้วย w,h ของกระดาน · circle = วงรีที่พอดีกรอบสี่เหลี่ยมของสองจุด
+ * (ฝั่งที่ลากเป็นคนทำให้เป็นวงกลมจริงโดยบังคับกรอบเป็นจัตุรัสตามพิกเซลก่อนส่ง)
+ */
+export function strokeShape(ctx, a, w, h) {
+  const x1 = a.x1 * w;
+  const y1 = a.y1 * h;
+  const x2 = a.x2 * w;
+  const y2 = a.y2 * h;
+  ctx.strokeStyle = a.color;
+  ctx.lineWidth = a.size;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.beginPath();
+  if (a.shape === "line") {
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+  } else if (a.shape === "rect") {
+    ctx.rect(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1));
+  } else if (a.shape === "circle") {
+    ctx.ellipse((x1 + x2) / 2, (y1 + y2) / 2, Math.abs(x2 - x1) / 2, Math.abs(y2 - y1) / 2, 0, 0, Math.PI * 2);
+  } else {
+    return; // ชนิดแปลกปลอม ไม่วาดอะไร
+  }
+  ctx.stroke();
+}
+
+/**
  * สร้างตัววาดผูกกับ canvas หนึ่งใบ
  * @param ctx 2D context ของ canvas นั้น
  * @param debug true = เปิดตัวนับสำหรับโหมดดีบักชั่วคราว (?debug=1)
@@ -314,6 +342,11 @@ export function createPainter(ctx, debug = false) {
     current = null;
   }
 
+  function shapeAt(a) {
+    current = null; // รูปทรงไม่ใช่เส้นที่ลากค้าง
+    strokeShape(ctx, a, w, h);
+  }
+
   function fillAt(a) {
     // อ่านขนาดจริงจาก canvas ตรงๆ ไม่คูณ dpr เอง จะได้ไม่เพี้ยนเรื่องปัดเศษ
     const cw = ctx.canvas.width;
@@ -344,6 +377,8 @@ export function createPainter(ctx, debug = false) {
           return endStroke();
         case "fill":
           return fillAt(action);
+        case "draw_shape":
+          return shapeAt(action);
         case "clear_canvas":
           return clearBoard();
         default:

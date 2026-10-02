@@ -44,3 +44,4 @@ cd server && npm run get-drawings
 - โมเดล: [VinayHajare/quickdraw-mobilevit-small-onnx](https://huggingface.co/VinayHajare/quickdraw-mobilevit-small-onnx) สัญญาอนุญาต MIT (ปรับต่อจาก MobileViT-Small ของ Apple)
 - ชุดข้อมูลที่ใช้ฝึก: [Google Quick, Draw! Dataset](https://github.com/googlecreativelab/quickdraw-dataset) สัญญาอนุญาต CC BY 4.0
 - ภาพวาดในช่วง "ดูภาพแล้วทาย" (`server/data/ai-drawings.json`): คัดและแปลงพิกัดจากชุดข้อมูล Google Quick, Draw! เดียวกัน (CC BY 4.0) ภาพเป็นผลงานของผู้เล่นทั่วโลกที่ร่วมวาดให้ชุดข้อมูลนี้
+- เพลงพื้นหลัง: [Children's March Theme](https://opengameart.org/content/childrens-march-theme) โดย Cleyton Kauffman ([SoundCloud](https://soundcloud.com/cleytonkauffman)) จาก OpenGameArt.org สัญญาอนุญาต [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) (ไม่บังคับให้เครดิต แต่ใส่ไว้เพื่อขอบคุณ) · ไฟล์อยู่ที่ `client/public/music/` เกมวนเล่นซ้ำเพลงนี้ และถ้าอยากเปลี่ยน/เพิ่มเพลง แค่ใส่ไฟล์ในโฟลเดอร์เดียวกัน

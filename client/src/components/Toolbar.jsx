@@ -46,6 +46,8 @@ export default function Toolbar({
   // maxSize: เพดานขนาดแปรงของหน้านี้ (Solo ตั้ง 12 เพราะแปรงหนาทำให้ AI ทายแม่นลดลงครึ่งหนึ่ง) · ไม่ใส่ = SIZE_MAX
   maxSize = SIZE_MAX,
   hideBucket = false,
+  // hideShapes: dont_lift_pen ซ่อนเครื่องมือรูปทรงด้วย (ลากแล้วปล่อยครั้งเดียว = ยกปากกา server ทิ้งทุกครั้ง)
+  hideShapes = false,
   historyLocked = false,
 }) {
   // สีที่เลือกเองจากแถบสีรุ้ง — เก็บเป็น "องศาสี" (0–360) แล้วแปลงเป็น hex ตอนใช้
@@ -197,6 +199,25 @@ export default function Toolbar({
             <Icon name="bucket" size={30} />
           </button>
         )}
+        {/* รูปทรง: เส้นตรง สี่เหลี่ยม วงกลม — ลากเห็นเงาก่อน ปล่อยแล้วค่อยวาดจริง */}
+        {!hideShapes &&
+          [
+            [TOOLS.LINE, "เส้นตรง", "shape-line"],
+            [TOOLS.RECT, "สี่เหลี่ยม", "shape-rect"],
+            [TOOLS.CIRCLE, "วงกลม", "shape-circle"],
+          ].map(([t, label, icon]) => (
+            <button
+              key={t}
+              type="button"
+              className={`tool${tool === t ? " tool--on" : ""}`}
+              aria-label={label}
+              title={label}
+              aria-pressed={tool === t}
+              onClick={() => onTool(t)}
+            >
+              <Icon name={icon} size={30} />
+            </button>
+          ))}
         {/* ล้างจอทำทันที ไม่ใช่โหมด จึงไม่ได้ค้างสถานะกดไว้แบบสามปุ่มบน */}
         <button type="button" className="tool tool--danger" aria-label="ล้างจอ" onClick={onClear}>
           <Icon name="trash" size={30} />

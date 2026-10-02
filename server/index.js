@@ -424,6 +424,11 @@ function challengeAllowsFill(room, color) {
   return true;
 }
 
+// กติกาของรูปทรง (draw_shape) — เหมือนถังสีเป๊ะ: colour_fix ต้องสีตรง · dont_lift_pen ทิ้งทุกครั้ง
+// (รูปทรงคือการลากแล้วปล่อยในครั้งเดียว ขัดกับ "เส้นเดียวต่อเนื่อง") แยกชื่อไว้ให้อ่านง่าย
+function challengeAllowsShape(room, color) {
+  return challengeAllowsFill(room, color);
+}
 
 function normalize(text) {
   return String(text ?? "").toLowerCase().replace(/\s+/g, "");
@@ -456,6 +461,7 @@ function normalize(text) {
 const SIZE_MIN = 2;
 const SIZE_MAX = 40;
 const VALID_TOOLS = ["pen", "eraser"];
+const VALID_SHAPES = ["line", "rect", "circle"]; // รูปทรงที่ draw_shape รับ (ดู events.md หัวข้อ 4)
 const COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 
 const MAX_POINTS_PER_MSG = 500; // จุดสูงสุดในหนึ่งข้อความ stroke_points
@@ -570,7 +576,7 @@ function storeAction(room, type, payload) {
     return true;
   }
 
-  // stroke_start / fill / clear_canvas — ขึ้นต้นการกระทำใหม่หนึ่งอัน
+  // stroke_start / fill / draw_shape / clear_canvas — ขึ้นต้นการกระทำใหม่หนึ่งอัน
   const op = { events: [{ type, ...payload }] };
   if (room.canvasEvents + op.events.length > MAX_CANVAS_EVENTS) {
     freezeCanvas(room);
@@ -850,8 +856,8 @@ const SOLO_NEXT_DELAY_MS = Number(process.env.AI_NEXT_DELAY_MS) || 4000; // พ�
 const SOLO_TIME_OVERRIDE = Number(process.env.AI_TIME_OVERRIDE) || 0;     // ไว้ให้เทสย่อเวลาเท่านั้น
 const SNAPSHOT_MIN_GAP_MS = 4000;     // ภาพถี่กว่านี้ทิ้งเงียบ ๆ (client ส่งทุก 5 วิ) กันเปลืองค่า API
 const MAX_SNAPSHOT_CHARS = 600000;    // เพดานขนาดภาพ (ตัวอักษรของ data URL) · Socket.IO เองก็ตัดที่ ~1MB
-// ช่วงสอง "ดูภาพแล้วทาย": เล่นซ้ำภาพที่คนจริงเคยวาด (Quick, Draw!) ให้จบภายในครึ่งหนึ่งของเวลา
-const DRAW_BUDGET_RATIO = 0.5;
+// ช่วงสอง "ดูภาพแล้วทาย": เล่นซ้ำภาพที่คนจริงเคยวาด (Quick, Draw!) ให้จบภายในหนึ่งในสามของเวลา
+const DRAW_BUDGET_RATIO = 1 / 3;
 const DRAW_COLOR = "#000000";
 const DRAW_SIZE = 4;
 const GUESS_MIN_GAP_MS = 300;  // พิมพ์ทายถี่กว่านี้ทิ้งเงียบ ๆ
@@ -1284,6 +1290,24 @@ io.on("connection", (socket) => {
     const payload = { x, y, color };
     storeAction(room, "fill", payload);
     socket.to(room.code).emit("fill", payload);
+  });
+
+  // draw_shape: เส้นตรง/สี่เหลี่ยม/วงกลม ที่ลากเสร็จแล้วส่งทีเดียว (ไม่มี stroke_start/points/end)
+  // เก็บเป็นหนึ่งการกระทำในประวัติ จึงย้อน/ทำซ้ำ และส่งใน canvas_history ได้เหมือน fill
+  socket.on("draw_shape", (data) => {
+    const room = drawRoom(socket);
+    if (!room || !data || typeof data !== "object") return;
+    if (room.strokeOpen) return; // ลากเส้นค้างอยู่ ห้ามแทรก ไม่งั้นลำดับในประวัติเพี้ยน
+
+    const { shape, x1, y1, x2, y2, color, size } = data;
+    if (!VALID_SHAPES.includes(shape)) return;
+    if (!isUnit(x1) || !isUnit(y1) || !isUnit(x2) || !isUnit(y2)) return;
+    if (!isColor(color) || !isSize(size)) return;
+    if (!challengeAllowsShape(room, color)) return;
+
+    const payload = { shape, x1, y1, x2, y2, color, size };
+    storeAction(room, "draw_shape", payload);
+    socket.to(room.code).emit("draw_shape", payload);
   });
 
   // clear_canvas ไม่ได้ล้าง "ประวัติ" ทิ้ง แต่ถูกเก็บเป็นอีกหนึ่งการกระทำ

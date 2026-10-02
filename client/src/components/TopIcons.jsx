@@ -1,8 +1,9 @@
 import { useEffect, useRef } from "react";
 import Modal from "./Modal";
 import TeamRules from "./TeamRules";
-import { useMusicOn, useReduceMotion, useSoundMuted } from "../hooks/usePrefs";
+import { useReduceMotion, useSoundMuted } from "../hooks/usePrefs";
 import { Icon } from "./Icons";
+import { AudioButtons } from "./AudioDock";
 import { copyText, inviteUrl } from "../invite";
 
 // รูปประตูพิกเซลของเราเอง (วาดจากสี่เหลี่ยมล้วน เหมือนมาสคอต) ใช้ในกล่องยืนยันออก
@@ -109,10 +110,9 @@ export function ExitModal({ onYes, onNo, note }) {
   );
 }
 
-// ── ไอคอนบนแถบบน: เสียง · แชร์ลิงก์ (เฉพาะในห้อง) · ข้อมูล · ออก (สูง ≥44px ให้นิ้วแตะบนไอแพดได้) ──
+// ── ไอคอนบนแถบบน: แชร์ลิงก์ (เฉพาะในห้อง) · ข้อมูล · ออก (สูง ≥44px ให้นิ้วแตะบนไอแพดได้) ──
 export function TopIcons({ onInfo, onExit, shareCode = null, onToast }) {
-  const [muted, setMuted] = useSoundMuted();
-  const [music, setMusic] = useMusicOn();
+  // ปุ่มเปิด/ปิดเสียงกับเพลงย้ายไป AudioDock (components/AudioDock.jsx) ที่อยู่ทุกหน้าตำแหน่งเดียวกัน
 
   // ลิงก์เชิญ: คัดลอก URL ที่มี ?room=รหัส ให้เพื่อนกดแล้วเข้าห้องได้เลย
   async function share() {
@@ -121,26 +121,7 @@ export function TopIcons({ onInfo, onExit, shareCode = null, onToast }) {
   }
   return (
     <div className="top-icons">
-      <button
-        type="button"
-        className="icon-btn"
-        onClick={() => setMuted(!muted)}
-        aria-pressed={!muted}
-        aria-label={muted ? "เปิดเสียง" : "ปิดเสียง"}
-        title={muted ? "เปิดเสียง" : "ปิดเสียง"}
-      >
-        <Icon name={muted ? "mute" : "sound"} size={26} />
-      </button>
-      <button
-        type="button"
-        className={`icon-btn${music ? "" : " icon-btn--off"}`}
-        onClick={() => setMusic(!music)}
-        aria-pressed={music}
-        aria-label={music ? "ปิดเพลง" : "เปิดเพลง"}
-        title={music ? "ปิดเพลง" : "เปิดเพลง"}
-      >
-        <Icon name="music" size={26} />
-      </button>
+      <AudioButtons />
       {/* แชร์ = คัดลอกลิงก์เชิญ · รหัสห้องแสดงอยู่บนปุ่มเลย (ทุกคนในห้องเห็นและกดได้) */}
       {shareCode && (
         <button
