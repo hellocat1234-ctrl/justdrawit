@@ -149,3 +149,5 @@ vite.config.ts.timestamp-*
 
 # โมเดล AI ของโหมด Solo (ไฟล์ใหญ่ ดาวน์โหลดด้วย npm run get-model)
 server/models/
+screenshots-*/
+.DS_Store
