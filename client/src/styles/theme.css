@@ -3942,3 +3942,198 @@ select[class] {
   box-shadow: 0 0 0 3px var(--white), 0 0 0 6px var(--ink);
   margin: 0 6px;
 }
+
+/* ============================ จานสี 20 สี + ช่องเลือกสีสองแกน (แก้ต่อรอบ 3C) ============================ */
+
+.toolbar {
+  position: relative; /* แผงเลือกสีเองลอยอยู่ข้างแถบ (.color-pop) */
+}
+
+/* ตารางสี่เหลี่ยมเล็ก 7 คอลัมน์ × 3 แถว (20 สี + ปุ่มสีเอง) — สี่เหลี่ยมพิกเซลเหมือนเดิม แต่เล็กลงเพื่อให้พอดีคอลัมน์ */
+.toolbar__group--colors {
+  grid-template-columns: repeat(7, 26px);
+  justify-content: space-between;
+  gap: 7px 4px;
+  padding: 3px 0; /* เผื่อวงแหวนของสีที่เลือกอยู่ ไม่ให้ถูกตัดหรือไปทับแถวอื่น */
+}
+
+.toolbar__group--colors .swatch {
+  width: 26px;
+  height: 26px;
+  border-width: 2px;
+  box-shadow: 1px 1px 0 var(--ink);
+  opacity: 0.85; /* 20 สีต้องเห็นสีจริงเพื่อเลือก (เดิมจาง 0.45 เพราะมีแค่ 8 สี) · สีที่เลือกอยู่ยังเด่นด้วยวงแหวน + โตขึ้น */
+}
+.toolbar__group--colors .swatch:hover {
+  opacity: 1;
+}
+.toolbar__group--colors .swatch:disabled {
+  opacity: 0.3;
+}
+.toolbar__group--colors .swatch--on,
+.toolbar__group--colors .swatch--on:hover,
+.toolbar__group--colors .swatch:disabled.swatch--on {
+  opacity: 1;
+  transform: scale(1.12);
+  outline: 3px solid var(--ink);
+  outline-offset: 1px;
+  position: relative;
+  z-index: 2;
+}
+
+/* ปุ่มสีเอง: พื้นสีรุ้งพิกเซล (แถบสีแข็งไม่ไล่เนียน) + เครื่องหมาย + ขาวขอบดำ บอกว่ากดเพื่อเลือกสีเพิ่ม
+   ต่างจากช่องสีธรรมดาทันที · ใส่สีรุ้งใน CSS นี้ได้เพราะเป็นลวดลายตกแต่ง ไม่ใช่สีที่ส่งไปวาด */
+.toolbar__group--colors .swatch--custom {
+  position: relative;
+  background: linear-gradient(
+    to right,
+    #e8553f 0 16.66%,
+    #ef8a2b 0 33.33%,
+    #ffc81e 0 50%,
+    #22a559 0 66.66%,
+    #1e6fe8 0 83.33%,
+    #7b5ce0 0 100%
+  );
+}
+/* เครื่องหมาย + : ::before = กากบาทดำ (ขอบ) ใหญ่กว่า · ::after = กากบาทขาวเล็กทับ
+   ใช้ gradient สองแถบซ้อนในองค์ประกอบเดียว (แทนสองกล่องที่ขอบดำทับกันจนรูปเพี้ยน) */
+.swatch--custom::before,
+.swatch--custom::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  pointer-events: none;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+.swatch--custom::before {
+  width: 16px;
+  height: 16px;
+  margin: -8px 0 0 -8px;
+  background-image: linear-gradient(var(--ink), var(--ink)), linear-gradient(var(--ink), var(--ink));
+  background-size: 16px 8px, 8px 16px;
+}
+.swatch--custom::after {
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  background-image: linear-gradient(var(--white), var(--white)), linear-gradient(var(--white), var(--white));
+  background-size: 12px 4px, 4px 12px;
+}
+/* จุดสีเองล่าสุดที่มุมล่างขวา (ขอบดำ 2px) — โผล่เมื่อเคยเลือกสีเองแล้ว */
+.swatch__dot {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  z-index: 1;
+  width: 11px;
+  height: 11px;
+  border: 2px solid var(--ink);
+  pointer-events: none;
+}
+
+/* แผงเลือกสีเอง: ลอยทางซ้ายของแถบ ทับกระดานชั่วคราว ไม่เพิ่มความสูงของคอลัมน์เครื่องมือ */
+.color-pop {
+  position: absolute;
+  z-index: 30;
+  top: 48px;
+  right: calc(100% + 14px);
+  width: 224px;
+  padding: 10px;
+  border: var(--border-thick);
+  box-shadow: var(--shadow-sm);
+  background: var(--cream);
+  color: var(--ink);
+}
+.color-pop__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.color-pop__hex {
+  flex: 1;
+  font-family: var(--font-pixel);
+  font-size: 16px;
+  letter-spacing: 1px;
+}
+.color-pop__close {
+  min-height: 36px;
+  padding: 0 12px;
+  border: var(--border);
+  background: var(--white);
+  font-family: var(--font-head);
+  font-weight: 600;
+  font-size: 15px;
+  cursor: pointer;
+}
+/* แถบสีรุ้งสดเต็มแถบ = แกนนอน */
+.color-pop__bar {
+  position: relative;
+  height: 26px;
+  margin-bottom: 8px;
+  border: var(--border);
+  cursor: ew-resize;
+  touch-action: none;
+}
+.color-pop__tick {
+  position: absolute;
+  top: -5px;
+  bottom: -5px;
+  width: 6px;
+  transform: translateX(-50%);
+  background: var(--white);
+  border: 2px solid var(--ink);
+  pointer-events: none;
+}
+.color-pop__area {
+  position: relative;
+  height: 150px;
+  border: var(--border);
+  cursor: crosshair;
+  touch-action: none; /* ลากด้วยนิ้ว/ปากกาแล้วหน้าห้ามเลื่อน */
+}
+.color-pop__thumb {
+  position: absolute;
+  width: 30px;
+  height: 30px;
+  transform: translate(-50%, -50%);
+  border: 3px solid var(--white);
+  outline: 3px solid var(--ink);
+  pointer-events: none;
+}
+
+/* จอแคบ (แถบเครื่องมืออยู่ใต้กระดาน): แผงเด้งขึ้นด้านบนของแถบแทน */
+@media (max-width: 1000px) {
+  .color-pop {
+    top: auto;
+    right: auto;
+    left: 0;
+    bottom: calc(100% + 8px);
+  }
+  .toolbar__group--colors {
+    min-width: 216px;
+  }
+}
+
+/* คำที่ต้องวาด/คำใบ้เหนือกระดาน: สีเขียวอ่อนลงนิดหนึ่ง */
+.wordbar .topbar__real-word {
+  color: #3ab26e;
+}
+
+/* คำที่ต้องวาด: ภาษาไทยมีสระบน/วรรณยุกต์ซ้อนสูง และสระล่าง/หางพยัญชนะต่ำ — เดิมกล่องคำสูง 66px แต่หมึกสูง ~55px
+   (ตัวอักษร 40px) จึงชิดขอบบน ย่อเป็น 31px (หมึกสูง ~46px เหลือบนล่างข้างละ ~6px) ให้มีที่เหลือทั้งบนและล่าง แล้วจัดกึ่งกลางแนวตั้งด้วย flex */
+.wordbar__word {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: stretch;
+}
+.wordbar .topbar__real-word {
+  font-size: 31px;
+  line-height: 1.7;
+  letter-spacing: 2px;
+  position: relative;
+  top: 3px; /* ขยับลงเล็กน้อย: เส้นกลางของกล่องอยู่เหนือกลางตัวพยัญชนะ เพราะวรรณยุกต์/สระบนซ้อนสูงกว่าหางด้านล่าง */
+}

@@ -1,16 +1,7 @@
 import { useState } from "react";
 import { Icon } from "./Icons";
-import {
-  PAINT_COLORS,
-  SIZE_MIN,
-  SIZE_MAX,
-  TOOLS,
-  HUE_MIN,
-  HUE_MAX,
-  HUE_DEFAULT,
-  RAINBOW_GRADIENT,
-  hslToHex,
-} from "../canvas/palette";
+import { PAINT_COLORS, SIZE_MIN, SIZE_MAX, TOOLS, PICK_DEFAULT, colorLabel, hslToHex } from "../canvas/palette";
+import ColorPicker from "./ColorPicker";
 
 /**
  * แถบเครื่องมือวาด — อยู่คอลัมน์ขวาของหน้าเกม (DESIGN.md)
@@ -50,24 +41,26 @@ export default function Toolbar({
   hideShapes = false,
   historyLocked = false,
 }) {
-  // สีที่เลือกเองจากแถบสีรุ้ง — เก็บเป็น "องศาสี" (0–360) แล้วแปลงเป็น hex ตอนใช้
-  // เก็บเป็น hue ไม่ใช่ hex เพราะแถบสีรุ้งต้องรู้ว่าจะวางหัวเลื่อนไว้ตรงไหน
-  const [hue, setHue] = useState(HUE_DEFAULT);
-  const custom = hslToHex(hue, 1, 0.5);
-  const customPicked = color.toLowerCase() === custom.toLowerCase();
+  // สีที่เลือกเอง: เก็บเป็น "องศาสี + ความสว่าง" (ไม่ใช่ hex) เพราะช่องเลือกสีต้องรู้ว่าจะวางจุดจับไว้ตรงไหน
+  const [pick, setPick] = useState(PICK_DEFAULT);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [hasPicked, setHasPicked] = useState(false); // เคยเลือกสีเองแล้วหรือยัง → ขึ้นจุดสีที่มุมช่อง และกดช่องแล้วใช้สีนั้นได้เลย
+  const custom = hslToHex(pick.hue, 1, pick.light);
+  const customPicked = color.toLowerCase() === custom.toLowerCase() && !PAINT_COLORS.some((c) => c.hex === color.toLowerCase());
   // colour_fix: กลุ่มเลือกสีใช้ไม่ได้ทั้งกลุ่ม (สีล็อกจาก server แล้ว ไม่ใช่สีที่ผู้ใช้เลือก)
   const colourLocked = Boolean(lockedColor);
+  const closePicker = () => setPickerOpen(false);
 
-  // ลากแถบสีรุ้งแล้วได้สีนั้นทันที ไม่ต้องกดยืนยันอีกที (โจทย์อยากให้เลือกง่าย)
-  function handleHue(e) {
-    const h = Number(e.target.value);
-    setHue(h);
-    onColor(hslToHex(h, 1, 0.5));
+  // ลาก/แตะในช่องเลือกสี → ได้สีนั้นทันที ไม่ต้องกดยืนยัน
+  function handlePick(hue, light) {
+    setPick({ hue, light });
+    setHasPicked(true);
+    onColor(hslToHex(hue, 1, light));
   }
 
   return (
     <div
-      className={`toolbar${locked ? " toolbar--locked" : ""}`}
+      className={`toolbar${locked ? " toolbar--locked" : ""}`} data-picker={pickerOpen && !colourLocked ? "open" : undefined}
       // aria-disabled บอกโปรแกรมอ่านหน้าจอว่าตอนนี้ใช้ไม่ได้ (ตัวกันการกดจริงคือ CSS pointer-events)
       aria-disabled={locked || undefined}
     >
@@ -98,11 +91,10 @@ export default function Toolbar({
         </button>
       </div>
 
-      {/* ── สีสำเร็จรูป 8 สี ──
+      {/* ── จานสี 20 สี + ปุ่ม "สีเอง" รวม 21 ช่อง เรียงเป็นตารางสี่เหลี่ยมเล็ก 7×3 ──
           colour_fix: ทั้งกลุ่มกดไม่ได้ (สีถูกล็อกไว้แล้ว) แต่ยังโชว์ให้เห็นว่ามีสีอะไรบ้าง
-          สีที่ล็อกอยู่จะติด swatch--on เอง เพราะ Game ส่ง drawColor ลงมาเป็นสีที่ล็อกแล้ว */}
-      {/* ไม่ใส่ toolbar__group--off ที่กลุ่มนี้ เพราะสีที่ล็อกอยู่ต้องเด่นเต็มที่
-          (จางทั้งกลุ่มแล้วจะมองไม่ออกว่าตานี้ต้องใช้สีอะไร) — ใช้ .swatch:disabled จัดการรายจุดแทน */}
+          สีที่ล็อกอยู่จะติด swatch--on เอง เพราะ Game ส่ง drawColor ลงมาเป็นสีที่ล็อกแล้ว
+          (สีล็อกมาจากชุดสีหลักของ server ซึ่งอยู่ในจานนี้ครบ ดู palette.js) */}
       <div
         className="toolbar__group toolbar__group--colors"
         role="group"
@@ -113,43 +105,42 @@ export default function Toolbar({
           <button
             key={c.hex}
             type="button"
-            className={`swatch${color === c.hex ? " swatch--on" : ""}`}
+            className={`swatch${color.toLowerCase() === c.hex ? " swatch--on" : ""}`}
             style={{ background: c.hex }}
-            aria-label={`สี${c.name}`}
-            aria-pressed={color === c.hex}
+            aria-label={colorLabel(c)}
+            title={c.name}
+            aria-pressed={color.toLowerCase() === c.hex}
             disabled={colourLocked}
-            onClick={() => onColor(c.hex)}
+            onClick={() => {
+              onColor(c.hex);
+              closePicker();
+            }}
           />
         ))}
-      </div>
-
-      {/* ── เลือกสีเองด้วยแถบสีรุ้ง ──
-          เดิมใช้วงล้อสีของเบราว์เซอร์ (input[type=color]) ซึ่งเปิดเป็นหน้าต่างใหญ่ ต้องกดหลายที
-          แถบนี้กดหรือลากตรงไหนก็ได้สีตรงนั้นทันที จึงเลือกสีผสมเองได้ง่ายกว่ามาก */}
-      <div className={`toolbar__group toolbar__group--hue${colourLocked ? " toolbar__group--off" : ""}`}>
-        <span className="toolbar__label">สีเอง</span>
-        <input
-          type="range"
-          className="rainbow"
-          style={{ background: RAINBOW_GRADIENT }} // ไล่สีทั้งแถบ ตั้งจาก palette.js (สีทั้งหมดอยู่ในไฟล์นั้นไฟล์เดียว)
-          min={HUE_MIN}
-          max={HUE_MAX}
-          value={hue}
-          aria-label="เลือกสีเองจากแถบสีรุ้ง"
-          disabled={colourLocked}
-          onChange={handleHue}
-        />
-        {/* ตัวอย่างสีที่เลือกเอง — กดเพื่อกลับมาใช้สีนี้ หลังเผลอไปกดสีอื่น */}
+        {/* ช่องที่ 21 = สีเอง: พื้นสีรุ้งพิกเซล + เครื่องหมาย + (กดเพื่อเลือกสีเพิ่ม) ต่างจากช่องสีธรรมดาทันที
+            เลือกสีเองแล้ว → มุมช่องมีจุดสีของสีเองล่าสุด · กดช่องนี้ขณะใช้สีอื่นอยู่ = ใช้สีเองล่าสุดเลย
+            กดอีกครั้งตอนที่ใช้สีเองอยู่ = เปิด/ปิดช่องเลือกสีเพื่อปรับ (ยังไม่เคยเลือก = เปิดช่องเลือกสีก่อน) */}
         <button
           type="button"
-          className={`swatch${customPicked ? " swatch--on" : ""}`}
-          style={{ background: custom }}
-          aria-label="ใช้สีที่เลือกเอง"
+          className={`swatch swatch--custom${customPicked ? " swatch--on" : ""}`}
+          aria-label={hasPicked ? `สีเอง ${custom}` : "สีเอง เปิดช่องเลือกสี"}
+          title={hasPicked ? "สีเอง: กดเพื่อใช้สีล่าสุด · กดซ้ำเพื่อปรับสี" : "สีเอง: เลือกสีเพิ่ม"}
           aria-pressed={customPicked}
+          aria-expanded={pickerOpen}
           disabled={colourLocked}
-          onClick={() => onColor(custom)}
-        />
+          onClick={() => {
+            if (!hasPicked || customPicked) return setPickerOpen((o) => !o);
+            onColor(custom); // ใช้สีเองล่าสุดเลย
+            setPickerOpen(false);
+          }}
+        >
+          {hasPicked && <span className="swatch__dot" style={{ background: custom }} />}
+        </button>
       </div>
+
+      {pickerOpen && !colourLocked && (
+        <ColorPicker hue={pick.hue} light={pick.light} onChange={handlePick} onClose={closePicker} />
+      )}
 
       {/* ── ขนาดแปรง 2–40 ── */}
       <div className="toolbar__group toolbar__group--size">
