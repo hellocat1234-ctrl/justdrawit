@@ -12,15 +12,6 @@ import {
   hslToHex,
 } from "../canvas/palette";
 
-// ตัวเลือกไอคอนถังสีชั่วคราว (?bucket=b หรือ c) เลือกแบบสุดท้ายแล้วลบ
-const BUCKET_ICON = (() => {
-  try {
-    return { b: "bucketB", c: "bucketC" }[new URLSearchParams(window.location.search).get("bucket")] ?? "bucket";
-  } catch {
-    return "bucket";
-  }
-})();
-
 /**
  * แถบเครื่องมือวาด — อยู่คอลัมน์ขวาของหน้าเกม (DESIGN.md)
  *
@@ -205,7 +196,8 @@ export default function Toolbar({
             aria-pressed={tool === TOOLS.BUCKET}
             onClick={() => onTool(TOOLS.BUCKET)}
           >
-            <Icon name={BUCKET_ICON} size={32} accent={color} /> {/* หยดสีใช้สีที่เลือกอยู่ */}
+            {/* ทั้งถัง หูหิ้ว หยดสี ใช้สีที่เลือกอยู่สีเดียว (เฉดเข้ม/อ่อนของสีนั้น) */}
+            <Icon name="bucket" size={40} accent={color} />
           </button>
         )}
         {/* รูปทรง: เส้นตรง สี่เหลี่ยม วงกลม — ลากเห็นเงาก่อน ปล่อยแล้วค่อยวาดจริง */}

@@ -295,62 +295,29 @@ const ART = {
     ".kkkkkkkkkk.",
     "............",
   ],
-  // ถังสี แบบ A: ถังน้ำสีฟ้าเอียง 45° มีหูหิ้ว สีไหลออกปากถังเป็นหยด (16×16 ช่อง C = สีที่เลือกอยู่ ส่งผ่าน prop accent)
+  // ถังสี 20×20: ถังเอียง 45° มีหูหิ้ว สีไหลออกปากถังเป็นหยด — "สีเดียวทั้งถัง" คือสีที่เลือกอยู่ (prop accent)
+  // C = สีที่เลือก · D = เฉดเข้มของสีนั้น · E = เฉดอ่อน (คำนวณใน toRects) · k = ขอบดำ จึงเห็นชัดแม้เลือกสีขาว/สีอ่อน
   bucket: [
-    "........kkk.....",
-    ".......kk.kk....",
-    "......kk....k...",
-    ".....kCCk...kk..",
-    ".....kCCCk...k..",
-    "....kwBCCCk..k..",
-    "...kwBBBCCCkkk..",
-    "..kwBBBBBCCCkk..",
-    "...kwBBBBBCCkk..",
-    "....kwBBBBkkCCk.",
-    ".....kwBBk..kk..",
-    "......kwk...kCk.",
-    ".......k...kCCk.",
-    "............kk..",
-    "................",
-    "................",
-  ],
-  // ถังสี แบบ B: กระป๋องสีเอียง 45° (ตัวโลหะ แถบป้ายเหลือง) ตัวเลือกชั่วคราวให้เลือก
-  bucketB: [
-    "................",
-    ".......kkkkk....",
-    "......kk...kk...",
-    ".....kCCk...k...",
-    "....kaCCCk..k...",
-    "....kyaCCCk.k...",
-    "...kyyyaCCCkk...",
-    "..kAayyyaCCCk...",
-    "..kaaayyyaCCkk..",
-    "...kaaayyyakCCk.",
-    "....kaaaykk.kk..",
-    ".....kaak...kCk.",
-    "......kk...kCCk.",
-    "............kk..",
-    "................",
-    "................",
-  ],
-  // ถังสี แบบ C: ถังแดงอ้วนๆ แบบการ์ตูน ตัวเลือกชั่วคราวให้เลือก
-  bucketC: [
-    "................",
-    ".......kkkkk....",
-    "......kk...k....",
-    ".....kCCk...k...",
-    ".....kCCCk..k...",
-    "....kRRCCCk.k...",
-    "...kRrrRCCCkk...",
-    "...krrrrRCCCk...",
-    "...kRrrrrRCCk...",
-    "....kRrrrrkkCk..",
-    ".....kRrrk..kCk.",
-    "......kkk...kCk.",
-    "...........kCCk.",
-    "............kk..",
-    "................",
-    "................",
+    ".........kkkkkk.....",
+    "........kDDDDDDk....",
+    ".......kDDkkkkDDk...",
+    ".......kDk....kDk...",
+    ".......kDDk....kDk..",
+    "......kEDDDk...kDk..",
+    ".....kECEDDDk..kDk..",
+    "....kECCCEDDDk.kDk..",
+    "....kECCCCEDDDkDDk..",
+    "...kECCCCCCEDDDDk...",
+    "...kDCCCCCCCEDDDk...",
+    "....kDCCCCCCDEkCk...",
+    ".....kDCCCCDkk.kCk..",
+    "......kDCCDk...kCk..",
+    ".......kDDk....kCk..",
+    "...............kCk..",
+    "..............kECCk.",
+    "..............kCCCk.",
+    "...............kkk..",
+    "....................",
   ],
   // เครื่องมือรูปทรง: เส้นตรง สี่เหลี่ยม วงกลม
   "shape-line": [
@@ -564,7 +531,15 @@ function medalRows(n, face, dark) {
 }
 
 // รวมช่องสีเดียวกันติดกันในแถวเดียวกันเป็น <rect> เดียว
+// ผสมสีกับดำ/ขาว ให้ได้เฉดเข้ม/อ่อนของสีเดียวกัน (ใช้กับสีเน้นของไอคอน)
+function mixHex(hex, target, t) {
+  const n = (i) => parseInt(String(hex).slice(1 + i * 2, 3 + i * 2), 16) || 0;
+  const to = target === "black" ? 0 : 255;
+  return `#${[0, 1, 2].map((i) => Math.round(n(i) + (to - n(i)) * t).toString(16).padStart(2, "0")).join("")}`;
+}
+
 export function toRects(rows, mirror, accent = "#e8553f") {
+  const shades = { C: accent, D: mixHex(accent, "black", 0.3), E: mixHex(accent, "white", 0.45) };
   const full = mirror ? rows.map((r) => r + [...r].reverse().join("")) : rows;
   const rects = [];
   full.forEach((row, y) => {
@@ -573,7 +548,7 @@ export function toRects(rows, mirror, accent = "#e8553f") {
       const ch = row[x];
       let end = x + 1;
       while (end < row.length && row[end] === ch) end++;
-      const fill = ch === "C" ? accent : PAL[ch]; // C = สีเน้น (เช่น สีที่เลือกอยู่ในหยดของถังสี)
+      const fill = shades[ch] ?? PAL[ch]; // C = สีเน้น (เช่น สีที่เลือกอยู่ในหยดของถังสี)
       if (ch !== "." && fill) rects.push({ x, y, w: end - x, fill });
       x = end;
     }
