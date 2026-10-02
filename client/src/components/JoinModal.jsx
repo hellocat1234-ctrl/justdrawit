@@ -6,12 +6,6 @@ export default function JoinModal({ initialCode = "", busy, onSubmit, onClose })
   const [code, setCode] = useState(initialCode);
   const inputRef = useRef(null);
   useEffect(() => inputRef.current?.focus(), []);
-  // ปิดด้วย Esc (คีย์บอร์ดคอม)
-  useEffect(() => {
-    const onKey = (e) => e.key === "Escape" && onClose();
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
 
   function submit(e) {
     e.preventDefault();
@@ -19,7 +13,7 @@ export default function JoinModal({ initialCode = "", busy, onSubmit, onClose })
   }
 
   return (
-    <Modal labelledBy="join-title">
+    <Modal labelledBy="join-title" onClose={onClose}>
       <form onSubmit={submit}>
         <h2 className="modal__title" id="join-title">
           เข้าห้อง

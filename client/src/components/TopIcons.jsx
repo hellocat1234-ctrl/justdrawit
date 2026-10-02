@@ -30,23 +30,13 @@ export function DoorArt({ className = "" }) {
   );
 }
 
-// ปิดกล่องด้วยปุ่ม Esc (คีย์บอร์ดคอม) — ไอแพดใช้ปุ่มในกล่องแทน
-function useEscape(onClose) {
-  useEffect(() => {
-    const onKey = (e) => e.key === "Escape" && onClose();
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-}
-
 // ── กล่องกติกาสั้นๆ + ตัวเลือกเสียง/ลดภาพเคลื่อนไหว ──
 export function InfoModal({ onClose, teamMode = false }) {
   const [muted, setMuted] = useSoundMuted();
   const [reduce, setReduce] = useReduceMotion();
-  useEscape(onClose);
 
   return (
-    <Modal labelledBy="info-title">
+    <Modal labelledBy="info-title" onClose={onClose}>
       <h2 className="modal__title" id="info-title">
         กติกาการวาด
       </h2>
@@ -88,11 +78,10 @@ export function InfoModal({ onClose, teamMode = false }) {
 // ── กล่องยืนยันออก — ปุ่ม "ไม่" ได้โฟกัสก่อน กดเบิ้ลพลาดแล้วไม่หลุดออกจากเกม ──
 export function ExitModal({ onYes, onNo, note }) {
   const noRef = useRef(null);
-  useEscape(onNo);
   useEffect(() => noRef.current?.focus(), []);
 
   return (
-    <Modal labelledBy="exit-title">
+    <Modal labelledBy="exit-title" onClose={onNo}>
       <DoorArt className="door--modal" />
       <h2 className="modal__title" id="exit-title">
         ออกจากเกมจริงไหม

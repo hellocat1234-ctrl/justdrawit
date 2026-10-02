@@ -1181,13 +1181,16 @@ input {
   place-items: center;
   padding: 20px;
   background: rgba(43, 43, 43, 0.5);
+  overflow-y: auto; /* จอเตี้ยมาก (มือถือแนวนอน) กล่องสูงกว่าจอ เลื่อนดูในม่านได้ ไม่ดันหน้า */
+  overscroll-behavior: contain;
 }
 
 .modal__panel {
   width: 100%;
   max-width: 460px;
-  max-height: calc(100vh - 40px);
+  max-height: calc(100dvh - 40px);
   overflow-y: auto;
+  margin: auto;
   padding: 24px;
   border: var(--border-thick);
   box-shadow: var(--shadow);
@@ -3743,7 +3746,8 @@ select[class] {
   z-index: 0;
   pointer-events: none;
 }
-.screen--home > :not(.grass) {
+.screen--home > .logo-wrap,
+.screen--home > .lobby {
   position: relative;
   z-index: 1;
 }
@@ -3787,4 +3791,27 @@ select[class] {
 .panel__title {
   font-size: 30px;
   line-height: 1.1;
+}
+
+/* จอเตี้ย (โน้ตบุ๊ก/ไอแพด ≤ 820px): แถวเครื่องมือสองแถวทำให้คอลัมน์เครื่องมือสูงกว่ากระดาน → หน้าเลื่อน
+   บีบแค่ช่องไฟและความสูงปุ่มเครื่องมือ (ยัง 44px ตามกฎปุ่มสูงอย่างน้อย 44px) กระดานไม่ต้องหดเพิ่ม */
+@media (min-width: 1001px) and (max-height: 820px) {
+  .toolbar {
+    gap: 8px;
+  }
+  .toolbar__group--tools {
+    gap: 0;
+  }
+  .toolbar__group--tools .tool {
+    height: 44px;
+  }
+  /* ป้าย "สีเอง"/"ขนาด" อยู่บรรทัดเดียวกับสไลเดอร์ (เดิมขึ้นบรรทัดบน) ประหยัดความสูง ~40px */
+  .toolbar__group--hue,
+  .toolbar__group--size {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+  .toolbar__group--hue .toolbar__label,
+  .toolbar__group--size .toolbar__label {
+    grid-column: auto;
+  }
 }
