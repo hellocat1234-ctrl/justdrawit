@@ -911,6 +911,14 @@ server แยกฟังก์ชัน `applySettings(room, data)` ใช้�
 ทดสอบแล้ว: **server `npm test` 592/592** (เพิ่มข้อ 33: guess รัวถูกปัดทิ้ง · ไล่เดารหัสถูกบล็อก · join_room ใช้โควตาเดียวกัน · รันบนพอร์ต 3055)
 · สคริปต์โจมตีรันจริงทั้งก่อน/หลัง (ดู before.txt/after.txt) · โลโก้ไม่ล้นจอที่ 1440/390/320 (คงสี+ขอบ ยืนยันด้วย screenshot) · `npm run build` ผ่าน
 
+### เสร็จแล้ว (แก้ตั้งค่า/ความยาก — branch `fix/game-settings` · แตะ server + client + `events.md`)
+**สัญญากลางถูกแก้** (`events.md` §4 `draw_shape` + §6 + 1 บรรทัดในตาราง "บันทึกการแก้ไข") · ไม่เพิ่ม library
+- **Solo เวลาเท่ากันทุกด่าน**: `ai.levelConfig` คืน 60 วิ เสมอ (`LEVEL_TIME`) ความยากมาจากคำอย่างเดียว (ทับของเดิม 60/45/30)
+- **Solo ระดับคำ**: ระดับที่เลือกตอนเริ่ม = **ระดับเริ่มต้น** (ผู้ใช้เลือกแบบนี้) `levelConfig(level, start)` ยากขึ้นหนึ่งระดับทุก 2 ด่านจนถึง hard · เดิม `soloConfig` เอาค่าที่เลือกทับทุกด่าน คำจึงอยู่ระดับเดียวทั้งเกม · โหมดห้องไม่เปลี่ยน (`settings.difficulty` ยังเป็นชุดคำทั้งเกม)
+- **รูปทรงสามเหลี่ยม**: `draw_shape` รับ `triangle` (`VALID_SHAPES`) · client: `TOOLS.TRIANGLE` · `strokeShape` · ปุ่ม+ไอคอน `shape-triangle` (แถวเครื่องมือเต็ม 4×2 พอดี)
+- **Geometric Shapes Only เปิดเป็นค่าเริ่มต้น** (ผู้ใช้สั่ง): `DEFAULT_CHALLENGES` ทั้ง `server/index.js` และ `client/src/roomOptions.js` = ครบ 4 ใบ ห้องรอขึ้น 4 / 4 ACTIVE ตั้งแต่สร้างห้อง · เทสข้อ 16 28 34 แก้ตาม (colour_fix ออกเหลือ ~20% จึงเพิ่ม `COLOUR_FIX_MAX_ROOMS` เป็น 250)
+- ⚠️ ในเครื่องนี้มีสองโฟลเดอร์ `justdrawit-main` (ไม่ใช่ git เก่ากว่า) กับ `justdrawit-merge` (repo นี้) — build/รันผิดโฟลเดอร์แล้วจะไม่เห็นของใหม่
+
 ### ยังไม่ได้ทำ (ตามลำดับใน PROMPTS.md)
 - (ไม่มีแล้ว — ข้อ 8 เสร็จ)
 
