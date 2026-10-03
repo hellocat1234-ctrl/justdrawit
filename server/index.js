@@ -570,16 +570,13 @@ function rollChallenge(room) {
   const history = room.challengeHistory ?? (room.challengeHistory = []);
   const enabled = room.settings.challenges ?? DEFAULT_CHALLENGES;
   const specials = SPECIAL_CHALLENGES.filter((t) => enabled.includes(t));
-  const hasNone = enabled.includes("none");
 
-  let type;
-  if (specials.length === 0) {
-    type = "none";
-  } else if (!hasNone) {
-    type = pickFrom(specials);
-  } else {
+  // กติกาจังหวะ (ผู้ใช้ตกลงไว้): ตาแรกไม่มีเสมอ · ตาถัดไปโอกาส ~1/3 · ไม่ติดกันสองตา
+  // สุ่มจากชุดที่หัวห้องเปิดไว้เท่านั้น · ไม่ได้เปิดกติกาพิเศษสักแบบ = ไม่มีเลย (ไม่ว่าจะเปิด Standard หรือไม่)
+  let type = "none";
+  if (specials.length > 0) {
     const allowed = CHALLENGE_NO_PACING || (history.length > 0 && history[history.length - 1] === "none");
-    type = allowed && Math.random() < CHALLENGE_CHANCE ? pickFrom(specials) : "none";
+    if (allowed && Math.random() < CHALLENGE_CHANCE) type = pickFrom(specials);
   }
   const ch = makeChallenge(type);
   history.push(ch.type);
@@ -1285,7 +1282,15 @@ function startDrawRound(socket, solo) {
   clearStrokeTimers(solo);
   clearTimeout(solo.roundTimer);
   solo.roundTimer = setTimeout(() => endDrawRound(socket, solo, false), time * 1000);
-  socket.emit("ai_draw_start", { level: solo.level, time, lives: solo.lives, category: picked.category });
+  // คำใบ้ช่องวรรณยุกต์ (makeHint) ขึ้นเมื่อเวลาเหลือครึ่งหนึ่ง · ส่งจาก server ตอนถึงเวลาเท่านั้น (ก่อนหน้านั้นไม่มีช่องคำใบ้อยู่ใน event ใดเลย)
+  // เก็บ timer รวมกับของเส้น จึงถูกเคลียร์พร้อมกันตอนทายถูก/หมดเวลา/ออกเกม (clearStrokeTimers)
+  const hintAtSec = Math.floor(time / 2);
+  socket.emit("ai_draw_start", { level: solo.level, time, lives: solo.lives, category: picked.category, hintAt: hintAtSec });
+  solo.strokeTimers.push(
+    setTimeout(() => {
+      if (!solo.over && solo.guessing) socket.emit("ai_draw_hint", { hint: makeHint(solo.guessWord) });
+    }, (time - hintAtSec) * 1000)
+  );
   for (const s of aiDrawings.schedule(picked.strokes, time * 1000 * DRAW_BUDGET_RATIO)) {
     solo.strokeTimers.push(
       setTimeout(() => {

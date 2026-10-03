@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { socket } from "../socket";
 import Logo from "../components/Logo";
 import Timer from "../components/Timer";
+import HintSlots from "../components/HintSlots";
 import Canvas from "../components/Canvas";
 import Toolbar from "../components/Toolbar";
 import Modal from "../components/Modal";
@@ -68,6 +69,7 @@ export default function SoloAI({ initialName = "", boot = null, onName, onBack }
   const [watch, setWatch] = useState(null); // ช่วง 2: { level, time, lives, category } (ไม่มีคำตอบ)
   const [answer, setAnswer] = useState(""); // ช่องพิมพ์ทายของช่วง 2
   const [wrongAnswers, setWrongAnswers] = useState([]); // คำที่เราทายผิดในช่วง 2
+  const [drawHint, setDrawHint] = useState(null); // คำใบ้ช่วง 2 (ช่องวรรณยุกต์จาก server) null = ยังไม่ถึงเวลา
   const [roundId, setRoundId] = useState(0); // นับขึ้นทุกด่าน ไว้สั่งล้างกระดาน
   const [lives, setLives] = useState(3);
   const [score, setScore] = useState(0);
@@ -191,6 +193,7 @@ export default function SoloAI({ initialName = "", boot = null, onName, onBack }
       setResult(null);
       setAnswer("");
       setWrongAnswers([]);
+      setDrawHint(null); // ช่องคำใบ้มาจาก server ตอนเวลาเหลือครึ่งหนึ่งเท่านั้น (client ไม่เดาเอง)
       canvasRef.current?.resetBoard();
       redoRef.current = [];
       setHist({ undo: false, redo: false });
@@ -199,6 +202,9 @@ export default function SoloAI({ initialName = "", boot = null, onName, onBack }
     };
     const onDrawStroke = (d) => {
       if (watchRef.current) playStroke(d); // ใช้ ref ที่ตั้งทันทีตอน ai_draw_start (phaseRef ยังไม่ทันอัปเดตตอนเส้นแรกมาถึง)
+    };
+    const onDrawHint = (d) => {
+      if (watchRef.current && Array.isArray(d?.hint)) setDrawHint(d.hint);
     };
     const onDrawReply = (d) => {
       if (!d?.correct) setWrongAnswers((w) => [...w, String(d?.text ?? "")]);
@@ -232,6 +238,7 @@ export default function SoloAI({ initialName = "", boot = null, onName, onBack }
     socket.on("ai_round_end", onRoundEnd);
     socket.on("ai_draw_start", onDrawStart);
     socket.on("ai_draw_stroke", onDrawStroke);
+    socket.on("ai_draw_hint", onDrawHint);
     socket.on("ai_draw_reply", onDrawReply);
     socket.on("ai_draw_end", onDrawEnd);
     socket.on("ai_game_end", onGameEnd);
@@ -242,6 +249,7 @@ export default function SoloAI({ initialName = "", boot = null, onName, onBack }
       socket.off("ai_round_end", onRoundEnd);
       socket.off("ai_draw_start", onDrawStart);
       socket.off("ai_draw_stroke", onDrawStroke);
+      socket.off("ai_draw_hint", onDrawHint);
       socket.off("ai_draw_reply", onDrawReply);
       socket.off("ai_draw_end", onDrawEnd);
       clearStrokes();
@@ -496,8 +504,13 @@ export default function SoloAI({ initialName = "", boot = null, onName, onBack }
             </div>
           <div className="wordbar__word">
             {phase === "watch" && watch ? (
-              <span className="topbar__idle" title="หมวดหมู่ของภาพ">
-                ภาพนี้คืออะไร? {watch.category && <>หมวด: <b>{watch.category}</b></>}
+              <span className="solo-watch" title="หมวดหมู่และคำใบ้ของภาพ">
+                {watch.category && <span className="topbar__idle">หมวด: <b>{watch.category}</b></span>}
+                {drawHint ? (
+                  <HintSlots hint={drawHint} />
+                ) : (
+                  <span className="topbar__idle">คำใบ้จะขึ้นเมื่อเหลือ {watch.hintAt ?? "?"} วิ</span>
+                )}
               </span>
             ) : round && phase !== "starting" ? (
               <span className="topbar__real-word" title="คำที่คุณต้องวาด">
@@ -549,7 +562,7 @@ export default function SoloAI({ initialName = "", boot = null, onName, onBack }
                     value={answer}
                     onChange={(e) => setAnswer(e.target.value)}
                     maxLength={MAX_GUESS_CHARS}
-                    placeholder="พิมพ์คำที่คิดว่าใช่ แล้วกด Enter"
+                    placeholder="พิมพ์คำตอบ แล้วกด Enter"
                     autoComplete="off"
                     aria-label="พิมพ์คำตอบ"
                     autoFocus
@@ -594,6 +607,8 @@ export default function SoloAI({ initialName = "", boot = null, onName, onBack }
             )}
           </div>
 
+          {/* ช่วง 2 (AI วาด เราทาย) ไม่ต้องวาด → ซ่อนเครื่องมือทั้งแถบ เหลือแต่กล่องพิมพ์คำตอบเต็มคอลัมน์ */}
+          {phase !== "watch" && (
           <div className="game__tools">
             <Toolbar
               tool={tool}
@@ -611,6 +626,7 @@ export default function SoloAI({ initialName = "", boot = null, onName, onBack }
               maxSize={SOLO_MAX_SIZE}
             />
           </div>
+          )}
         </aside>
       </main>
 

@@ -820,7 +820,7 @@ input {
      392px คือที่กันไว้ให้: แถบบน 66 + ป้าย Mini Challenge 44 + แถบเวลา 14 + กล่องใต้กระดาน 176
      + ช่องว่าง 36 + ขอบจอ 28 + เผื่ออีก 28 (เดิม 360 ก่อนมีแถบเวลา · วัดจริงแล้วที่ 386 ล้น 3px) — คำนวณจากของจริงแล้ววัดซ้ำในเบราว์เซอร์
      ตั้งใจให้กระดานกินที่ที่เหลือทั้งหมด เพราะเป็นสิ่งที่ผู้เล่นจ้องตลอดเวลา */
-  max-width: calc((100dvh - 402px) * 4 / 3);
+  max-width: calc((100dvh - 228px) * 4 / 3); /* งบเดียวกับ --board-w (ดูบล็อก "โครงหน้าเกมจอคอม") */
   margin: 0 auto;
 }
 
@@ -1987,7 +1987,7 @@ select[class] {
   border: var(--border);
   background: var(--cream);
   box-shadow: var(--shadow-xs);
-  max-width: calc((100dvh - 402px) * 4 / 3);
+  max-width: calc((100dvh - 228px) * 4 / 3);
   overflow: hidden;
 }
 
@@ -3215,18 +3215,32 @@ select[class] {
   font-weight: 500;
 }
 
-/* ---- โครงหน้าเกมจอคอม: แถบผู้เล่นสูงเท่ากระดานพอดี ----
+/* ---- โครงหน้าเกมจอคอม: แถบผู้เล่น · กระดาน · คอลัมน์ขวา (เครื่องมือ+แชท) ----
    .game__stage ถูกถอดกล่องออก (display: contents) แล้ววางลูกลงตาราง
-   แถวที่ 2 = กระดาน · แถบผู้เล่น (ซ้าย) กับเครื่องมือ (ขวา) อยู่แถวเดียวกัน
-   แถบผู้เล่นใส่ contain: size เพื่อไม่ให้ความสูงของรายชื่อไปดันแถวสูงกว่ากระดาน (ล้นก็เลื่อนในกรอบ)
-   --board-w คือความกว้างสูงสุดของกระดานที่คิดจากความสูงจอ (สูตรเดียวกับ .board) ใช้กับทุกชิ้นในคอลัมน์กลางให้ขอบตรงกัน */
+   แถวที่ 1 = แถบคำ · แถวที่ 2 = กระดาน · แถวที่ 3 = แถบเวลา — ใต้กระดานโล่ง ไม่มีกล่องอะไรอีก กระดานจึงใหญ่ได้เต็มที่
+   แถบผู้เล่น (ซ้าย แถว 2 สูงเท่ากระดาน) กับคอลัมน์ขวา (แถว 1–3 สูงเท่าทั้งกอง) ใส่ contain: size
+   เพื่อไม่ให้ความสูงของเนื้อหาข้างในไปดันแถวสูงกว่ากระดาน (ล้นก็เลื่อนในกรอบ)
+   --board-w คือความกว้างสูงสุดของกระดานที่คิดจากความสูงจอ ใช้กับทุกชิ้นในคอลัมน์กลางให้ขอบตรงกัน
+   228px = ของที่อยู่รอบกระดานในแนวตั้ง: แถบบน+ช่องไฟ ~92 · แถบคำ 64 · ช่องไฟ 2×12 · แถบเวลา 14 · ขอบล่างจอ ~34 (วัดซ้ำในเบราว์เซอร์ทุกครั้งที่เพิ่มของรอบกระดาน) */
 @media (min-width: 1001px) {
+  .game {
+    --board-w: max(320px, calc((100dvh - 228px) * 4 / 3));
+    --side-w: 330px;
+    --players-w: 250px;
+  }
+
+  /* กระดานได้ขนาดเต็มก่อนเสมอ (--center-w) แล้วคอลัมน์ข้างค่อยขยายใช้ที่ว่างที่เหลือ (ชื่อผู้เล่น/แชทอ่านง่ายขึ้นในจอที่กว้างเกินกระดาน)
+     ที่จอแคบ กระดานหดตามที่ที่เหลือหลังหักคอลัมน์ข้างขั้นต่ำ · 28px = ขอบหน้า · 24px = ช่องไฟสองช่อง */
   .game:not(.game--solo) {
-    --board-w: max(320px, calc((100dvh - 402px) * 4 / 3));
-    grid-template-columns: 290px minmax(0, var(--board-w)) 240px;
+    --center-w: min(var(--board-w), calc(100vw - 28px - var(--players-w) - var(--side-w) - 24px));
+    grid-template-columns: minmax(var(--players-w), 300px) var(--center-w) minmax(var(--side-w), 380px);
     justify-content: center;
     row-gap: 12px;
     align-items: start;
+    align-content: start; /* ไม่ยืดแถวตอนกระดานเตี้ยกว่าพื้นที่ (จอกว้างแต่เตี้ย) แถบคำจะได้ติดกระดาน */
+    /* แถวที่ 4 ยืดได้ รับที่ว่างใต้แถบเวลา — คอลัมน์ซ้าย/ขวาต่อลงไปถึงขอบล่าง (แชทของคนวาดบนจอ 1024 ได้ที่เพิ่ม)
+       จอที่กระดานกินความสูงเต็ม (1440×900 · 1366×768) แถวนี้สูง ~0 จึงไม่เปลี่ยนอะไร */
+    grid-template-rows: auto auto auto 1fr;
   }
 
   .game:not(.game--solo) .game__stage {
@@ -3248,28 +3262,33 @@ select[class] {
     grid-row: 3;
   }
 
-  .game:not(.game--solo) .game__answers {
-    grid-column: 2;
-    grid-row: 4;
-  }
-
   .game:not(.game--solo) .game__players {
     grid-column: 1;
-    grid-row: 2;
+    grid-row: 2 / 5;
     align-self: stretch;
     contain: size;
     overflow-y: auto;
   }
 
-  .game:not(.game--solo) .game__tools {
+  .game:not(.game--solo) .game__side {
     grid-column: 3;
-    grid-row: 2;
+    grid-row: 1 / 5;
+    align-self: stretch;
+    contain: size;
   }
 }
 
 @media (min-width: 1001px) and (max-width: 1400px) {
-  .game:not(.game--solo) {
-    grid-template-columns: 250px minmax(0, var(--board-w)) 232px;
+  .game {
+    --side-w: 300px;
+    --players-w: 210px;
+  }
+}
+
+@media (min-width: 1001px) and (max-width: 1100px) {
+  .game {
+    --side-w: 280px;
+    --players-w: 190px;
   }
 }
 
@@ -3610,7 +3629,7 @@ select[class] {
 @media (min-width: 1001px) {
   .game--solo .wordbar {
     width: 100%;
-    max-width: max(320px, calc((100dvh - 402px) * 4 / 3));
+    max-width: var(--board-w);
     margin: 0 auto;
   }
 }
@@ -4145,37 +4164,6 @@ select[class] {
    ชื่อคลาสใหม่ทั้งหมดตรวจแล้วว่าไม่ชนของเดิม (grep ก่อนเพิ่ม — บทเรียน CSS ชนกันข้ามหน้า)
    ========================================================================== */
 
-/* ---- หน้าเกมจอคอม: กล่อง "คำตอบ" ย้ายไปคอลัมน์ขวา ใต้เครื่องมือวาด ----
-   .game__answers ถูกถอดกล่อง (display: contents) ลูกสองตัวจึงวางลงตารางของ .game ได้เอง
-   - คำตอบ (.panel--answers): คอลัมน์ 3 แถว 3–4 = ใต้เครื่องมือ สูงเท่าแถบเวลา + กล่อง "ในห้อง"
-   - ในห้อง (.panel--room): คอลัมน์กลาง แถว 4 ใต้กระดานเหมือนเดิม แต่ได้ความกว้างเต็มกระดาน
-   กระดานไม่เปลี่ยนขนาด เพราะความสูงของแถวใต้กระดานยังเป็น 176px เท่าเดิม (งบ 402px ของ --board-w ไม่ต้องแก้)
-   contain: size = ข้อความในแชทเยอะแค่ไหนก็ไม่ดันแถวให้สูงขึ้น (เลื่อนในกล่องแทน) เหมือนแถบผู้เล่น
-   จอ ≤ 1000px ไม่แตะ: ยังเรียง กระดาน → เครื่องมือ → คำตอบ/ในห้อง → รายชื่อ (แชทอยู่ใต้กระดาน) */
-@media (min-width: 1001px) {
-  .game:not(.game--solo) .game__answers {
-    display: contents;
-  }
-
-  .game:not(.game--solo) .game__answers .panel--answers {
-    grid-column: 3;
-    grid-row: 3 / 5;
-    height: auto;
-    align-self: stretch;
-    contain: size;
-  }
-
-  .game:not(.game--solo) .game__answers .panel--room {
-    grid-column: 2;
-    grid-row: 4;
-  }
-
-  /* ช่องพิมพ์ในคอลัมน์แคบ: ปุ่มส่งไม่บีบช่องพิมพ์จนพิมพ์ไม่เห็น */
-  .game:not(.game--solo) .game__answers .panel--answers .chat__input {
-    min-width: 0;
-  }
-}
-
 /* ---- ผู้เล่นที่หลุดอยู่ (server รอให้กลับมา 30 วิ) ---- */
 .score-row--away,
 .player-card--away {
@@ -4603,4 +4591,658 @@ select[class] {
   .game--solo .game__side {
     order: 6;
   }
+}
+
+/* ==========================================================================
+   Solo + หน้าเกมห้อง: คอลัมน์ขวากว้างขึ้น · กระดานใหญ่ขึ้น · จัดกึ่งกลางหน้า
+   - เดิม Solo มี "กระดาน + คอลัมน์ขวา 240px" ชิดซ้ายทิ้งที่ว่างเปล่าฝั่งซ้าย
+     ตอนนี้ตารางกว้างเท่าที่ใช้จริง (กระดาน + คอลัมน์ขวา) แล้วจัดกึ่งกลางหน้า → ซ้ายขวาสมดุล ไม่มีที่ว่างเปล่าข้างเดียว
+   - ใต้กระดานไม่มีกล่องแล้ว (Solo ไม่มีตั้งแต่แรก · หน้าเกมห้องย้ายแชทไปขวา) จึงใช้งบความสูง 228px (ดู --board-w ข้างบน)
+   - คอลัมน์ขวา Solo กว้าง 380px (≤1400px: 340px · ≤1100px: 300px) ช่องพิมพ์คำตอบเห็นข้อความเต็ม
+   ========================================================================== */
+@media (min-width: 1001px) {
+  .game--solo {
+    --solo-side-w: 380px;
+    grid-template-columns: minmax(0, var(--board-w)) var(--solo-side-w);
+    justify-content: center;
+  }
+
+  /* คอลัมน์ขวาสูงเท่าชั้นกระดาน (แถบคำ+กระดาน+แถบเวลา) พอดี ไม่ยื่นเลยขอบล่างกระดาน — ล้นก็เลื่อนในกรอบ */
+  .game--solo .game__side {
+    contain: size;
+  }
+}
+
+@media (min-width: 1001px) and (max-width: 1400px) {
+  .game--solo {
+    --solo-side-w: 340px;
+    grid-template-columns: minmax(0, var(--board-w)) var(--solo-side-w);
+  }
+}
+
+@media (min-width: 1001px) and (max-width: 1100px) {
+  .game--solo {
+    --solo-side-w: 300px;
+    grid-template-columns: minmax(0, var(--board-w)) var(--solo-side-w);
+  }
+}
+
+/* มือถือ/แท็บเล็ตตั้ง: คอลัมน์ขวา (เครื่องมือ+แชท) อยู่ใต้กระดาน ก่อนรายชื่อผู้เล่น */
+@media (max-width: 1000px) {
+  .game__side {
+    order: 2;
+  }
+
+  .game--solo .game__side {
+    order: 6;
+  }
+}
+
+/* Solo ช่วง 2: หมวดหมู่ + คำใบ้สองแถว อยู่ในแถบคำเหนือกระดาน */
+.solo-watch {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+}
+
+/* ==========================================================================
+   จอคอมเตี้ย (≤ 820px สูง เช่น 1366×768 · 1024×768): หน้า SET UP กับหน้าแรกต้องไม่เลื่อน
+   วัดจริงที่ 1366×768: SET UP สูง 828px (ปุ่มสร้างห้องตกขอบ) · หน้าแรกเกิน 2px
+   → ย่อรูปหน้าปกการ์ดโหมดและช่องไฟ (ปุ่ม/ตัวหนังสือไม่เล็กลง ปุ่มสูง ≥ 44px เหมือนเดิม)
+   ========================================================================== */
+@media (min-width: 1001px) and (max-height: 820px) {
+  .mode-card__art {
+    min-height: 0;
+    height: 92px;
+  }
+
+  .mode-card__art--ai {
+    min-height: 0;
+    height: 70px;
+  }
+
+  .screen--setup {
+    padding-top: 14px;
+  }
+
+  /* กล่องตั้งค่าซ้ายเป็นตัวกำหนดความสูงของตาราง (การ์ดโหมดยืดตาม) → ลดช่องไฟในกล่องนี้ */
+  .setup__opts {
+    gap: 10px;
+    padding-top: 14px;
+    padding-bottom: 14px;
+  }
+
+  .open-rooms {
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+}
+
+/* ==========================================================================
+   ห้องรอ: หน้าเดียว ไม่เลื่อน (จอคอม/แท็บเล็ต ≥ 901px) · สองคอลัมน์เคียงกัน
+   ซ้าย = รหัสห้อง+ลิงก์เชิญ+ตั้งค่า+Mini Challenge · ขวา = รายชื่อผู้เล่น (เลื่อนในกรอบ) + ปุ่ม Ready/START ล่างสุดของคอลัมน์
+   โลโก้ย่อเหลือบรรทัดเดียวข้างริบบิ้น · มาสคอตรอเพื่อนอยู่ในช่องว่างใต้รายชื่อตอนคนยังน้อย
+   มือถือ (≤ 900px): เรียงบนลงล่างและเลื่อนได้ตามปกติ
+   ========================================================================== */
+.screen--wr {
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 10px 16px 14px;
+}
+
+.wr-head {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px 22px;
+}
+
+.screen--wr .logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: clamp(16px, 4.6vw, 24px);
+}
+
+.screen--wr .ribbon {
+  margin: 0;
+}
+
+.wr {
+  width: 100%;
+  max-width: 1200px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+}
+
+.wr .panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  min-height: 0;
+  padding: 14px 16px;
+}
+
+.wr .panel__title {
+  margin: 0;
+}
+
+.wr-code {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+}
+
+.wr-code__main {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.wr .code-badge {
+  padding: 8px 0;
+}
+
+.wr .code-hint {
+  margin: 6px 0 0;
+}
+
+.wr .btn--invite {
+  margin-top: 0;
+  flex: 0 0 auto;
+  min-height: 48px;
+}
+
+.wr .room-facts {
+  margin: 0;
+}
+
+.wr-settings {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 14px;
+}
+
+.wr-settings .settings__row {
+  gap: 4px;
+  min-width: 0;
+}
+
+.wr .segmented {
+  gap: 6px;
+}
+
+.wr .seg {
+  min-width: 40px;
+  padding: 6px 8px;
+}
+
+.wr .challenge-cards-wrap {
+  margin-top: 0;
+}
+
+.wr .chal-card {
+  min-height: 0;
+  padding: 8px 10px;
+}
+
+.wr-players-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.wr-rules-btn {
+  min-height: 40px;
+  padding: 0 12px;
+  font-size: 14px;
+}
+
+.wr-players {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+.wr .player-list {
+  margin-top: 0;
+  gap: 8px;
+}
+
+.wr .player-card__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wr .team-cols {
+  margin-top: 0;
+}
+
+.wr .team-me-banner {
+  margin: 0;
+}
+
+.wr-foot {
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 3px dashed var(--ink);
+}
+
+.wr-foot .form-note {
+  margin: 0 0 8px;
+}
+
+.wr-foot .actions {
+  margin-top: 0;
+}
+
+@media (min-width: 700px) {
+  .screen--wr {
+    height: 100%; /* #root = 100dvh (พื้นที่ที่เห็นจริง) */
+    min-height: 0;
+  }
+
+  .wr {
+    flex: 1;
+    min-height: 0;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  }
+
+  /* ตัวเลือกที่ยาวเกินพื้นที่ (จอเตี้ยมาก) ให้เลื่อนในกรอบของมันเอง ไม่ดันทั้งหน้า */
+  .wr__left {
+    overflow-y: auto;
+  }
+
+  .wr-players {
+    flex: 1;
+    overflow-y: auto;
+  }
+}
+
+/* การ์ด Mini Challenge เรียงสี่ใบแถวเดียวเมื่อที่พอ (กล่องซ้ายกว้าง ≥ ~620px) */
+@media (min-width: 1200px) {
+  .wr .challenge-cards {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1000px) {
+  .screen--wr {
+    justify-content: flex-start;
+  }
+
+  .wr-settings {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ==========================================================================
+   ไอแพด (Safari มีแถบเบราว์เซอร์กินด้านบน → ใช้ 100dvh = พื้นที่ที่เห็นจริง ไม่ใช่ขนาดจอเต็ม)
+   เป้าหมาย: ขอบนอกน้อยสุด · กระดาน 4:3 ใหญ่สุดเท่าที่พื้นที่ให้ · รายชื่อซ้ายแคบแต่ป้ายไม่โดนตัด
+   ทดสอบ: แนวนอน 1180×740 · 1024×690 · แนวตั้ง 820×1100 (และ 768×1024)
+   ========================================================================== */
+
+/* ── แนวนอน (1001–1400px) ── */
+@media (min-width: 1001px) and (max-width: 1400px) {
+  .screen--game {
+    padding: 8px;
+    gap: 8px;
+  }
+
+  .game {
+    --players-w: 150px;
+    --side-w: 290px;
+    /* ของที่อยู่รอบกระดานแนวตั้งเหลือ ~200px: ขอบ 16 · แถบบน ~66 · แถบคำ 64 · ช่องไฟ 24 · แถบเวลา 14 · เผื่อ ~16 */
+    --board-w: max(320px, calc((100dvh - 200px) * 4 / 3));
+    gap: 8px;
+  }
+
+  .game:not(.game--solo) {
+    row-gap: 8px;
+  }
+
+  .board,
+  .timebar {
+    max-width: calc((100dvh - 200px) * 4 / 3);
+  }
+
+  .game--solo {
+    --solo-side-w: 320px;
+  }
+
+  /* แถวรายชื่อแคบ: อวตารเล็ก · ชื่อตัดด้วย ... · ป้ายขึ้นบรรทัดใหม่ได้ (ไม่ตัดป้ายทิ้ง) · แถวสูงตามเนื้อหา */
+  .score-row {
+    grid-template-columns: 46px minmax(0, 1fr) auto;
+    gap: 6px;
+    height: auto;
+    min-height: 56px;
+    padding: 6px;
+  }
+
+  .score-row .avatar-chip--lg {
+    width: 40px;
+    height: 40px;
+  }
+
+  .score-row__name {
+    font-size: 15px;
+  }
+
+  .score-row__tags {
+    flex-wrap: wrap;
+    height: auto;
+    overflow: visible;
+    row-gap: 3px;
+  }
+
+  .score-row__score {
+    min-width: 2ch;
+    font-size: 18px;
+  }
+
+  /* คอลัมน์ 150px ไม่พอให้ข้อความ "วาดคนถัดไป" → เหลือไอคอน (tooltip + aria บอกความหมายเหมือนเดิม) ป้ายอื่นขึ้นบรรทัดใหม่เอง */
+  .score-row__tags .tag__text {
+    display: none;
+  }
+
+  .score-row__tags {
+    max-width: 100%;
+  }
+}
+
+@media (min-width: 1001px) and (max-width: 1100px) {
+  .game {
+    --side-w: 270px;
+  }
+
+  .game--solo {
+    --solo-side-w: 290px;
+  }
+}
+
+/* ── แนวตั้ง / แท็บเล็ตแคบ (700–1000px เช่น iPad 820×1100 · 768×1024) ──
+   กระดานเต็มความกว้าง · ใต้กระดานแถวเดียว: ซ้าย = เครื่องมือ+แชท · ขวา = รายชื่อ (ไม่ต้องเลื่อนหา)
+   แถวล่างได้ที่ที่เหลืออย่างน้อย 260px · กระดานหดอัตโนมัติถ้าจอเตี้ยจนแถวล่างจะน้อยกว่านั้น */
+@media (min-width: 700px) and (max-width: 1000px) {
+  .screen--game {
+    padding: 8px;
+    gap: 8px;
+  }
+
+  .game {
+    grid-template-columns: minmax(0, 1fr) 220px;
+    grid-template-rows: auto auto auto minmax(320px, 1fr);
+    gap: 8px;
+    align-items: start;
+  }
+
+  .game--solo {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .wordbar,
+  .board,
+  .timebar {
+    grid-column: 1 / -1;
+    order: 0;
+  }
+
+  .wordbar { grid-row: 1; }
+  .board { grid-row: 2; max-width: min(100%, calc((100dvh - 540px) * 4 / 3)); }
+  .timebar { grid-row: 3; max-width: 100%; }
+
+  .game__side,
+  .game--solo .game__side {
+    grid-column: 1;
+    grid-row: 4;
+    order: 0;
+    align-self: stretch;
+    min-height: 0;
+    contain: size;
+  }
+
+  .game--solo .game__side {
+    grid-column: 1 / -1;
+  }
+
+  .game__side .game__answers--solo {
+    flex: 1;
+    min-height: 0;
+  }
+
+  .game__side .game__answers--solo .panel {
+    height: auto;
+    flex: 1;
+    min-height: 0;
+  }
+
+  .game__players {
+    grid-column: 2;
+    grid-row: 4;
+    order: 0;
+    align-self: stretch;
+    min-height: 0;
+    contain: size;
+    overflow-y: auto;
+  }
+
+  /* เครื่องมือกระชับ: จุดสี+เครื่องมืออยู่แถวเดียวกัน (เดิมเครื่องมือยืดเต็มความกว้างลงมาอีกแถว) */
+  .game__side .toolbar {
+    gap: 6px 12px;
+  }
+
+  .game__side .toolbar__group--tools {
+    flex: 0 1 250px;
+    min-width: 200px;
+  }
+
+  .game__side .toolbar__group--colors {
+    min-width: 0;
+  }
+
+  /* รายชื่อเรียงแนวตั้งในคอลัมน์ขวา (จอเล็กกว่านี้เป็นแถบนอนเลื่อนข้าง) */
+  .score-list {
+    grid-auto-flow: row;
+    grid-auto-columns: minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
+    overflow-x: visible;
+  }
+
+  .score-row {
+    grid-template-columns: 46px minmax(0, 1fr) auto;
+    gap: 6px;
+    height: auto;
+    min-height: 56px;
+    padding: 6px;
+  }
+
+  .score-row .avatar-chip--lg {
+    width: 40px;
+    height: 40px;
+  }
+
+  .score-row__name {
+    font-size: 15px;
+  }
+
+  .score-row__score {
+    min-width: 2ch;
+    font-size: 18px;
+  }
+
+  .score-row__tags {
+    flex-wrap: wrap;
+    height: auto;
+    overflow: visible;
+    row-gap: 3px;
+  }
+}
+
+/* ── แนวตั้ง (700–1000px) หน้าเกมห้อง: ใต้กระดาน = เครื่องมือ (ซ้าย) | รายชื่อ (ขวาบน) + แชท (ขวาล่าง) ──
+   ทับค่าของบล็อกด้านบน เฉพาะหน้าเกมห้อง (Solo ใช้ของเดิม) · คนทายไม่มีเครื่องมือ → แชทกินคอลัมน์ซ้ายเต็มความสูง */
+@media (min-width: 700px) and (max-width: 1000px) {
+  .game:not(.game--solo) {
+    --pboard: min(100%, calc((100dvh - 560px) * 4 / 3));
+    grid-template-columns: minmax(0, 1fr) 250px;
+    grid-template-rows: auto auto auto 170px minmax(150px, 1fr);
+  }
+
+  .game:not(.game--solo) .wordbar,
+  .game:not(.game--solo) .board,
+  .game:not(.game--solo) .timebar {
+    width: 100%;
+    max-width: var(--pboard);
+    justify-self: center;
+  }
+
+  .game:not(.game--solo) .game__side {
+    display: contents;
+  }
+
+  .game:not(.game--solo) .game__tools {
+    grid-column: 1;
+    grid-row: 4 / 6;
+    align-self: stretch;
+    overflow-y: auto;
+  }
+
+  .game:not(.game--solo) .game__players {
+    grid-column: 2;
+    grid-row: 4;
+  }
+
+  .game:not(.game--solo) .game__answers {
+    grid-column: 2;
+    grid-row: 5;
+    display: flex;
+    align-self: stretch;
+    min-height: 0;
+    contain: size;
+  }
+
+  .game--no-tools:not(.game--solo) .game__answers {
+    grid-column: 1;
+    grid-row: 4 / 6;
+  }
+
+  .game--no-tools:not(.game--solo) .game__players {
+    grid-row: 4 / 6;
+  }
+}
+
+/* ==========================================================================
+   พื้นที่ที่เห็นจริงบนไอแพด/มือถือ (Safari มีแถบเบราว์เซอร์ที่ย่อ-ขยายได้) + โหมดเต็มจอจาก "เพิ่มไปยังหน้าจอโฮม"
+   - ความสูงหน้า = 100dvh (พื้นที่ที่เห็นตอนนี้) ไม่ใช่ 100vh (ขนาดจอเต็มที่ทำให้ล้นใต้แถบ)
+   - เว้นขอบปลอดภัย (รอยบาก/แถบล่างของ iPhone) ด้วย env(safe-area-inset-*) · เบราว์เซอร์ปกติค่าเป็น 0
+   ========================================================================== */
+@supports (height: 100dvh) {
+  html,
+  body,
+  #root {
+    height: 100dvh;
+  }
+}
+
+#root {
+  box-sizing: border-box;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+/* ==========================================================================
+   จอเตี้ยมาก (≤ 760px สูง เช่น ไอแพดใน Safari 1180×740 · 1024×690 ที่แถบเบราว์เซอร์กินพื้นที่)
+   หน้าแรก / SET UP / ฟอร์ม Solo ต้องไม่เลื่อน → ย่อโลโก้ ช่องไฟ และรูปการ์ดเพิ่ม (ปุ่มยังสูง ≥ 44px)
+   ========================================================================== */
+@media (min-width: 1001px) and (max-height: 760px) {
+  /* ไม่แตะหน้าเกม (.screen--game ขอบ 8px ตามบล็อกไอแพด) กับห้องรอ (.screen--wr จัดเอง) */
+  .screen:not(.screen--game):not(.screen--wr) {
+    gap: 12px;
+    padding-top: 14px;
+    padding-bottom: 14px;
+  }
+
+  .screen--home .logo {
+    font-size: 30px;
+  }
+
+  .lobby .panel,
+  .screen--home .panel {
+    padding: 14px 18px;
+  }
+
+  .avatar-picker__stage {
+    width: 96px;
+    height: 96px;
+  }
+
+  .big-btn {
+    min-height: 54px;
+    font-size: 24px;
+  }
+
+  .mode-card__art {
+    height: 70px;
+  }
+
+  .mode-card__art--ai {
+    height: 56px;
+  }
+
+  .setup__opts {
+    gap: 6px;
+  }
+
+  .solo-intro {
+    gap: 8px;
+  }
+}
+
+/* ไอแพดสูงสั้นสุด (≤ 700px เช่น 1024×690): ซ่อนบรรทัดอธิบายประกอบของ SET UP (ข้อมูลเดียวกันดูได้ในห้องรอ) */
+@media (min-width: 1001px) and (max-height: 700px) {
+  .setup__note,
+  .setup__who {
+    display: none;
+  }
+
+  .screen--setup .ribbon {
+    transform: scale(0.85);
+  }
+}
+
+/* ห้องรอบนไอแพดสูงสั้นสุด (≤ 700px): คำอธิบายใต้ชื่อการ์ด Mini Challenge ซ่อน (ชื่อ+สถานะ ENABLED ยังอยู่ครบ) ให้กล่องซ้ายไม่ต้องเลื่อน */
+@media (min-width: 700px) and (max-height: 700px) {
+  .wr .chal-card__desc {
+    display: none;
+  }
+}
+
+/* ห้องรอโหมดทีมบนจอแคบ (≤ 1000px): การ์ดผู้เล่นในคอลัมน์ทีมแคบมาก → ป้าย READY/ปุ่มเตะลงบรรทัดใหม่แทนที่จะล้นขอบ */
+@media (max-width: 1000px) {
+  .wr .team-col .player-card {
+    flex-wrap: wrap;
+    gap: 4px 8px;
+    padding: 6px 8px;
+  }
+
+  .wr .team-col .player-card__badges {
+    margin-left: auto;
+  }
+}
+
+/* ชื่อยาว: การ์ดผู้เล่นในห้องรอห้ามกว้างเกินกล่อง (ชื่อตัดด้วย ... ป้ายอยู่ครบ) */
+.wr .player-card {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.wr .player-card__name {
+  flex: 1 1 0;
 }

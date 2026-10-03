@@ -2,7 +2,19 @@
 <html lang="th">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover: ใช้พื้นที่เต็มจอ (ขอบ/รอยบากจัดการด้วย env(safe-area-inset-*) ใน theme.css) -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#6b5bff" />
+
+    <!-- เพิ่มไปยังหน้าจอโฮม (Safari: แชร์ → เพิ่มไปยังหน้าจอโฮม) แล้วเปิดแบบเต็มจอไม่มีแถบเบราว์เซอร์
+         iOS ใช้ meta apple-* + apple-touch-icon · Android/Chrome ใช้ manifest (display: standalone) -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Just Drawit" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <title>Just Drawit</title>
 
     <!-- ฟอนต์ (ดู DESIGN.md หัวข้อ "ธีม Neo-Arcade")

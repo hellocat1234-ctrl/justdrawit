@@ -127,3 +127,8 @@ server รันโมเดลจำแนกภาพวาดที่ฝึ�
 - **เพลงพื้นหลัง**: [Children's March Theme](https://opengameart.org/content/childrens-march-theme) โดย Cleyton Kauffman ([SoundCloud](https://soundcloud.com/cleytonkauffman)) จาก OpenGameArt.org สัญญาอนุญาต [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) (ไม่บังคับให้เครดิต แต่ใส่ไว้เพื่อขอบคุณ) · ไฟล์อยู่ที่ `client/public/music/` เกมวนเล่นซ้ำเพลงนี้ ถ้าอยากเปลี่ยน/เพิ่มเพลง แค่ใส่ไฟล์ (.mp3 .ogg .wav .m4a) ในโฟลเดอร์เดียวกัน; ไม่มีไฟล์เพลงเลยปุ่มเพลงจะหายไปเอง
 - **ไอคอน ตัวการ์ตูน มาสคอต เสียงเอฟเฟกต์ ภาพประกอบ**: วาด/สร้างเองโดยทีม (พิกเซลอาร์ตจากโค้ด เสียงสร้างสดด้วย Web Audio)
 - **ไลบรารี**: React, React Router, Vite, Express, Socket.IO, onnxruntime-node, sharp, dotenv (สัญญาอนุญาตของแต่ละตัวตามต้นทาง)
+
+
+## เล่นบนไอแพด/มือถือแบบเต็มจอ
+
+เปิดเกมใน Safari (ไอแพด/ไอโฟน) → ปุ่มแชร์ → **เพิ่มไปยังหน้าจอโฮม** แล้วเปิดจากไอคอนดินสอ จะเป็นเต็มจอไม่มีแถบเบราว์เซอร์ (ต้องเปิดผ่าน https เช่นลิงก์ Render หรือ `npm run share` — วงแลน http ธรรมดาติดตั้งแบบนี้ไม่ได้ แต่เล่นปกติได้)

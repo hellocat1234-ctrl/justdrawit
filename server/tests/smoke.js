@@ -24,7 +24,9 @@ process.env.SCORES_FILE = SCORES_FILE;
 // (server ทุกตัวที่เทสสตาร์ทสืบทอดค่านี้) · ข้อ 26 ตั้งค่าเฉพาะของมันเอง
 const NO_DRAWINGS_FILE = path.join(os.tmpdir(), "jdi-no-drawings.json");
 process.env.AI_DRAWINGS_FILE = NO_DRAWINGS_FILE;
-const URL = "http://localhost:3000";
+// TEST_PORT: ให้เทสรันบนพอร์ตอื่นได้ตอนที่ server จริงของผู้ใช้เปิดพอร์ต 3000 อยู่ (ไม่ต้องคัดลอกโฟลเดอร์ไปแก้เลขพอร์ต)
+const TEST_PORT = process.env.TEST_PORT || "3000";
+const URL = `http://localhost:${TEST_PORT}`;
 const SECRET_KEY = "sk-ant-TEST-SECRET-must-never-leak";
 
 // ใช้ client ของ socket.io ที่มีอยู่ใน node_modules แล้วรันบน Node ได้เลย
@@ -192,7 +194,7 @@ async function startServer() {
     stdio: ["ignore", "pipe", "pipe"],
     // ข้อ 21-24 (Solo): บังคับ AI โหมดจำลอง ทายถูกเสมอ · ย่อเวลาด่านเหลือ 2 วิ · พักก่อนด่านถัดไป 0.3 วิ
     // ใส่ key ปลอมไว้ด้วย เพื่อเช็คว่า key ไม่หลุดถึง client เลย
-    env: { ...process.env, SCORES_FILE, AI_MODE: "mock", AI_MOCK_CHANCE: "1", AI_TIME_OVERRIDE: "2", AI_NEXT_DELAY_MS: "300", ANTHROPIC_API_KEY: SECRET_KEY,
+    env: { ...process.env, PORT: TEST_PORT, SCORES_FILE, AI_MODE: "mock", AI_MOCK_CHANCE: "1", AI_TIME_OVERRIDE: "2", AI_NEXT_DELAY_MS: "300", ANTHROPIC_API_KEY: SECRET_KEY,
       // Mini Challenge: ปิดกฎตาแรก/ไม่ติดกัน + โอกาส 60% + ข้ามป้ายใหญ่ เพื่อให้ข้อ 16–18 สุ่มชนิดที่ต้องการได้เร็วและวาดได้ทันที
       // (จังหวะจริงของกติกาเทสในข้อ 29 กับ server ตัวที่สองที่ไม่ตั้งสามค่านี้)
       CHALLENGE_NO_PACING: "1", CHALLENGE_ODDS: "0.6", CHALLENGE_INTRO_MS: "0" },
@@ -1811,7 +1813,7 @@ async function main() {
       const e1 = await P.wait("ai_round_end", null, 5000);
       check("ช่องแรกหมดเวลา: เสียชีวิต 1", [e1.correct, e1.lives], [false, 2]);
       const start = await P.wait("ai_draw_start", null, 3000);
-      check("ai_draw_start: มีแค่ level time lives category", Object.keys(start).sort(), ["category", "level", "lives", "time"]);
+      check("ai_draw_start: มีแค่ level time lives category hintAt", Object.keys(start).sort(), ["category", "hintAt", "level", "lives", "time"]);
       check("ai_draw_start: ด่านเดิม เวลา 3 วิ (เทสย่อ) เหลือ 2 ชีวิต หมวดหมู่เป็นข้อความ", [start.level, start.time, start.lives, typeof start.category], [1, 3, 2, "string"]);
       const startIdx = dumpIdx(P, "ai_draw_start");
 
@@ -1835,6 +1837,8 @@ async function main() {
       checkOk("ทายถูก: correct, คะแนน 100–500, ชีวิตไม่เสีย, เฉลย แมว",
         end1.correct === true && end1.gained >= 100 && end1.gained <= 500 && end1.totalScore === end1.gained && end1.lives === 2 && end1.word === "แมว");
       check("ai_draw_end: มีแค่ correct gained totalScore lives word", Object.keys(end1).sort(), ["correct", "gained", "lives", "totalScore", "word"]);
+
+      check("ทายถูกก่อนเวลาคำใบ้ → ไม่ส่ง ai_draw_hint (ยกเลิก timer แล้ว)", P.dump().filter((e) => e.name === "ai_draw_hint").length, 0);
 
       // ★ คำตอบต้องไม่หลุดใน event ใดตั้งแต่เริ่มช่องสองจนถึงก่อนเฉลย
       const endIdx = dumpIdx(P, "ai_draw_end");
@@ -1862,6 +1866,17 @@ async function main() {
       await P.wait("ai_round_end", null, 5000);
       await P.wait("ai_draw_start", null, 3000);
       const end2 = await P.wait("ai_draw_end", null, 5000);
+      {
+        // คำใบ้เปิดเมื่อเหลือครึ่งหนึ่ง (เวลา 3 วิ → hintAt 1 → ขึ้นหลังเริ่ม 2 วิ) · ส่งครั้งเดียว · ช่องวรรณยุกต์ล้วน ไม่มีตัวอักษรจริง
+        const ev = P.dump().filter((e) => e.name === "ai_draw_hint");
+        check("ช่อง AI วาด: ส่ง ai_draw_hint ครั้งเดียวต่อช่อง", ev.length, 1);
+        const hint = ev[0]?.args[0];
+        check("ai_draw_hint: มีแค่ช่อง hint เป็น array ของ { tone } / { space } (แมว = 3 ช่อง ไม่มีตัวอักษร)",
+          [Object.keys(hint ?? {}), Array.isArray(hint?.hint) && hint.hint.length === 3 && hint.hint.every((x) => Object.keys(x).every((k) => k === "tone" || k === "space")), JSON.stringify(hint).includes("แมว")],
+          [["hint"], true, false]);
+        const names = P.dump().map((e) => e.name);
+        check("ai_draw_hint มาหลัง ai_draw_start และก่อน ai_draw_end", names.filter((n) => n.startsWith("ai_draw_") && n !== "ai_draw_stroke").slice(-3), ["ai_draw_start", "ai_draw_hint", "ai_draw_end"]);
+      }
       check("หมดเวลาช่องสอง: ไม่ได้คะแนน เสียชีวิต เฉลยคำ", [end2.correct, end2.gained, end2.lives, end2.totalScore, end2.word], [false, 0, 0, end1.gained, "แมว"]);
       check("เส้นทั้ง 3 ถูกวาดครบก่อนหมดเวลา", strokeAt.length, 3);
       checkOk(`เส้นสุดท้ายมาถึงภายในหนึ่งในสามของเวลา (1 วิ + เผื่อเครือข่าย) ได้ ${strokeAt.at(-1)} ms`, strokeAt.at(-1) <= 1000 + 400);
@@ -2251,6 +2266,43 @@ async function main() {
       const r1 = await H.wait("choose_word", null, 4000);
       check("เล่นอีกรอบ: ตาแรกไม่มี Mini Challenge อีกครั้ง", r1.challenge.type, "none");
       for (const P of [H, G]) P.socket.disconnect();
+
+      // ---------- จังหวะใช้กับชุดที่หัวห้องเปิดเสมอ (ไม่ว่าจะเปิด Standard หรือไม่) ----------
+      {
+        const X = await mk();
+        const xc = await emitAck(X.socket, "create_room", { name: "PaceX", avatar: 0, rounds: 2, drawTime: 30 });
+        const Y = await mk();
+        await emitAck(Y.socket, "join_room", { code: xc.code, name: "PaceY", avatar: 1 });
+        await wait(200);
+        // เปิดแค่ shapes_only (ปิด Standard): ตาแรกต้องไม่มี · ตา 2 มี (ODDS=1) · ตา 3 ไม่ติดกันจึงไม่มี · ตา 4 มี และเป็น shapes_only ทุกครั้งที่มี
+        X.socket.emit("set_challenges", { challenges: ["shapes_only"] });
+        await Y.wait("room_update", (r) => r.settings.challenges.length === 1 && r.settings.challenges[0] === "shapes_only", 2000);
+        X.clear(); Y.clear();
+        X.socket.emit("start_game");
+        const p1 = await turn(X, Y);
+        const p2 = await turn(Y, X);
+        const p3 = await turn(X, Y);
+        const p4 = await turn(Y, X);
+        check("เปิดแค่ shapes_only: ตาแรกไม่มี (จังหวะยังใช้แม้ปิด Standard)", p1.cw.challenge.type, "none");
+        check("เปิดแค่ shapes_only: ตา 2 เป็น shapes_only", p2.cw.challenge.type, "shapes_only");
+        check("เปิดแค่ shapes_only: ตา 3 ไม่ติดกัน → ไม่มี", p3.cw.challenge.type, "none");
+        check("เปิดแค่ shapes_only: ตา 4 เป็น shapes_only", p4.cw.challenge.type, "shapes_only");
+        for (const P of [X, Y]) P.socket.disconnect();
+
+        // เปิดแค่ Standard: ไม่มีกติกาพิเศษเลยทุกตา
+        const Z = await mk();
+        const zc = await emitAck(Z.socket, "create_room", { name: "PaceZ", avatar: 0, rounds: 2, drawTime: 30 });
+        const W = await mk();
+        await emitAck(W.socket, "join_room", { code: zc.code, name: "PaceW", avatar: 1 });
+        await wait(200);
+        Z.socket.emit("set_challenges", { challenges: ["none"] });
+        await W.wait("room_update", (r) => r.settings.challenges.length === 1 && r.settings.challenges[0] === "none", 2000);
+        Z.clear(); W.clear();
+        Z.socket.emit("start_game");
+        const q = [await turn(Z, W), await turn(W, Z), await turn(Z, W), await turn(W, Z)];
+        check("เปิดแค่ Standard: ทั้ง 4 ตาไม่มี Mini Challenge", q.map((t) => t.cw.challenge.type), ["none", "none", "none", "none"]);
+        for (const P of [Z, W]) P.socket.disconnect();
+      }
 
       // ---------- โหมดทีม: 4 คน (ทีมละ 2) 1 รอบ = 2 ตา ----------
       const T1 = await mk();
@@ -2805,9 +2857,9 @@ async function main() {
   await runPart("34. set_challenges — หัวห้องเปิด/ปิดทีละใบ · ต้องเหลือ ≥1 · shapes_only บล็อกเส้นแต่รับรูปทรง", async () => {
     const wait = (ms) => new Promise((r) => setTimeout(r, ms));
     const last = (P, name) => P.dump().filter((e) => e.name === name).at(-1)?.args[0];
-    const H = track(await connect());
+    let H = track(await connect());
     const made = await emitAck(H.socket, "create_room", { name: "ChalH", avatar: 0 });
-    const G = track(await connect());
+    let G = track(await connect());
     await emitAck(G.socket, "join_room", { code: made.code, name: "ChalG", avatar: 1 });
     await wait(150);
     check("ค่าเริ่มต้น challenges = เปิดครบ 4 ใบ (รวม shapes_only)", last(H, "room_update").settings.challenges, ["none", "colour_fix", "dont_lift_pen", "shapes_only"]);
@@ -2831,11 +2883,24 @@ async function main() {
     await G.wait("room_update", (r) => r.settings.challenges.length === 1);
     check("หัวห้องตั้ง challenges = [shapes_only] (กรองค่าเพี้ยนออก) ทุกคนเห็น", last(G, "room_update").settings.challenges, ["shapes_only"]);
 
-    // เริ่มเกม: ทุกตาต้องเป็น shapes_only (ไม่มี none ให้สุ่ม)
-    H.socket.on("choose_word", (d) => H.socket.emit("word_chosen", { word: d.options[0] }));
-    H.socket.emit("start_game");
-    const rs = await G.wait("round_start");
-    check("เปิดแค่ shapes_only → ตานี้เป็น shapes_only", rs.challenge, { type: "shapes_only" });
+    // เริ่มเกม: server นี้ปิดกฎตาแรก/ไม่ติดกัน (CHALLENGE_NO_PACING) แต่ยังสุ่ม 60% ต่อตา → ลองห้องใหม่จนได้ตา shapes_only
+    // (จังหวะจริงของกฎเทสในข้อ 29 กับ server ตัวที่สอง)
+    let rs = null;
+    for (let attempt = 0; attempt < 20; attempt++) {
+      H.socket.on("choose_word", (d) => H.socket.emit("word_chosen", { word: d.options[0] }));
+      H.socket.emit("start_game");
+      rs = await G.wait("round_start");
+      if (rs.challenge.type === "shapes_only") break;
+      H.socket.disconnect();
+      G.socket.disconnect();
+      H = track(await connect());
+      const again = await emitAck(H.socket, "create_room", { name: "ChalH", avatar: 0 });
+      G = track(await connect());
+      await emitAck(G.socket, "join_room", { code: again.code, name: "ChalG", avatar: 1 });
+      H.socket.emit("set_challenges", { challenges: ["shapes_only"] });
+      await G.wait("room_update", (r) => r.settings.challenges.length === 1);
+    }
+    check("เปิดแค่ shapes_only → ตาที่ได้กติกาพิเศษเป็น shapes_only", rs.challenge, { type: "shapes_only" });
 
     // shapes_only: เส้นมือเปล่าถูกทิ้ง (G ไม่ได้รับ) · รูปทรงผ่าน (G ได้รับ)
     await wait(150);
@@ -2859,8 +2924,136 @@ async function main() {
   });
 
   // ══════════════════════════════════════════════════════════════════
+  // ข้อ 37 — เพิ่มไปยังหน้าจอโฮม (PWA): manifest standalone + ไอคอนถูกเสิร์ฟจริงด้วยชนิดไฟล์ที่ถูก
+  // ══════════════════════════════════════════════════════════════════
+  await runPart("37. web app manifest — display standalone · ไอคอนเสิร์ฟได้ · index.html ชี้ถูก", async () => {
+    const dist = path.join(__dirname, "..", "..", "client", "dist");
+    if (!fs.existsSync(path.join(dist, "manifest.webmanifest"))) {
+      console.log("   ⚠️  ข้าม: ยังไม่ได้ build client (npm run setup) จึงไม่มี manifest ใน client/dist");
+      return;
+    }
+    const res = await fetch(`${URL}/manifest.webmanifest`);
+    check("manifest ตอบ 200 เป็น JSON ของ web manifest", [res.status, /json/.test(res.headers.get("content-type") ?? "")], [200, true]);
+    const m = await res.json();
+    check("display = standalone · start_url = /", [m.display, m.start_url], ["standalone", "/"]);
+    checkOk("มีไอคอน 192 และ 512 และแบบ maskable", ["192x192", "512x512"].every((z) => m.icons.some((i) => i.sizes === z)) && m.icons.some((i) => i.purpose === "maskable"));
+    for (const icon of m.icons) {
+      const r = await fetch(`${URL}${icon.src}`);
+      check(`ไอคอน ${icon.src} เสิร์ฟได้เป็น image/png`, [r.status, r.headers.get("content-type")], [200, "image/png"]);
+    }
+    const apple = await fetch(`${URL}/icons/apple-touch-icon.png`);
+    check("apple-touch-icon เสิร์ฟได้", apple.status, 200);
+    const html = await (await fetch(`${URL}/`)).text();
+    checkOk("index.html ชี้ manifest + apple-touch-icon + apple-mobile-web-app-capable + viewport-fit=cover",
+      html.includes('rel="manifest"') && html.includes("apple-touch-icon") && html.includes('name="apple-mobile-web-app-capable"') && html.includes("viewport-fit=cover"));
+  });
+
+  // ══════════════════════════════════════════════════════════════════
   // ข้อ 35 — ปุ่ม Ready (set_ready) และเตะออก (kick_player, หัวห้องเท่านั้น) + กัน rejoin อัตโนมัติ
   // ══════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════
+  // ข้อ 36 — โหมดทีมหลังเปลี่ยนเป็น playerId ถาวร (ผู้เล่นส่ง playerKey): ภาพ แชท คำใบ้ ของแต่ละทีมไม่ข้ามทีม · คำตอบไม่หลุด
+  // ══════════════════════════════════════════════════════════════════
+  await runPart("36. โหมดทีม + playerKey — ภาพ/แชท/คำใบ้ไม่ข้ามทีม · your_word/choose_word ถึงเฉพาะคนวาดของทีม · คำตอบไม่หลุด", async () => {
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const connectAs = (key) => new Promise((resolve, reject) => {
+      const s = io(URL, { transports: ["websocket"], auth: { playerKey: key } });
+      const t = setTimeout(() => reject(new Error("ต่อ server ไม่ติด")), 8000);
+      s.on("connect", () => { clearTimeout(t); resolve(track(s)); });
+      s.on("connect_error", (e) => { clearTimeout(t); reject(e); });
+    });
+    const rid = Math.random().toString(36).slice(2, 10);
+    const T = [];
+    for (let i = 1; i <= 4; i++) T.push(await connectAs(`team36-${rid}-player-${i}-key`));
+    const [T1, T2, T3, T4] = T; // ทีม A = T1,T3 · ทีม B = T2,T4 (จัดทีมอัตโนมัติสลับกัน)
+    const made = await emitAck(T1.socket, "create_room", { name: "Tm36a", avatar: 0, mode: "team", rounds: 1, drawTime: 30 });
+    const ids = [made.playerId];
+    for (const [i, P] of [T2, T3, T4].entries()) ids.push((await emitAck(P.socket, "join_room", { code: made.code, name: `Tm36${"bcd"[i]}`, avatar: i })).playerId);
+    await wait(250);
+    const ru = T1.dump().filter((e) => e.name === "room_update").at(-1).args[0];
+    const teamOf = (pid) => ru.players.find((p) => p.id === pid).team;
+    check("จัดทีมอัตโนมัติ: T1,T3 = A · T2,T4 = B (playerId ถาวร ไม่ใช่ socket.id)", [teamOf(ids[0]), teamOf(ids[2]), teamOf(ids[1]), teamOf(ids[3])], ["A", "A", "B", "B"]);
+    checkOk("playerId ไม่ใช่ socket.id", T.every((P, i) => ids[i] !== P.socket.id));
+
+    T.forEach((P) => P.clear());
+    T1.socket.emit("start_game");
+    const ca = await T1.wait("choose_word", null, 5000);
+    const cb = await T2.wait("choose_word", null, 5000);
+    check("choose_word ถึงเฉพาะคนวาดสองทีม (T3 T4 ไม่ได้)", (await T3.quiet("choose_word", 150)).length + (await T4.quiet("choose_word", 1)).length, 0);
+    checkOk("ตัวเลือกคำชุดเดียวกันทั้งสองทีม", JSON.stringify(ca.options) === JSON.stringify(cb.options));
+    // คนทายพยายามเลือกคำแทนคนวาด → ถูกเมิน (ยังไม่มี round_start)
+    T3.socket.emit("word_chosen", { word: ca.options[1] });
+    T4.socket.emit("word_chosen", { word: ca.options[1] });
+    check("คนทายส่ง word_chosen → ไม่เริ่มตา", (await T1.quiet("round_start", 400)).length, 0);
+    T1.socket.emit("word_chosen", { word: ca.options[0] });
+    const rs36 = await T3.wait("round_start", null, 3000);
+    await T4.wait("round_start", null, 3000);
+    const word = (await T1.wait("your_word", null, 3000)).word;
+    const yw2 = await T2.tryWait("your_word", null, 1500);
+    check("your_word ถึงคนวาดทั้งสองทีมเท่านั้น (T3 T4 ไม่ได้)", [!!yw2, (await T3.quiet("your_word", 100)).length, (await T4.quiet("your_word", 1)).length], [true, 0, 0]);
+    check("คำของทั้งสองทีมเป็นคำเดียวกัน", yw2?.word, word);
+    if (rs36.intro) await T3.wait("intro_end", null, 5000); // ตาที่สุ่มได้ Mini Challenge มีป้ายใหญ่ ต้องรอให้จบก่อนวาด
+
+    // ── ภาพ: ทีม A วาด → T3 เห็น · T2 T4 (ทีม B) ไม่เห็น ──
+    // เคารพ Mini Challenge ของตานี้ (server ทิ้งการวาดที่ผิดกติกา): colour_fix ใช้สีที่ล็อก · shapes_only ส่งรูปทรงแทนเส้น
+    const ch36 = rs36.challenge;
+    const col = ch36.type === "colour_fix" ? ch36.color : "#000000";
+    const shapes = ch36.type === "shapes_only";
+    const drawEv = shapes ? "draw_shape" : "stroke_start";
+    const draw = (P, x) => {
+      if (shapes) P.socket.emit("draw_shape", { shape: "rect", x1: x, y1: x, x2: x + 0.2, y2: x + 0.2, color: col, size: 4 });
+      else { P.socket.emit("stroke_start", { x, y: x, color: col, size: 5, tool: "pen" }); P.socket.emit("stroke_end"); }
+    };
+    T.forEach((P) => P.clear());
+    draw(T1, 0.1);
+    checkOk("ภาพทีม A ถึงเพื่อนทีม A (T3)", (await T3.tryWait(drawEv, null, 2000)) !== null);
+    check("ภาพทีม A ไม่ถึงทีม B (T2 T4)", (await T2.quiet(drawEv, 300)).length + (await T4.quiet(drawEv, 1)).length, 0);
+    // คนทายส่งภาพ → ไม่มีใครได้รับ
+    T.forEach((P) => P.clear());
+    draw(T3, 0.3);
+    draw(T4, 0.3);
+    check("คนทายส่งภาพ → ไม่ถึงใครเลย", (await Promise.all(T.map((P) => P.quiet(drawEv, 300)))).reduce((n, a) => n + a.length, 0), 0);
+    // ทีม B วาด → ถึง T4 เท่านั้น
+    T.forEach((P) => P.clear());
+    draw(T2, 0.5);
+    checkOk("ภาพทีม B ถึงเพื่อนทีม B (T4)", (await T4.tryWait(drawEv, null, 2000)) !== null);
+    check("ภาพทีม B ไม่ถึงทีม A (T1 T3)", (await T1.quiet(drawEv, 300)).length + (await T3.quiet(drawEv, 1)).length, 0);
+
+    // ── คำใบ้: คนวาดทีม A ขอ → เฉพาะทีม A ได้ hint_reveal ──
+    T.forEach((P) => P.clear());
+    T1.socket.emit("request_hint");
+    const hr = await T3.wait("hint_reveal", null, 2000);
+    checkOk("คำใบ้ทีม A ถึงเพื่อนทีม A เป็นช่องวรรณยุกต์ ไม่มีตัวอักษรจริง", Array.isArray(hr.hint) && !JSON.stringify(hr).includes(word));
+    check("คำใบ้ทีม A ไม่ถึงทีม B", (await T2.quiet("hint_reveal", 300)).length + (await T4.quiet("hint_reveal", 1)).length, 0);
+
+    // ── แชท: ทายผิดในทีมไหน เห็นเฉพาะในทีมนั้น ──
+    T.forEach((P) => P.clear());
+    T3.socket.emit("guess", { text: "ผิดของทีมเอ" });
+    await T1.wait("chat_message", (m) => m.text === "ผิดของทีมเอ", 2000);
+    check("แชทของทีม A ไม่ถึงทีม B", (await T2.quiet("chat_message", 300)).length + (await T4.quiet("chat_message", 1)).length, 0);
+    T.forEach((P) => P.clear());
+    T4.socket.emit("guess", { text: "ผิดของทีมบี" });
+    await T2.wait("chat_message", (m) => m.text === "ผิดของทีมบี", 2000);
+    check("แชทของทีม B ไม่ถึงทีม A", (await T1.quiet("chat_message", 300)).length + (await T3.quiet("chat_message", 1)).length, 0);
+
+    // ── ทายถูก: ทีม A เห็นชื่อ · ทีม B เห็นแค่ { team } ──
+    T.forEach((P) => P.clear());
+    T3.socket.emit("guess", { text: word });
+    const cg = await T1.wait("correct_guess", null, 2000);
+    check("ทีม A เห็น correct_guess พร้อมชื่อและ playerId ถาวร", [cg.playerId, cg.name, cg.team], [ids[2], "Tm36c", "A"]);
+    const cgB = await T4.wait("correct_guess", null, 2000);
+    check("ทีม B เห็น correct_guess แค่ { team } (ไม่รั่วชื่อ/id)", cgB, { team: "A" });
+
+    // ── คำตอบไม่หลุดถึงคนทายก่อนจบตา (ดูทุก event ที่ T3 T4 ได้ตั้งแต่ต้นตา จนถึงก่อน round_end) ──
+    for (const P of [T3, T4]) {
+      const evs = P.dump();
+      const upTo = evs.findIndex((e) => e.name === "round_end");
+      const before = JSON.stringify(upTo >= 0 ? evs.slice(0, upTo) : evs);
+      checkOk(`คนทาย ${P === T3 ? "T3" : "T4"}: ไม่มีคำตอบใน event ใดก่อนจบตา (ยกเว้นข้อความทายถูกของตัวเอง)`, !before.replace(new RegExp(`"text":"${word}"`, "g"), "").includes(word));
+    }
+    T.forEach((P) => P.socket.disconnect());
+  });
+
   await runPart("35. Ready · เตะออก (หัวห้องเท่านั้น) · คนถูกเตะ rejoin ไม่ได้ แต่ join ใหม่ได้", async () => {
     const wait = (ms) => new Promise((r) => setTimeout(r, ms));
     const last = (P, name) => P.dump().filter((e) => e.name === name).at(-1)?.args[0];

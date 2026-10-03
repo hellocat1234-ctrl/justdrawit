@@ -1,18 +1,27 @@
 import { useEffect, useRef, useState } from "react";
+import { Icon } from "./Icons";
 
 /**
- * กล่อง "คำตอบ" — ใต้กระดาน ฝั่งซ้าย (DESIGN.md หัวข้อหน้าเกม)
+ * แชทของห้อง — คอลัมน์ขวาของหน้าเกม (DESIGN.md หัวข้อหน้าเกม)
  *
- * เก็บเฉพาะ "คำที่ผู้เล่นพิมพ์ทาย" ส่วนเรื่องในห้อง (ใครเข้าออก ใครทายถูก) อยู่กล่องขวา (RoomLog)
- * แยกกันเพราะคนละประโยชน์: กล่องนี้คือที่ที่เราต้องจ้องเพื่อทาย ส่วนกล่องขวาไว้อ่านบรรยากาศห้อง
- *
- * ข้อความ 3 แบบ
- *   ทายผิด  ดำปกติ
- *   ทายถูก  พื้นเขียวอ่อนตัวเขียว (คำของตัวเองเห็นคำจริง คนอื่นเห็น ****** — server ตัดสิน)
- *   ของตัวเอง ขอบซ้ายสีฟ้า
+ * รวมสองอย่างไว้ในกล่องเดียว (เดิมแยกเป็น "คำตอบ" กับ "ในห้อง")
+ *   ข้อความผู้เล่น  ทายผิดดำปกติ · ทายถูกพื้นเขียวอ่อนตัวเขียว (คำของตัวเองเห็นคำจริง คนอื่นเห็น ****** — server ตัดสิน) · ของตัวเองขอบซ้ายสีฟ้า
+ *   ข้อความระบบ     เรื่องที่เกิดในห้อง (ใครเข้าออก ใครทายถูก คำใบ้ หมดเวลา) แถวเทาเอียงพร้อมไอคอนตามชนิด (`kind` ที่ useGame ใส่มา)
  *
  * คนวาดพิมพ์ไม่ได้ระหว่างวาด server ตัดทิ้งอยู่แล้ว แต่ฝั่งเราปิดช่องไปเลยจะได้เข้าใจง่าย
  */
+// ชนิดข้อความระบบ → ไอคอน (ชนิดที่ไม่รู้จัก/ไม่มี = info)
+const KINDS = {
+  join: "door",
+  leave: "door",
+  correct: "check",
+  timeout: "clock",
+  hint: "bulb",
+  pen: "pen",
+  team: "flag",
+  info: "info",
+};
+
 export default function Chat({ messages = [], meId, disabled = false, onSend, focusKey = 0 }) {
   const [text, setText] = useState("");
   const listRef = useRef(null);
@@ -39,15 +48,24 @@ export default function Chat({ messages = [], meId, disabled = false, onSend, fo
     setText("");
   }
 
-  const guesses = messages.filter((m) => !m.system);
-
   return (
-    <section className="panel panel--answers" aria-label="คำตอบ">
-      <h2 className="panel__title">คำตอบ</h2>
+    <section className="panel panel--chat" aria-label="แชท">
+      <h2 className="panel__title">แชท</h2>
 
       <div className="chat__list" ref={listRef}>
-        {guesses.length === 0 && <p className="chat__empty">พิมพ์ทายคำที่นี่</p>}
-        {guesses.map((m, i) => {
+        {messages.length === 0 && <p className="chat__empty">พิมพ์ทายคำที่นี่</p>}
+        {messages.map((m, i) => {
+          if (m.system) {
+            const kind = KINDS[m.kind] ? m.kind : "info";
+            return (
+              <p className={`chat__row chat__row--system note note--${kind}`} key={i}>
+                <span className="note__icon" aria-hidden="true">
+                  <Icon name={KINDS[kind]} size={16} />
+                </span>
+                <span className="note__text">{m.text}</span>
+              </p>
+            );
+          }
           const classes = ["chat__row"];
           if (m.correct) classes.push("chat__row--correct");
           if (m.playerId === meId) classes.push("chat__row--mine");

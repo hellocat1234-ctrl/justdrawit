@@ -5,7 +5,6 @@ import TimeBar from "../components/TimeBar";
 import { MascotNote } from "../components/Mascot";
 import Scoreboard from "../components/Scoreboard";
 import Chat from "../components/Chat";
-import RoomLog from "../components/RoomLog";
 import ChallengeBanner from "../components/ChallengeBanner";
 import Canvas from "../components/Canvas";
 import Toolbar from "../components/Toolbar";
@@ -226,7 +225,7 @@ export default function Game({
 
       {/* เรียงตาม DESIGN.md: รายชื่อซ้าย · กระดานกลาง · เครื่องมือขวา
           มือขวาเอื้อมถึงเครื่องมือได้ถนัด (คนส่วนใหญ่ถนัดขวา) และกระดานได้ที่กว้างที่สุด */}
-      <main className="game">
+      <main className={`game${isDrawer ? "" : " game--no-tools"}`}>
         <aside className="game__players">
           <Scoreboard
             players={players}
@@ -305,11 +304,39 @@ export default function Game({
             notice={teamSkipped ? "ตานี้ทีมเราไม่มีคนวาด (คนวาดของทีมหลุด) รอตาหน้านะ" : null}
           />
 
-          {/* แถบเวลาวิ่งลดลงใต้กระดาน (ความสูงนับรวมใน 386px ของ .board แล้ว) */}
+          {/* แถบเวลาวิ่งลดลงใต้กระดาน (ความสูงนับรวมในงบของ .board แล้ว) */}
           <TimeBar timeLeft={drawing ? game.timeLeft : null} total={game.round?.time ?? null} />
+        </section>
 
-          {/* ใต้กระดาน สองกล่องข้างกัน: คำที่คนทาย กับ เรื่องที่เกิดในห้อง */}
-          <div className="game__answers">
+        {/* คอลัมน์ขวา: คนวาด = เครื่องมือ (บน) + แชท (ล่าง) · คนทาย = แชทเต็มคอลัมน์
+            คนทายไม่มีเครื่องมือให้เห็น — กระดานไม่กระโดดเพราะความกว้างของกระดานไม่ขึ้นกับเนื้อหาคอลัมน์นี้ (กำหนดจาก --board-w) */}
+        <aside className="game__side">
+          {isDrawer && (
+            <div className="game__tools">
+              <Toolbar
+                tool={tool}
+                color={drawColor}
+                size={size}
+                onTool={setToolChoice}
+                onColor={setColor}
+                onSize={setSize}
+                onClear={handleClear}
+                onUndo={askUndo}
+                onRedo={askRedo}
+                // ล็อกไว้ที่ 0 ระหว่าง dont_lift_pen ไม่ใช่ปล่อยตาม server
+                // (canUndo ที่ค้างจาก canvas_history ตัวสุดท้ายจะยังเป็น true อยู่ ทั้งที่กดไปก็ไม่เกิดอะไร)
+                canUndo={game.canUndo && !historyLocked}
+                canRedo={game.canRedo && !historyLocked}
+                historyLocked={historyLocked}
+                lockedColor={colourFix}
+                hideBucket={noLift}
+                hideShapes={noLift}
+                hidePen={shapesOnly}
+                locked={!canDraw}
+              />
+            </div>
+          )}
+          <div className="game__answers game__answers--solo">
             <Chat
               messages={game.messages}
               meId={meId}
@@ -318,34 +345,7 @@ export default function Game({
               onSend={sendGuess}
               focusKey={game.roundKey} // ขึ้นตาใหม่ = โฟกัสช่องพิมพ์ให้เลย
             />
-            <RoomLog messages={game.messages} />
           </div>
-        </section>
-
-        {/* เครื่องมืออยู่ขวาเสมอ แม้ตอนไม่ใช่ตาของเรา — แค่จางและกดไม่ได้
-            ถ้าซ่อนไปเลย กระดานจะกว้างขึ้นแล้วหดกลับทุกครั้งที่สลับคนวาด ภาพที่วาดไว้จะกระโดด */}
-        <aside className="game__tools">
-          <Toolbar
-            tool={tool}
-            color={drawColor}
-            size={size}
-            onTool={setToolChoice}
-            onColor={setColor}
-            onSize={setSize}
-            onClear={handleClear}
-            onUndo={askUndo}
-            onRedo={askRedo}
-            // ล็อกไว้ที่ 0 ระหว่าง dont_lift_pen ไม่ใช่ปล่อยตาม server
-            // (canUndo ที่ค้างจาก canvas_history ตัวสุดท้ายจะยังเป็น true อยู่ ทั้งที่กดไปก็ไม่เกิดอะไร)
-            canUndo={game.canUndo && !historyLocked}
-            canRedo={game.canRedo && !historyLocked}
-            historyLocked={historyLocked}
-            lockedColor={colourFix}
-            hideBucket={noLift}
-            hideShapes={noLift}
-            hidePen={shapesOnly}
-            locked={!canDraw}
-          />
         </aside>
       </main>
 
