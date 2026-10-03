@@ -92,7 +92,7 @@ export default function Scoreboard({
                   // หัวห้อง/กำลังวาดโชว์แค่ไอคอน (ที่ในแถวมีจำกัด มี tooltip บอกชื่อ) ป้ายวาดคนถัดไปมีข้อความ
                   <span className={`tag tag--${kind}`} key={kind} title={text}>
                     <Icon name={icon} size={13} />
-                    {kind === "next" && ` ${text}`}
+                    {kind === "next" && <span className="tag__text"> {text}</span>}
                   </span>
                 ))}
               </span>
