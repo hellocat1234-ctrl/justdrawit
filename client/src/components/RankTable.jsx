@@ -5,7 +5,17 @@ import { Icon } from "./Icons";
 
 const MEDALS = { 1: "medal1", 2: "medal2", 3: "medal3" };
 
-export default function RankTable({ board, limit = 20, compact = false, emptyText, meName = "" }) {
+// showLevel = false ซ่อนคอลัมน์ "ด่าน" (กระดานเล่นกับเพื่อนไม่มีด่าน) · emptyHint = บรรทัดชวนเล่นตอนยังไม่มีคะแนน
+export default function RankTable({
+  board,
+  limit = 20,
+  compact = false,
+  emptyText,
+  meName = "",
+  showLevel = true,
+  emptyHint = "ลองเล่นโหมด Solo แข่งกับ AI แล้วมาเป็นคนแรกบนกระดานนี้กัน!",
+  emptyIcon = "robot",
+}) {
   const rows = board.top.slice(0, limit);
 
   if (board.status === "error") {
@@ -24,10 +34,10 @@ export default function RankTable({ board, limit = 20, compact = false, emptyTex
     return (
       <div className="board-empty">
         <p className="board-empty__icon">
-          <Icon name="robot" size={44} />
+          <Icon name={emptyIcon} size={44} />
         </p>
         <p>{emptyText}</p>
-        <p className="muted">ลองเล่นโหมด Solo แข่งกับ AI แล้วมาเป็นคนแรกบนกระดานนี้กัน!</p>
+        <p className="muted">{emptyHint}</p>
       </div>
     );
   }
@@ -43,7 +53,7 @@ export default function RankTable({ board, limit = 20, compact = false, emptyTex
         <tr>
           <th scope="col">อันดับ</th>
           <th scope="col">ชื่อ</th>
-          <th scope="col">ด่าน</th>
+          {showLevel && <th scope="col">ด่าน</th>}
           <th scope="col">คะแนน</th>
         </tr>
       </thead>
@@ -61,7 +71,7 @@ export default function RankTable({ board, limit = 20, compact = false, emptyTex
               {row.name}
               {meName && row.name === meName && <YouTag />}
             </td>
-            <td className="rank-row__level">{row.levelReached}</td>
+            {showLevel && <td className="rank-row__level">{row.levelReached}</td>}
             <td className="rank-row__score">{row.score}</td>
           </tr>
         ))}

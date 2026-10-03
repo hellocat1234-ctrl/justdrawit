@@ -4,6 +4,7 @@ const express = require("express");
 const http = require("http");
 const fs = require("fs");
 const os = require("os");
+const crypto = require("crypto");
 const path = require("path");
 const { Server } = require("socket.io");
 const { cleanName } = require("./clean");
@@ -62,6 +63,23 @@ const io = new Server(server, {
   allowRequest: (req, cb) => cb(null, originOk(req)),
 });
 
+// ── ตัวตนผู้เล่นแบบถาวร (playerId) ──
+// socket.id เปลี่ยนทุกครั้งที่รีเฟรชหน้า จึงใช้เป็น "ตัวตน" ไม่ได้ ถ้าใช้ รีเฟรชทีเดียวก็กลายเป็นคนใหม่
+// client เก็บ "กุญแจลับ" (playerKey) ไว้ในเบราว์เซอร์ แล้วส่งมาตอนต่อ socket ทุกครั้ง (handshake.auth)
+// server แปลงกุญแจเป็น playerId ด้วย SHA-256 → กุญแจเดิม = playerId เดิมเสมอ
+// ทำไมไม่ใช้กุญแจเป็น playerId ตรงๆ: playerId ถูกส่งให้ทุกคนในห้อง (อยู่ใน room_update)
+// ถ้ามันคือกุญแจด้วย ใครก็เอา id ของเพื่อนไป rejoin สวมรอยได้ · แปลงทางเดียวแล้วย้อนกลับไปหากุญแจไม่ได้
+// ไม่ส่งกุญแจมา (test.html / สคริปต์เทส) = ใช้ socket.id เหมือนเดิม และไม่มีสิทธิ์ rejoin
+const PLAYER_KEY_RE = /^[A-Za-z0-9_-]{16,64}$/;
+io.use((socket, next) => {
+  const key = socket.handshake.auth?.playerKey;
+  socket.data.persistent = typeof key === "string" && PLAYER_KEY_RE.test(key);
+  socket.data.pid = socket.data.persistent
+    ? crypto.createHash("sha256").update(key).digest("hex").slice(0, 20)
+    : socket.id;
+  next();
+});
+
 // ตอน deploy หลังพร็อกซีของ Render: ใครเข้าด้วย http ให้เด้งไป https (ตั้ง FORCE_HTTPS=1) · /healthz ยกเว้น (Render เช็คตรงเข้าเครื่อง)
 if (process.env.FORCE_HTTPS === "1") {
   app.use((req, res, next) => {
@@ -85,12 +103,36 @@ app.get("/api/leaderboard", (req, res) => {
   if (month !== undefined && !leaderboard.isValidMonth(month)) {
     return res.status(400).json({ error: "INVALID_MONTH" });
   }
+  // board = "solo" (แข่งกับ AI · ค่าเริ่มต้น) | "multi" (เล่นกับเพื่อน) — สองกระดานแยกกัน ไม่ปนคะแนนกัน
+  const board = req.query.board ?? "solo";
+  if (!leaderboard.isValidBoard(board)) return res.status(400).json({ error: "INVALID_BOARD" });
   try {
-    res.json(leaderboard.getLeaderboard(month ?? null));
+    res.json(leaderboard.getLeaderboard(month ?? null, board));
   } catch (err) {
     console.warn("ดึง leaderboard ไม่สำเร็จ:", err.message);
     res.status(500).json({ error: "SERVER_ERROR" });
   }
+});
+
+// ---------- รายการห้อง Public (HTTP เหมือน leaderboard: หน้าแรกขอดูเป็นระยะ ไม่ต้องสดระดับวินาที) ----------
+// ส่งเฉพาะห้องที่หัวห้องตั้งเป็น public และยังไม่เต็ม · ห้อง private ไม่อยู่ในรายการ เข้าได้ด้วยรหัสเท่านั้น
+// ส่งแค่ข้อมูลที่หน้าแรกต้องโชว์ — ไม่มีคำ ไม่มีคะแนน ไม่มี playerId
+// (ประกาศ rooms / MAX_PLAYERS อยู่ข้างล่าง ใช้ได้เพราะฟังก์ชันนี้ถูกเรียกหลังไฟล์โหลดเสร็จแล้ว)
+app.get("/api/rooms", (req, res) => {
+  const list = [];
+  for (const room of rooms.values()) {
+    if (room.settings.visibility !== "public" || room.players.length >= MAX_PLAYERS) continue;
+    list.push({
+      code: room.code,
+      host: room.players.find((p) => p.id === room.hostId)?.name ?? "",
+      players: room.players.length,
+      maxPlayers: MAX_PLAYERS,
+      status: room.status,
+      mode: room.settings.mode,
+      difficulty: room.settings.difficulty,
+    });
+  }
+  res.json({ rooms: list.slice(0, 30) });
 });
 
 // ---------- เสิร์ฟหน้าเว็บของเกม (client ที่ build แล้ว) ----------
@@ -200,11 +242,10 @@ function resetLane(lane, word, challenge) {
 
 // ให้ socket ของผู้เล่นอยู่ใน room ย่อยของทีมตัวเองเท่านั้น (team = null → ออกจากทั้งสอง)
 function syncTeamRoom(room, player) {
-  const sock = io.sockets.sockets.get(player.id);
-  if (!sock) return;
+  // io.in(playerId) = ทุก socket ของผู้เล่นคนนี้ (ปกติมีตัวเดียว · ตอนหลุดอยู่ไม่มีเลยก็ไม่เป็นไร)
   for (const t of TEAMS) {
-    if (t === player.team) sock.join(teamRoom(room, t));
-    else sock.leave(teamRoom(room, t));
+    if (t === player.team) io.in(player.id).socketsJoin(teamRoom(room, t));
+    else io.in(player.id).socketsLeave(teamRoom(room, t));
   }
 }
 
@@ -222,7 +263,8 @@ function applyMode(room) {
 
 const laneList = (room) => (isTeamMode(room) && room.teams ? TEAMS.map((t) => room.teams[t]) : []);
 const laneOfDrawer = (room, id) => laneList(room).find((l) => l.drawerId === id) || null;
-const laneGuessers = (room, lane) => room.players.filter((p) => p.team === lane.team && p.id !== lane.drawerId);
+const laneGuessers = (room, lane) =>
+  room.players.filter((p) => p.team === lane.team && p.id !== lane.drawerId && p.connected !== false); // คนที่หลุดอยู่ไม่ต้องรอ
 const laneIsDone = (room, lane) =>
   lane.skipped || laneGuessers(room, lane).every((p) => lane.guessedIds.has(p.id));
 
@@ -231,6 +273,11 @@ function pickTeamDrawer(room, team) {
   const members = room.players.filter((p) => p.team === team);
   if (members.length === 0) return null;
   const lane = room.teams[team];
+  // ข้ามคนที่หลุดอยู่ (ถ้าหลุดกันทั้งทีมก็ใช้คนตามคิวเดิม)
+  for (let i = 0; i < members.length; i++) {
+    const m = members[lane.nextIdx++ % members.length];
+    if (m.connected !== false) return m.id;
+  }
   return members[lane.nextIdx++ % members.length].id;
 }
 
@@ -277,12 +324,13 @@ function nextTeamTurn(room) {
   room.round = Math.floor(room.teamTurn / room.teamPerRound) + 1;
   room.teamTurn++;
   room.phase = "choosing";
-  room.wordOptions = pickWords(3); // สองทีมได้ตัวเลือกชุดเดียวกัน คนวาดคนไหนเลือกก่อน คำนั้นใช้กับทั้งสองทีม
+  room.wordOptions = pickWords(3, room.settings.difficulty); // สองทีมได้ตัวเลือกชุดเดียวกัน คนวาดคนไหนเลือกก่อน คำนั้นใช้กับทั้งสองทีม
   const challenge = rollChallenge(room); // Mini Challenge เดียวกันทั้งสองทีม
   for (const lane of laneList(room)) {
     if (lane.drawerId) io.to(lane.drawerId).emit("choose_word", { options: room.wordOptions, time: 10, challenge });
   }
-  room.chooseTimeout = setTimeout(() => startTeamDrawing(room, room.wordOptions[0]), 10000);
+  room.chooseEndsAt = Date.now() + CHOOSE_MS;
+  room.chooseTimeout = setTimeout(() => startTeamDrawing(room, room.wordOptions[0]), CHOOSE_MS);
 }
 
 function startTeamDrawing(room, word) {
@@ -313,17 +361,17 @@ function startTeamDrawing(room, word) {
 function handleTeamGuess(socket, room, player, text) {
   const lane = room.teams?.[player.team];
   if (!lane) return;
-  const msg = { playerId: socket.id, name: player.name, text };
+  const msg = { playerId: socket.data.pid, name: player.name, text };
   // ไม่ได้อยู่ช่วงวาด หรือทีมนี้ถูกข้าม: คุยได้แต่ในทีมตัวเอง
   if (room.phase !== "drawing" || room.intro || lane.skipped) return void io.to(lane.code).emit("chat_message", msg);
-  if (socket.id === lane.drawerId) return; // คนวาดพิมพ์ไม่ได้
-  if (lane.guessedIds.has(socket.id)) {
+  if (socket.data.pid === lane.drawerId) return; // คนวาดพิมพ์ไม่ได้
+  if (lane.guessedIds.has(socket.data.pid)) {
     for (const id of [lane.drawerId, ...lane.guessedIds]) io.to(id).emit("chat_message", msg);
     return;
   }
   if (normalize(text) !== normalize(room.word)) return void io.to(lane.code).emit("chat_message", msg); // ทายผิด เห็นแค่ในทีม
 
-  lane.guessedIds.add(socket.id);
+  lane.guessedIds.add(socket.data.pid);
   if (!lane.solved) {
     lane.solved = true;
     lane.rank = ++room.solveCount; // 1 = ทีมแรกที่ทายถูก
@@ -332,7 +380,7 @@ function handleTeamGuess(socket, room, player, text) {
   }
   const gained = 50 + room.timeLeft * 5 + (lane.rank === 1 ? FIRST_TEAM_BONUS : 0);
   player.score += gained;
-  room.roundGains[socket.id] = gained;
+  room.roundGains[socket.data.pid] = gained;
   const drawer = room.players.find((p) => p.id === lane.drawerId);
   if (drawer) {
     drawer.score += 50;
@@ -340,7 +388,7 @@ function handleTeamGuess(socket, room, player, text) {
   }
   socket.emit("chat_message", { ...msg, correct: true });
   socket.to(lane.code).emit("chat_message", { ...msg, text: "******", correct: true });
-  io.to(lane.code).emit("correct_guess", { playerId: socket.id, name: player.name, team: lane.team });
+  io.to(lane.code).emit("correct_guess", { playerId: socket.data.pid, name: player.name, team: lane.team });
   io.to(room.code).emit("room_update", roomState(room));
   checkTeamRoundEnd(room);
 }
@@ -403,9 +451,12 @@ function loadWords() {
 
 loadWords();
 
-// โหมดปกติ: ทุกระดับปนกัน (ข้อ 7 ค่อยสุ่มจาก WORD_BANK ตามระดับเอง)
-function pickWords(n) {
-  return [...ALL_WORDS].sort(() => Math.random() - 0.5).slice(0, n);
+// สุ่มคำจากระดับความยากที่ห้องเลือก (settings.difficulty: easy | medium | hard)
+// ระดับนั้นมีคำไม่พอ (เช่นตอนใช้คำสำรองที่มีแต่ easy) → ใช้ทุกระดับปนกัน เกมต้องเดินต่อได้เสมอ
+function pickWords(n, difficulty) {
+  const level = (WORD_BANK[difficulty] || []).map((item) => item.word);
+  const pool = level.length >= n ? level : ALL_WORDS;
+  return [...pool].sort(() => Math.random() - 0.5).slice(0, n);
 }
 
 
@@ -418,6 +469,7 @@ function pickWords(n) {
 // ไม่ว่าจะใน round_start ของคนเข้าห้องกลางตา หรือที่ไหน — คนทายเปิด DevTools ดูได้
 // เพราะฉะนั้น roundInfo() จึงส่ง hint: null จนกว่าจะเปิดจริงเท่านั้น
 const HINT_AT_DIVISOR = 3;
+const CHOOSE_MS = 10000; // เวลาเลือกคำ (หมดแล้ว server เลือกตัวแรกให้)
 
 function makeHint(word) {
   const slots = [];
@@ -455,8 +507,10 @@ function revealHint(room, by) {
 
 // ---------- Mini Challenge (ข้อ 5) ----------
 // สุ่มใหม่ทุกครั้งที่ขึ้นตาใหม่ แล้วติดไปกับ round_start ของตานั้น (events.md หัวข้อ 5)
-//   none 40% · colour_fix 30% · dont_lift_pen 30%
-// shapes_only ถูกตัดออกจากเกมแล้ว (ดู CLAUDE.md) จึงไม่มีการสุ่มขึ้นมาเลย
+//
+// หัวห้องเปิด/ปิดกติกาได้ "ทีละใบ" ในห้องรอ (settings.challenges = ลิสต์ชนิดที่เปิด)
+//   "none" = Standard Drawing (วาดอิสระ) · "colour_fix" · "dont_lift_pen" · "shapes_only"
+// แต่ละตาสุ่มจากใบที่เปิดอยู่เท่านั้น (ดู rollChallenge) · ต้องเปิดอย่างน้อย 1 ใบเสมอ
 //
 // ทุกกติกาตัดสินที่ server เท่านั้น client แค่ปิดปุ่มให้ใช้ง่าย ไม่ใช่ตัวกันโกง
 // และเหมือนการวาดทุกอย่าง: ไม่ผ่านกติกา = ทิ้งเงียบ ๆ ไม่ตอบ error กลับไป
@@ -484,20 +538,50 @@ const BOARD_COLOR = "#ffffff";
 // เหลือ 7 สี ทุกสียัง "เป็นสีที่ตาเห็นได้" ทั้งหมด
 const COLOUR_FIX_COLORS = CHALLENGE_COLORS.filter((c) => c !== BOARD_COLOR);
 
-// เลือก "ชนิด" ของกติกา (ไม่รวม none) · colour_fix กับ dont_lift_pen อย่างละครึ่ง
-function pickChallenge() {
-  if (Math.random() < 0.5) {
-    return { type: "colour_fix", color: COLOUR_FIX_COLORS[Math.floor(Math.random() * COLOUR_FIX_COLORS.length)] };
-  }
-  return { type: "dont_lift_pen" };
+// ชนิดกติกาทั้งหมดที่เลือกเปิด/ปิดได้ · "none" = Standard Drawing (วาดอิสระ)
+const CHALLENGE_TYPES = ["none", "colour_fix", "dont_lift_pen", "shapes_only"];
+const SPECIAL_CHALLENGES = ["colour_fix", "dont_lift_pen", "shapes_only"]; // ทุกใบยกเว้น Standard
+// ค่าเริ่มต้นตอนสร้างห้อง: เปิด Standard + colour_fix + dont_lift_pen (shapes_only ปิดไว้ก่อน หัวห้องเปิดเองได้)
+const DEFAULT_CHALLENGES = ["none", "colour_fix", "dont_lift_pen"];
+
+// กรองลิสต์ให้เหลือชนิดที่รู้จัก ไม่ซ้ำ และต้องมีอย่างน้อย 1 ใบ (ไม่งั้นคืน null = ไม่รับค่านี้)
+function sanitizeChallenges(list) {
+  if (!Array.isArray(list)) return null;
+  const set = CHALLENGE_TYPES.filter((t) => list.includes(t)); // คงลำดับมาตรฐาน ตัดซ้ำ/ค่าแปลกปลอม
+  return set.length > 0 ? set : null;
 }
 
+// สร้างก้อน Challenge จากชนิด — colour_fix แนบสีสุ่ม (ตัดสีขาวออก) · ที่เหลือมีแค่ type
+function makeChallenge(type) {
+  if (type === "colour_fix") {
+    return { type, color: COLOUR_FIX_COLORS[Math.floor(Math.random() * COLOUR_FIX_COLORS.length)] };
+  }
+  return { type };
+}
+
+const pickFrom = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
 // สุ่ม Mini Challenge ของตาที่กำลังจะเริ่ม → room.nextChallenge (ใช้ทั้งบอกคนวาดตอนเลือกคำ และตอนเริ่มวาดจริง)
-// challengeHistory = ชนิดของทุกตาในเกมนี้ (ล้างตอน start_game) ไว้ดูตาแรกกับตาที่แล้ว
+// สุ่ม "จากใบที่หัวห้องเปิดไว้เท่านั้น" (settings.challenges) · challengeHistory = ชนิดของทุกตา (ล้างตอน start_game) ไว้ดูตาแรก/ตาที่แล้ว
+//   - เปิดแค่ Standard → ทุกตา none
+//   - ปิด Standard → ทุกตาต้องเป็นกติกาพิเศษ (ไม่มีจังหวะตาแรก/ไม่ติดกัน เพราะไม่มีตาปกติให้คั่น)
+//   - เปิดทั้ง Standard และกติกาพิเศษ → ใช้จังหวะเดิม: ตาแรกไม่มี · ~1/3 · ไม่ติดกันสองตา
 function rollChallenge(room) {
   const history = room.challengeHistory ?? (room.challengeHistory = []);
-  const allowed = CHALLENGE_NO_PACING || (history.length > 0 && history[history.length - 1] === "none");
-  const ch = allowed && Math.random() < CHALLENGE_CHANCE ? pickChallenge() : { type: "none" };
+  const enabled = room.settings.challenges ?? DEFAULT_CHALLENGES;
+  const specials = SPECIAL_CHALLENGES.filter((t) => enabled.includes(t));
+  const hasNone = enabled.includes("none");
+
+  let type;
+  if (specials.length === 0) {
+    type = "none";
+  } else if (!hasNone) {
+    type = pickFrom(specials);
+  } else {
+    const allowed = CHALLENGE_NO_PACING || (history.length > 0 && history[history.length - 1] === "none");
+    type = allowed && Math.random() < CHALLENGE_CHANCE ? pickFrom(specials) : "none";
+  }
+  const ch = makeChallenge(type);
   history.push(ch.type);
   room.nextChallenge = ch;
   return ch;
@@ -536,6 +620,7 @@ const isEraser = (tool) => tool === "eraser";
 function challengeAllowsStroke(room, color, tool) {
   const ch = room.challenge;
   if (!ch || ch.type === "none") return true;
+  if (ch.type === "shapes_only") return false; // โหมดรูปทรง: ห้ามวาดเส้นมือเปล่า (รวมยางลบ) รับแค่ draw_shape
   if (ch.type === "colour_fix") return isEraser(tool) || sameColor(color, ch.color);
   if (ch.type === "dont_lift_pen") return !room.penUsed; // ยกปากกาไปแล้ว = วาดต่อไม่ได้
   return true;
@@ -549,17 +634,43 @@ function challengeAllowsFill(room, color) {
   if (!ch || ch.type === "none") return true;
   if (ch.type === "colour_fix") return sameColor(color, ch.color);
   if (ch.type === "dont_lift_pen") return false;
+  // shapes_only ตกมาถึงตรงนี้ → อนุญาตถังสี (ไว้ระบายสีในรูปทรง — ที่ห้ามคือเส้นมือเปล่าเท่านั้น)
   return true;
 }
 
-// กติกาของรูปทรง (draw_shape) — เหมือนถังสีเป๊ะ: colour_fix ต้องสีตรง · dont_lift_pen ทิ้งทุกครั้ง
-// (รูปทรงคือการลากแล้วปล่อยในครั้งเดียว ขัดกับ "เส้นเดียวต่อเนื่อง") แยกชื่อไว้ให้อ่านง่าย
+// กติกาของรูปทรง (draw_shape):
+//   colour_fix → ต้องสีตรง · dont_lift_pen → ทิ้งทุกครั้ง (ขัดกับ "เส้นเดียวต่อเนื่อง")
+//   shapes_only → อนุญาต (เป็นเครื่องมือเดียวที่ใช้ได้ในโหมดนี้) · ตกผ่าน challengeAllowsFill เป็น true
 function challengeAllowsShape(room, color) {
   return challengeAllowsFill(room, color);
 }
 
 function normalize(text) {
   return String(text ?? "").toLowerCase().replace(/\s+/g, "");
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// จำกัดความถี่ (rate limit) — กันสคริปต์ยิง event รัว ๆ (ดู server/demo-attacks)
+//
+// วิธี: "sliding window" ต่อ socket · เก็บเวลาที่ event ถูกเรียกไว้ในลิสต์
+// ถ้าในช่วงเวลา windowMs ที่ผ่านมามีเกิน max ครั้ง = เกินโควตา (คืน false)
+// ตั้งเพดานให้ "สูงกว่าที่คนเล่นจริงทำได้" แต่ "ต่ำกว่าที่สคริปต์ยิงรัว ๆ ทำ" มาก
+// - guess: คนเล่นจริงพิมพ์ทายเร็วสุดก็ไม่กี่คำต่อวินาที แต่สคริปต์ยิงทั้งคลัง 130 คำรวด
+// - การเดารหัสห้อง (join_room/rejoin): คนพิมพ์รหัสผิดไม่กี่ครั้ง แต่สคริปต์สแกนหลายพันรหัส/วินาที
+// ══════════════════════════════════════════════════════════════════════
+const GUESS_MAX = 10;        // ทายได้ไม่เกิน 10 ครั้ง
+const GUESS_WINDOW_MS = 5000; // ต่อ 5 วินาที (= เฉลี่ย 2 ครั้ง/วินาที · เผื่อ burst 10 ครั้งรวด)
+const LOOKUP_MAX = 15;        // ค้นหา/เข้าห้อง (join_room + rejoin) ได้ไม่เกิน 15 ครั้ง
+const LOOKUP_WINDOW_MS = 10000; // ต่อ 10 วินาที (คนพิมพ์รหัสผิดไม่ถึง · สแกนรหัสชนทันที)
+
+function rateOk(socket, key, max, windowMs) {
+  const now = Date.now();
+  const store = (socket.data.rate ??= {});
+  const times = (store[key] ??= []);
+  while (times.length && now - times[0] > windowMs) times.shift(); // ทิ้งเวลาที่พ้นหน้าต่างไปแล้ว
+  if (times.length >= max) return false;
+  times.push(now);
+  return true;
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -610,10 +721,10 @@ function drawRoom(socket) {
   if (!room || room.phase !== "drawing" || room.intro) return null; // ช่วงป้ายใหญ่ห้ามวาด
   // โหมดทีม: คืน "เลน" ของทีมที่คนนี้เป็นคนวาด — ทุก handler จึงเขียน/ส่งต่อเฉพาะในทีมนั้น (lane.code = 48213:A)
   if (isTeamMode(room)) {
-    const lane = laneOfDrawer(room, socket.id);
+    const lane = laneOfDrawer(room, socket.data.pid);
     return lane && !lane.skipped ? lane : null;
   }
-  if (room.drawerId !== socket.id) return null;
+  if (room.drawerId !== socket.data.pid) return null;
   return room;
 }
 
@@ -802,13 +913,16 @@ function nextTurn(room) {
 
   room.drawerId = room.turnOrder[room.turnIndex];
   room.turnIndex++;
-  if (!room.players.some((p) => p.id === room.drawerId)) return nextTurn(room);
+  // ข้ามคนที่ออกไปแล้ว และคนที่หลุดอยู่ (ยังอยู่ในช่วงรอกลับมา) — ไม่งั้นทั้งห้องต้องนั่งดูกระดานเปล่าทั้งตา
+  const nextDrawer = room.players.find((p) => p.id === room.drawerId);
+  if (!nextDrawer || nextDrawer.connected === false) return nextTurn(room);
 
   room.phase = "choosing";
-  room.wordOptions = pickWords(3);
+  room.wordOptions = pickWords(3, room.settings.difficulty);
   // บอกคนวาดก่อนเลือกคำว่าตานี้มี Mini Challenge อะไร (ส่งถึงคนวาดคนเดียว)
   io.to(room.drawerId).emit("choose_word", { options: room.wordOptions, time: 10, challenge: rollChallenge(room) });
-  room.chooseTimeout = setTimeout(() => startDrawing(room, room.wordOptions[0]), 10000);
+  room.chooseEndsAt = Date.now() + CHOOSE_MS;
+  room.chooseTimeout = setTimeout(() => startDrawing(room, room.wordOptions[0]), CHOOSE_MS);
 }
 
 function startDrawing(room, word) {
@@ -906,6 +1020,12 @@ function endGame(room) {
     ended.teamRanking = TEAMS.map((team) => ({ team, score: scores[team] })).sort((a, b) => b.score - a.score);
     ended.winner = scores.A === scores.B ? null : scores.A > scores.B ? "A" : "B"; // เสมอ = null
   }
+  room.lastEnded = ended; // คนที่รีเฟรชหลังจบเกมจะได้ผลนี้อีกครั้งตอน rejoin
+  // บันทึกคะแนนของทุกคนลงกระดาน "เล่นกับเพื่อน" — server บันทึกเอง client ส่งคะแนนมาไม่ได้
+  // คนที่ได้ 0 ไม่บันทึก (ไม่ได้เล่นจริง) · saveScore ไม่ throw จึงไม่ทำให้จบเกมพัง
+  for (const p of room.players) {
+    if (p.score > 0) leaderboard.saveScore({ name: p.name, score: p.score, levelReached: 0, board: "multi" });
+  }
   io.to(room.code).emit("game_end", ended);
   io.to(room.code).emit("room_update", roomState(room));
 }
@@ -917,32 +1037,110 @@ function applySettings(room, data) {
   const drawTime = Number(data?.drawTime);
   if ([1, 2, 3, 4, 5].includes(rounds)) room.settings.rounds = rounds;
   if ([30, 45, 60, 90].includes(drawTime)) room.settings.drawTime = drawTime;
+  if (LEVELS.includes(data?.difficulty)) room.settings.difficulty = data.difficulty; // ระดับของ "ชุดคำ" เท่านั้น ไม่เกี่ยวกับเวลา
+  if (data?.visibility === "public" || data?.visibility === "private") room.settings.visibility = data.visibility;
+  // ชุดกติกาที่เปิด (ใบไหนบ้าง) · รองรับค่าเดิม challenge: boolean ไว้ด้วย (true = ชุดเริ่มต้น · false = เปิดแค่ Standard)
+  const sc = sanitizeChallenges(data?.challenges);
+  if (sc) room.settings.challenges = sc;
+  else if (data?.challenge === false) room.settings.challenges = ["none"];
+  else if (data?.challenge === true) room.settings.challenges = [...DEFAULT_CHALLENGES];
   if ((data?.mode === "classic" || data?.mode === "team") && room.settings.mode !== data.mode) {
     room.settings.mode = data.mode;
     applyMode(room);
   }
 }
 
+// ---------- ออกจากห้อง · หลุด · กลับเข้าห้องเดิม (rejoin) ----------
+// ออกเอง (leave_room) = ลบออกจากห้องทันที
+// หลุด (ปิดแท็บ รีเฟรช เน็ตหลุด) = ยังไม่ลบ รอ REJOIN_GRACE_MS ก่อน เผื่อเขากลับมา (รีเฟรชใช้เวลาแค่ 1–2 วิ)
+//   ระหว่างรอ ผู้เล่นยังอยู่ในห้องครบ (คะแนน ทีม คิววาด) แค่ถูกทำเครื่องหมาย connected: false ให้เพื่อนเห็น
+//   กลับมาทัน (event rejoin) = ยกเลิกตัวจับเวลา เล่นต่อได้เลย · ไม่ทัน = ลบออกเหมือนออกเอง
+// REJOIN_GRACE_MS เป็น env ไว้ให้เทสย่อเวลาเท่านั้น
+const REJOIN_GRACE_MS = process.env.REJOIN_GRACE_MS !== undefined ? Number(process.env.REJOIN_GRACE_MS) : 30000;
+
 function leaveRoom(socket) {
   const code = socket.data.roomCode;
   if (!code) return;
-
-  socket.leave(code);
-  for (const t of TEAMS) socket.leave(`${code}:${t}`);
   socket.data.roomCode = null;
-
   const room = rooms.get(code);
-  if (!room) return;
-  room.players = room.players.filter((p) => p.id !== socket.id);
+  if (room) removePlayer(room, socket.data.pid);
+}
 
-    if (room.players.length === 0) {
+// ผู้เล่นคนนี้ยังมี socket ต่ออยู่ไหม (ห้องส่วนตัวชื่อ playerId ยังมีสมาชิก = ยังต่ออยู่)
+const isOnline = (pid) => (io.sockets.adapter.rooms.get(pid)?.size ?? 0) > 0;
+
+function cancelDrop(room, pid) {
+  clearTimeout(room.dropTimers?.get(pid));
+  room.dropTimers?.delete(pid);
+}
+
+// socket หลุด: มีตัวตนถาวร → รอให้กลับมา · ไม่มี (ไม่ได้ส่ง playerKey) → กลับมาไม่ได้อยู่แล้ว ลบทันทีเหมือนเดิม
+function handleDisconnect(socket) {
+  const code = socket.data.roomCode;
+  const pid = socket.data.pid;
+  if (!code) return;
+  socket.data.roomCode = null;
+  const room = rooms.get(code);
+  const player = room?.players.find((p) => p.id === pid);
+  if (!player) return;
+  if (isOnline(pid)) return; // socket ตัวใหม่ของคนเดียวกันต่อเข้ามาแล้ว (รีเฟรชเร็ว) ไม่ถือว่าหลุด
+  if (!socket.data.persistent || REJOIN_GRACE_MS <= 0) return removePlayer(room, pid);
+
+  player.connected = false;
+  io.to(code).emit("room_update", roomState(room));
+  room.dropTimers ??= new Map();
+  cancelDrop(room, pid);
+  room.dropTimers.set(
+    pid,
+    setTimeout(() => {
+      room.dropTimers.delete(pid);
+      if (rooms.get(code) === room && !isOnline(pid)) removePlayer(room, pid);
+    }, REJOIN_GRACE_MS)
+  );
+}
+
+// ส่งสถานะเกมปัจจุบันทั้งหมดให้ socket ที่เพิ่งเข้ามากลางเกม (คนเข้าใหม่ และคนที่ rejoin ใช้ชุดเดียวกัน)
+// ลำดับสำคัญ: game_started → round_start → canvas_history (จอต้องล้างกระดานก่อนรับภาพ ไม่งั้นภาพที่เพิ่งได้จะถูกล้างทิ้ง)
+function sendGameState(socket, room, player) {
+  if (room.status === "ended") {
+    if (room.lastEnded) socket.emit("game_end", room.lastEnded);
+    return;
+  }
+  if (room.status !== "playing") return;
+  socket.emit("game_started", { mode: room.settings.mode, totalRounds: room.settings.rounds });
+  const lane = isTeamMode(room) ? room.teams?.[player.team] : null;
+  const board = isTeamMode(room) ? lane : room; // โหมดทีม: เห็นเฉพาะภาพของทีมตัวเอง
+  const drawerId = isTeamMode(room) ? lane?.drawerId : room.drawerId;
+  if (room.phase === "drawing" && board) {
+    socket.emit("round_start", isTeamMode(room) ? teamRoundInfo(room, lane) : roundInfo(room));
+    socket.emit("canvas_history", canvasPayload(board));
+    // คนวาดที่กลับมา ต้องได้คำของตัวเองอีกครั้ง (ส่งถึงเขาคนเดียว) และรู้ถ้าปากกาถูกล็อกไปแล้ว
+    if (drawerId === player.id && room.word) socket.emit("your_word", { word: room.word });
+    if (board.penUsed) socket.emit("pen_locked", {});
+  } else if (room.phase === "choosing" && drawerId === player.id) {
+    // คนวาดรีเฟรชตอนกำลังเลือกคำ: ส่งตัวเลือกชุดเดิมพร้อมเวลาที่เหลือ
+    const left = Math.max(1, Math.ceil((room.chooseEndsAt - Date.now()) / 1000));
+    socket.emit("choose_word", { options: room.wordOptions, time: left, challenge: room.nextChallenge ?? { type: "none" } });
+  }
+}
+
+// ลบผู้เล่นออกจากห้องจริงๆ (ออกเอง หรือหลุดเกินเวลารอ) แล้วจัดการผลที่ตามมา: ห้องว่าง ย้ายหัวห้อง คนวาดหาย
+function removePlayer(room, pid) {
+  const code = room.code;
+  if (!room.players.some((p) => p.id === pid)) return;
+  cancelDrop(room, pid);
+  io.in(pid).socketsLeave([code, ...TEAMS.map((t) => `${code}:${t}`)]);
+  room.players = room.players.filter((p) => p.id !== pid);
+
+  if (room.players.length === 0) {
+    for (const t of room.dropTimers?.values() ?? []) clearTimeout(t);
     stopTimer(room);
     clearTimeout(room.chooseTimeout);
     rooms.delete(code);
     return;
   }
 
-  if (room.hostId === socket.id) {
+  if (room.hostId === pid) {
     room.hostId = room.players[0].id;
     room.players[0].isHost = true;
   }
@@ -950,7 +1148,7 @@ function leaveRoom(socket) {
   if (room.status === "playing" && isTeamMode(room)) {
     // ทีมใดเหลือน้อยกว่า 2 คน เล่นต่อไม่ได้ (ไม่มีใครทาย) → จบเกม
     if (TEAMS.some((t) => teamCount(room, t) < TEAM_MIN_PLAYERS)) return endGame(room);
-    const lane = laneOfDrawer(room, socket.id);
+    const lane = laneOfDrawer(room, pid);
     if (lane && room.phase === "choosing") {
       // คนวาดของทีมหลุดตอนเลือกคำ: ทีมนั้นถูกข้ามตานี้ ถ้าไม่เหลือคนวาดเลยก็ข้ามทั้งตา
       lane.drawerId = null;
@@ -970,7 +1168,7 @@ function leaveRoom(socket) {
     checkTeamRoundEnd(room); // คนทายหลุดก็ทำให้ทีมทายครบได้ จึงต้องเช็คเสมอ
   } else if (room.status === "playing") {
     if (room.players.length < 2) return endGame(room);
-    if (room.drawerId === socket.id) {
+    if (room.drawerId === pid) {
       if (room.phase === "choosing") {
         clearTimeout(room.chooseTimeout);
         nextTurn(room);
@@ -991,13 +1189,20 @@ const SOLO_NEXT_DELAY_MS = Number(process.env.AI_NEXT_DELAY_MS) || 4000; // พ�
 const SOLO_TIME_OVERRIDE = Number(process.env.AI_TIME_OVERRIDE) || 0;     // ไว้ให้เทสย่อเวลาเท่านั้น
 const SNAPSHOT_MIN_GAP_MS = 4000;     // ภาพถี่กว่านี้ทิ้งเงียบ ๆ (client ส่งทุก 5 วิ) กันเปลืองค่า API
 const MAX_SNAPSHOT_CHARS = 600000;    // เพดานขนาดภาพ (ตัวอักษรของ data URL) · Socket.IO เองก็ตัดที่ ~1MB
-// ช่วงสอง "ดูภาพแล้วทาย": เล่นซ้ำภาพที่คนจริงเคยวาด (Quick, Draw!) ให้จบภายในหนึ่งในสามของเวลา
-const DRAW_BUDGET_RATIO = 1 / 3;
+// ช่วงสอง "ดูภาพแล้วทาย": เล่นซ้ำภาพที่คนจริงเคยวาด (Quick, Draw!) ให้จบภายในหนึ่งในหกของเวลา
+// ★ ปรับความเร็วที่ AI วาดตรงนี้: เลขยิ่งน้อย = วาดจบเร็วขึ้น (เดิม 1/3 · ตอนนี้ 1/6 = เร็วขึ้น 2 เท่า)
+const DRAW_BUDGET_RATIO = 1 / 6;
 const DRAW_COLOR = "#000000";
 const DRAW_SIZE = 4;
 const GUESS_MIN_GAP_MS = 300;  // พิมพ์ทายถี่กว่านี้ทิ้งเงียบ ๆ
 const MAX_GUESS_CHARS = 40;
 const IMAGE_RE = /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/;
+
+// เวลาสั้นลงตามด่านเหมือนเดิม · ชุดคำ: ถ้าผู้เล่นเลือกระดับความยากไว้ใช้ระดับนั้นทั้งเกม ไม่เลือก = ไล่ตามด่านแบบเดิม
+function soloConfig(solo) {
+  const cfg = ai.levelConfig(solo.level);
+  return solo.difficulty ? { ...cfg, difficulty: solo.difficulty } : cfg;
+}
 
 function stopSolo(socket) {
   const solo = socket.data.solo;
@@ -1015,7 +1220,7 @@ function clearStrokeTimers(solo) {
 }
 
 function startSoloRound(socket, solo) {
-  const cfg = ai.levelConfig(solo.level);
+  const cfg = soloConfig(solo);
   const time = SOLO_TIME_OVERRIDE || cfg.time;
   const word = ai.pickWord(ai.soloWords(WORD_BANK), cfg.difficulty, solo.usedWords);
   solo.usedWords.add(word);
@@ -1031,7 +1236,7 @@ function startSoloRound(socket, solo) {
   clearTimeout(solo.roundTimer);
   solo.roundTimer = setTimeout(() => endSoloRound(socket, solo, false), time * 1000);
   // ส่งคำจริงให้ผู้เล่นได้เพราะเขาเป็นคนวาด · aiMode บอกว่าตอนนี้ AI จริงหรือจำลอง
-  socket.emit("ai_round_start", { level: solo.level, word, time, lives: solo.lives, aiMode: ai.aiMode(), drawNext: solo.drawNext });
+  socket.emit("ai_round_start", { level: solo.level, word, time, lives: solo.lives, aiMode: ai.aiMode(), drawNext: solo.drawNext, difficulty: cfg.difficulty });
 }
 
 function endSoloRound(socket, solo, correct) {
@@ -1067,7 +1272,7 @@ function advanceSolo(socket, solo) {
 // ช่องสอง: server เล่นซ้ำภาพคนจริงทีละเส้น ผู้เล่นพิมพ์ทาย · server ตัดสินเอง
 // ⚠️ ห้ามให้คำตอบ (ทั้งไทย/อังกฤษ) อยู่ใน event ใดก่อน ai_draw_end — ส่งได้แค่หมวดหมู่เป็นคำใบ้
 function startDrawRound(socket, solo) {
-  const cfg = ai.levelConfig(solo.level);
+  const cfg = soloConfig(solo);
   const picked = aiDrawings.pick(ai.soloWords(WORD_BANK), cfg.difficulty, solo.usedWords);
   if (!picked) return advanceSolo(socket, solo); // ไม่มีภาพ → ข้ามช่องสอง ไม่ล่ม
   const time = SOLO_TIME_OVERRIDE || cfg.time;
@@ -1171,9 +1376,54 @@ async function handleSoloSnapshot(socket, data) {
   }
 }
 
+// พา socket ตัวใหม่ของผู้เล่นเดิมกลับเข้าห้อง — คืนคำตอบของ callback
+// ผู้เล่นยังเป็นคนเดิมทุกอย่าง (id คะแนน ทีม หัวห้อง คิววาด) จึงไม่ต้องแก้ข้อมูลเกมเลย แค่ต่อ socket กลับเข้า room
+function rejoinRoom(socket, room) {
+  const player = room.players.find((p) => p.id === socket.data.pid);
+  if (socket.data.roomCode && socket.data.roomCode !== room.code) leaveRoom(socket); // อยู่ห้องอื่นค้างไว้ ออกก่อน
+  stopSolo(socket);
+  cancelDrop(room, player.id);
+  player.connected = true;
+  socket.join(room.code);
+  socket.data.roomCode = room.code;
+  syncTeamRoom(room, player);
+  io.to(room.code).emit("room_update", roomState(room));
+  sendGameState(socket, room, player);
+  return { ok: true, code: room.code, playerId: player.id, name: player.name, avatar: player.avatar };
+}
+
 // ---------- เมื่อมีผู้เล่นต่อเข้ามา ----------
 io.on("connection", (socket) => {
   console.log("มีคนเชื่อมต่อเข้ามา:", socket.id);
+  // ห้องส่วนตัวชื่อเดียวกับ playerId — io.to(playerId) จึงส่งถึงคนนั้นได้ไม่ว่า socket จะเปลี่ยนไปกี่ครั้ง
+  socket.join(socket.data.pid);
+
+  // ── ตัวดักข้อผิดพลาด (กัน server ล่มทั้งตัวเพราะ handler เดียวโยน error) ──
+  // ครอบ "ทุก handler ของ socket นี้" ไว้ใน try/catch ที่เดียว โดยห่อ socket.on
+  // ถ้า handler ใดโยน error (เช่นได้ข้อมูลผิดรูปแบบที่ไม่ได้เช็ค) จะ log ให้เห็นชัดแทนที่จะทำให้โปรเซสดับ
+  // async handler (เช่น ai_snapshot) คืน Promise ด้วย จึงดัก .catch() เพิ่ม
+  // ไม่พิมพ์เนื้อข้อมูลลง log (อาจมีคำตอบ/กุญแจ) พิมพ์แค่ชื่อ event · ห้อง · ผู้เล่น · ข้อความ error
+  const rawOn = socket.on.bind(socket);
+  socket.on = (event, handler) =>
+    rawOn(event, function (...args) {
+      const onErr = (err) => {
+        console.error(
+          `❌ handler "${event}" โยน error (ห้อง ${socket.data.roomCode ?? "-"} ผู้เล่น ${socket.data.pid}): ${err?.message || err}`
+        );
+        // ถ้ามี callback (อาร์กิวเมนต์สุดท้ายเป็นฟังก์ชัน) ตอบว่าเกิดข้อผิดพลาด ไม่ให้ client ค้างรอ
+        const cb = args[args.length - 1];
+        if (typeof cb === "function") {
+          try { cb({ ok: false, error: "SERVER_ERROR" }); } catch {}
+        }
+      };
+      try {
+        const ret = handler.apply(this, args);
+        if (ret && typeof ret.catch === "function") ret.catch(onErr);
+        return ret;
+      } catch (err) {
+        onErr(err);
+      }
+    });
 
   socket.on("create_room", (data, callback) => {
     if (typeof callback !== "function") return;
@@ -1185,10 +1435,10 @@ io.on("connection", (socket) => {
     const code = makeRoomCode();
     const room = {
       code,
-      hostId: socket.id,
+      hostId: socket.data.pid,
       status: "lobby",
-      players: [{ id: socket.id, name, avatar: cleanAvatar(data.avatar), score: 0, isHost: true, team: null }],
-      settings: { mode: "classic", rounds: 3, drawTime: 60 },
+      players: [{ id: socket.data.pid, name, avatar: cleanAvatar(data.avatar), score: 0, isHost: true, team: null, connected: true, ready: false }],
+      settings: { mode: "classic", rounds: 3, drawTime: 60, difficulty: "easy", visibility: "private", challenges: [...DEFAULT_CHALLENGES] },
     };
     rooms.set(code, room);
 
@@ -1196,58 +1446,104 @@ io.on("connection", (socket) => {
     socket.data.roomCode = code;
     applySettings(room, data); // ค่าที่เลือกตั้งแต่หน้าแรก (โหมดทีม → หัวห้องเข้าทีม A และเข้า room ย่อยแล้ว)
 
-    callback({ ok: true, code, playerId: socket.id });
+    callback({ ok: true, code, playerId: socket.data.pid });
     io.to(code).emit("room_update", roomState(room));
   });
 
   socket.on("join_room", (data, callback) => {
     if (typeof callback !== "function") return;
+    // จำกัดความถี่: กันสคริปต์ไล่เดารหัสห้อง (join_room กับ rejoin ใช้โควตาเดียวกัน)
+    if (!rateOk(socket, "lookup", LOOKUP_MAX, LOOKUP_WINDOW_MS)) return callback({ ok: false, error: "TOO_MANY_ATTEMPTS" });
     const name = cleanName(data?.name);
     const code = String(data?.code ?? "");
     const room = rooms.get(code);
 
     if (!name) return callback({ ok: false, error: "INVALID_NAME" });
     if (!room) return callback({ ok: false, error: "ROOM_NOT_FOUND" });
+    // เป็นสมาชิกห้องนี้อยู่แล้ว (เช่นรีเฟรชแล้วกดเข้าห้องเดิมภายในเวลารอ) = กลับเข้าที่เดิม ไม่สร้างผู้เล่นซ้ำ
+    if (room.players.some((p) => p.id === socket.data.pid)) return callback(rejoinRoom(socket, room));
     if (room.players.length >= MAX_PLAYERS) return callback({ ok: false, error: "ROOM_FULL" });
     if (room.players.some((p) => p.name === name)) return callback({ ok: false, error: "NAME_TAKEN" });
 
     leaveRoom(socket);
-    const joiner = { id: socket.id, name, avatar: cleanAvatar(data.avatar), score: 0, isHost: false, team: null };
+    const joiner = { id: socket.data.pid, name, avatar: cleanAvatar(data.avatar), score: 0, isHost: false, team: null, connected: true, ready: false };
     if (isTeamMode(room)) joiner.team = autoTeam(room); // โหมดทีม: เข้าทีมที่คนน้อยกว่าอัตโนมัติ (รวมคนเข้ากลางเกม)
     room.players.push(joiner);
     socket.join(code);
     socket.data.roomCode = code;
     syncTeamRoom(room, joiner);
-    callback({ ok: true, playerId: socket.id });
+    callback({ ok: true, playerId: socket.data.pid });
     io.to(code).emit("room_update", roomState(room));
-    if (room.status === "playing" && isTeamMode(room)) {
-      socket.emit("game_started", { mode: room.settings.mode, totalRounds: room.settings.rounds });
-      if (room.phase === "drawing") {
-        const lane = room.teams[joiner.team];
-        socket.emit("round_start", teamRoundInfo(room, lane));
-        socket.emit("canvas_history", canvasPayload(lane)); // เห็นเฉพาะภาพของทีมตัวเอง
-      }
-    } else if (room.status === "playing") {
-      room.turnOrder.push(socket.id);
-      socket.emit("game_started", { mode: room.settings.mode, totalRounds: room.settings.rounds });
-      if (room.phase === "drawing") {
-        socket.emit("round_start", roundInfo(room));
-        // ภาพที่วาดไปแล้วก่อนเข้า — ส่ง "หลัง" round_start เพื่อให้จอใหม่ล้างกระดานเสร็จก่อน
-        // ไม่งั้นภาพที่เพิ่งได้มาจะถูกล้างทิ้งทันที
-        socket.emit("canvas_history", canvasPayload(room));
-      }
+    if (room.status === "playing") {
+      if (!isTeamMode(room)) room.turnOrder.push(socket.data.pid); // ต่อคิววาดท้ายรอบนี้
+      sendGameState(socket, room, joiner);
     }
+  });
+
+  // rejoin: หน้าเว็บถูกรีเฟรช / เน็ตหลุดแล้วต่อใหม่ → ขอกลับเข้าห้องเดิมด้วยตัวตนเดิม (playerId จากกุญแจใน handshake)
+  // server ส่งสถานะทั้งหมดกลับไป: ห้อง คะแนน รอบ เวลาที่เหลือ ภาพบนกระดาน คำของคนวาด
+  socket.on("rejoin", (data, callback) => {
+    if (typeof callback !== "function") return;
+    // จำกัดความถี่: กันสคริปต์ไล่เดารหัสห้อง (ใช้โควตาเดียวกับ join_room)
+    if (!rateOk(socket, "lookup", LOOKUP_MAX, LOOKUP_WINDOW_MS)) return callback({ ok: false, error: "TOO_MANY_ATTEMPTS" });
+    const room = rooms.get(String(data?.code ?? ""));
+    if (!room) return callback({ ok: false, error: "ROOM_NOT_FOUND" });
+    if (!room.players.some((p) => p.id === socket.data.pid)) return callback({ ok: false, error: "NOT_IN_ROOM" });
+    callback(rejoinRoom(socket, room));
   });
 
 
     socket.on("update_settings", (data) => {
     const room = rooms.get(socket.data.roomCode);
     if (!room || room.status === "playing") return;
-    if (room.hostId !== socket.id) {
+    if (room.hostId !== socket.data.pid) {
       return socket.emit("game_error", { code: "NOT_HOST", message: "เฉพาะหัวห้องเท่านั้น" });
     }
     applySettings(room, data);
     io.to(room.code).emit("room_update", roomState(room));
+  });
+
+  // เปิด/ปิด Mini Challenge ทีละใบ (ในห้องรอ) — หัวห้องเท่านั้น · ต้องเปิดอย่างน้อย 1 ใบ
+  // ข้อมูลเพี้ยน/ว่าง (sanitize แล้วเหลือ 0 ใบ) = ทิ้งเงียบ ๆ (คงค่าเดิมไว้)
+  socket.on("set_challenges", (data) => {
+    const room = rooms.get(socket.data.roomCode);
+    if (!room || room.status === "playing") return;
+    if (room.hostId !== socket.data.pid) {
+      return socket.emit("game_error", { code: "NOT_HOST", message: "เฉพาะหัวห้องเท่านั้น" });
+    }
+    const sc = sanitizeChallenges(data?.challenges);
+    if (!sc) return;
+    room.settings.challenges = sc;
+    io.to(room.code).emit("room_update", roomState(room));
+  });
+
+  // กดพร้อม/ไม่พร้อม (Ready) — ได้เฉพาะตอนไม่ได้เล่นอยู่ · หัวห้องไม่ต้องกด (client ไม่นับหัวห้องในเงื่อนไขเริ่มเกม)
+  socket.on("set_ready", (data) => {
+    const room = rooms.get(socket.data.roomCode);
+    if (!room || room.status === "playing") return;
+    const player = room.players.find((p) => p.id === socket.data.pid);
+    if (!player) return;
+    player.ready = !!data?.ready;
+    io.to(room.code).emit("room_update", roomState(room));
+  });
+
+  // เตะผู้เล่นออก — หัวห้องเท่านั้น (server ตรวจซ้ำเสมอ) · เตะตัวเองไม่ได้
+  socket.on("kick_player", (data) => {
+    const room = rooms.get(socket.data.roomCode);
+    if (!room) return;
+    if (room.hostId !== socket.data.pid) {
+      return socket.emit("game_error", { code: "NOT_HOST", message: "เฉพาะหัวห้องเท่านั้น" });
+    }
+    const targetId = String(data?.playerId ?? "");
+    if (!targetId || targetId === socket.data.pid) return;
+    const target = room.players.find((p) => p.id === targetId);
+    if (!target) return;
+    // บอกทุก socket ของคนที่ถูกเตะให้กลับหน้าแรก (ส่งก่อนลบ ตอนเขายังอยู่ใน room จะได้รับแน่)
+    io.to(targetId).emit("kicked", { code: room.code });
+    // removePlayer ลบออกจากห้อง + ให้ socket ของเขา leave room (socketsLeave) + จัดการผลที่ตามมา
+    // (ย้ายหัวห้อง · คนวาดหลุด · ห้องว่าง) เหมือนคนออกเอง
+    // rejoin จะไม่ดึงเขากลับ เพราะเขาไม่ใช่สมาชิกแล้ว (rejoin ตอบ NOT_IN_ROOM) · จะเข้าใหม่ต้อง join_room ด้วยรหัสเอง
+    removePlayer(room, targetId);
   });
 
   // เลือกทีม (ตอนอยู่ในห้องรอ/จบเกม ไม่ใช่ตอนเล่น) — เฉพาะโหมดทีม
@@ -1255,7 +1551,7 @@ io.on("connection", (socket) => {
     const room = rooms.get(socket.data.roomCode);
     if (!room || room.status === "playing" || !isTeamMode(room)) return;
     if (!TEAMS.includes(data?.team)) return;
-    const player = room.players.find((p) => p.id === socket.id);
+    const player = room.players.find((p) => p.id === socket.data.pid);
     if (!player) return;
     player.team = data.team;
     syncTeamRoom(room, player);
@@ -1265,7 +1561,7 @@ io.on("connection", (socket) => {
   socket.on("start_game", () => {
     const room = rooms.get(socket.data.roomCode);
     if (!room || room.status === "playing") return;
-    if (room.hostId !== socket.id) {
+    if (room.hostId !== socket.data.pid) {
       return socket.emit("game_error", { code: "NOT_HOST", message: "เฉพาะหัวห้องเท่านั้นที่เริ่มเกมได้" });
     }
     if (room.players.length < 2) {
@@ -1298,7 +1594,7 @@ io.on("connection", (socket) => {
   socket.on("word_chosen", (data) => {
     const room = rooms.get(socket.data.roomCode);
     if (!room || room.phase !== "choosing") return;
-    if (isTeamMode(room) ? !laneOfDrawer(room, socket.id) : room.drawerId !== socket.id) return;
+    if (isTeamMode(room) ? !laneOfDrawer(room, socket.data.pid) : room.drawerId !== socket.data.pid) return;
     if (!room.wordOptions.includes(data?.word)) return;
     if (isTeamMode(room)) return startTeamDrawing(room, data.word);
     startDrawing(room, data.word);
@@ -1307,20 +1603,22 @@ io.on("connection", (socket) => {
     socket.on("guess", (data) => {
     const room = rooms.get(socket.data.roomCode);
     if (!room) return;
-    const player = room.players.find((p) => p.id === socket.id);
+    const player = room.players.find((p) => p.id === socket.data.pid);
     const text = String(data?.text ?? "").trim().slice(0, 100);
     if (!player || !text) return;
+    // จำกัดความถี่: ยิงทายรัว ๆ เกินเพดาน = ทิ้งเงียบ ๆ (เหมือน input ที่ไม่ผ่านกติกาอื่น ไม่บอกคนโกงว่าโดนดัก)
+    if (!rateOk(socket, "guess", GUESS_MAX, GUESS_WINDOW_MS)) return;
     if (room.status === "playing" && isTeamMode(room)) return handleTeamGuess(socket, room, player, text);
-    const msg = { playerId: socket.id, name: player.name, text };
+    const msg = { playerId: socket.data.pid, name: player.name, text };
 
     // ไม่ได้อยู่ช่วงวาด คุยเล่นได้ปกติ
     if (room.phase !== "drawing" || room.intro) return io.to(room.code).emit("chat_message", msg);
 
     // ช่องโกง 1: คนวาดห้ามพิมพ์ระหว่างวาด
-    if (socket.id === room.drawerId) return;
+    if (socket.data.pid === room.drawerId) return;
 
     // ช่องโกง 2: คนที่ทายถูกแล้ว คุยได้แค่กับคนที่รู้คำตอบแล้ว
-    if (room.guessedIds.has(socket.id)) {
+    if (room.guessedIds.has(socket.data.pid)) {
       for (const id of [room.drawerId, ...room.guessedIds]) {
         io.to(id).emit("chat_message", msg);
       }
@@ -1329,10 +1627,10 @@ io.on("connection", (socket) => {
 
     // ทายถูก
     if (normalize(text) === normalize(room.word)) {
-      room.guessedIds.add(socket.id);
+      room.guessedIds.add(socket.data.pid);
       const gained = 50 + room.timeLeft * 5;
       player.score += gained;
-      room.roundGains[socket.id] = gained;
+      room.roundGains[socket.data.pid] = gained;
 
       const drawer = room.players.find((p) => p.id === room.drawerId);
       if (drawer) {
@@ -1343,10 +1641,10 @@ io.on("connection", (socket) => {
       // ช่องโกง 3 (ไอเดียเรา): คนทายเห็นคำตัวเอง คนอื่นเห็นเป็น ******
       socket.emit("chat_message", { ...msg, correct: true });
       socket.to(room.code).emit("chat_message", { ...msg, text: "******", correct: true });
-      io.to(room.code).emit("correct_guess", { playerId: socket.id, name: player.name });
+      io.to(room.code).emit("correct_guess", { playerId: socket.data.pid, name: player.name });
       io.to(room.code).emit("room_update", roomState(room));
 
-      const guessers = room.players.filter((p) => p.id !== room.drawerId);
+      const guessers = room.players.filter((p) => p.id !== room.drawerId && p.connected !== false); // คนที่หลุดอยู่ไม่ต้องรอ
       if (guessers.every((p) => room.guessedIds.has(p.id))) endRound(room);
       return;
     }
@@ -1495,7 +1793,7 @@ io.on("connection", (socket) => {
     leaveRoom(socket); // ผู้เล่นหนึ่งคนอยู่ได้อย่างเดียว: ห้อง หรือ Solo
     stopSolo(socket);  // กดเริ่มซ้ำ = เริ่มเกมใหม่ เกมเก่าทิ้ง
     const solo = {
-      name, level: 1, lives: SOLO_LIVES, totalScore: 0, usedWords: new Set(), roundId: 0,
+      name, difficulty: LEVELS.includes(data?.difficulty) ? data.difficulty : null, level: 1, lives: SOLO_LIVES, totalScore: 0, usedWords: new Set(), roundId: 0,
       over: false, drawing: false, busy: false, roundTimer: null, nextTimer: null,
       guessing: false, drawNext: false, passed: false, strokeTimers: [],
     };
@@ -1519,7 +1817,7 @@ io.on("connection", (socket) => {
   socket.on("disconnect", () => {
     console.log("มีคนหลุดออกไป:", socket.id);
     stopSolo(socket); // เล่นไม่จบ = ไม่บันทึกคะแนน
-    leaveRoom(socket);
+    handleDisconnect(socket); // อยู่ในห้อง: รอให้กลับมาก่อน ไม่ลบทันที
   });
 });
 
@@ -1543,6 +1841,17 @@ Promise.all([ai.init(), leaderboard.init()]).then(() => {
     if (!HAS_CLIENT) console.log("⚠️  ยังไม่ได้ build หน้าเว็บ (client/dist) — รัน npm run setup ก่อน");
     console.log(`AI Solo: โหมด ${ai.aiMode()}`);
   });
+});
+
+// ── กันโปรเซสดับจากข้อผิดพลาดที่ไม่ได้ดักไว้ ──
+// ปกติ Node จะปิดโปรเซสทันทีเมื่อเจอ exception/rejection ที่ไม่มีใครจับ
+// ระหว่างเดโมถ้า server ดับ = ทุกห้องหายหมด จึง log ไว้แล้วให้ทำงานต่อ (ตัวห่อ socket.on ด้านบนดักส่วนใหญ่ไว้แล้ว นี่คือตาข่ายชั้นสุดท้าย)
+// ไม่ปิดโปรเซส เพราะเป้าหมายคือ "ห้ามล่มตอนเดโม" — error ยังถูกพิมพ์ให้เห็นเสมอ ไม่กลืนเงียบ
+process.on("uncaughtException", (err) => {
+  console.error("❌ uncaughtException (server ยังทำงานต่อ):", err?.stack || err?.message || err);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error("❌ unhandledRejection (server ยังทำงานต่อ):", reason?.stack || reason?.message || reason);
 });
 
 // ถูกสั่งปิด (deploy ใหม่/รีสตาร์ทบน Render ส่ง SIGTERM): เขียนคะแนนที่ค้างลง Upstash ให้เสร็จก่อนค่อยดับ จะได้ไม่เสียคะแนนล่าสุด

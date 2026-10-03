@@ -49,11 +49,21 @@ function lastOpIndex(actions) {
  * กติกาทุกอย่างอยู่ที่ server: เวลา ชีวิต คะแนน การขึ้นด่าน การบันทึก leaderboard
  * หน้านี้แค่แสดงผลและส่งภาพ — นับเวลาถอยหลังเองเพื่อโชว์เท่านั้น server เป็นคนปิดด่าน
  */
-export default function SoloAI({ initialName = "", onName, onBack }) {
+// ระดับความยากของชุดคำ (ค่าเดียวกับที่ server รับใน ai_start / settings.difficulty)
+const DIFFICULTIES = [
+  ["easy", "ง่าย"],
+  ["medium", "กลาง"],
+  ["hard", "ยาก"],
+];
+
+export default function SoloAI({ initialName = "", boot = null, onName, onBack }) {
   // intro = กรอกชื่อ · starting = ส่ง ai_start แล้วรอด่านแรก · playing = ช่วง 1 เราวาด AI ทาย
   // watch = ช่วง 2 ดูภาพที่เล่นซ้ำแล้วพิมพ์ทาย · rest = พักระหว่างช่วง · over = จบเกม
   const [phase, setPhase] = useState("intro");
   const [name, setName] = useState(initialName);
+  // ระดับความยากของ "ชุดคำ" ทั้งเกม (เวลายังสั้นลงตามด่านเหมือนเดิม) — server เป็นคนสุ่มคำตามระดับนี้
+  // มาจากหน้า SET UP (boot) ถ้าเข้าทางนั้น ไม่งั้นเริ่มที่ง่าย
+  const [difficulty, setDifficulty] = useState(boot?.difficulty ?? "easy");
   const [round, setRound] = useState(null); // { level, word, time, lives, aiMode, drawNext }
   const [watch, setWatch] = useState(null); // ช่วง 2: { level, time, lives, category } (ไม่มีคำตอบ)
   const [answer, setAnswer] = useState(""); // ช่องพิมพ์ทายของช่วง 2
@@ -245,6 +255,20 @@ export default function SoloAI({ initialName = "", onName, onBack }) {
     };
   }, []);
 
+  // มาจากหน้า SET UP (เลือกโหมด "แข่งกับ AI") → เริ่มเกมทันที ข้ามหน้ากรอกชื่อ
+  // ผูกไว้หลัง effect ที่ติด listener ด้านบน (เรียงตามลำดับ) จึงมั่นใจว่า listener พร้อมก่อนส่ง ai_start
+  // ส่งเฉพาะตอนยังอยู่หน้ากรอกชื่อ กันยิงซ้ำถ้า component re-render
+  useEffect(() => {
+    if (!boot || phaseRef.current !== "intro") return;
+    onName?.(initialName.trim());
+    setScore(0);
+    setLives(3);
+    setFinal(null);
+    setPhase("starting");
+    socket.emit("ai_start", { name: initialName, difficulty: boot.difficulty });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ขึ้นด่านใหม่ = ล้างกระดานและประวัติย้อนกลับ
   useEffect(() => {
     if (roundId === 0) return;
@@ -300,7 +324,7 @@ export default function SoloAI({ initialName = "", onName, onBack }) {
     setLives(3);
     setFinal(null);
     setPhase("starting");
-    socket.emit("ai_start", { name });
+    socket.emit("ai_start", { name, difficulty });
   }
 
   // ช่วง 2: ส่งคำที่พิมพ์ให้ server ตัดสิน (ฝั่งนี้ไม่รู้คำตอบเลย)
@@ -390,6 +414,22 @@ export default function SoloAI({ initialName = "", onName, onBack }) {
             autoComplete="off"
             autoFocus
           />
+          <span className="field__label" id="solo-diff-label">
+            ระดับความยากของคำ
+          </span>
+          <div className="segmented" role="group" aria-labelledby="solo-diff-label">
+            {DIFFICULTIES.map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                className={difficulty === value ? "seg seg--active" : "seg"}
+                aria-pressed={difficulty === value}
+                onClick={() => setDifficulty(value)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
           <button type="submit" className="btn btn--primary btn--wide" disabled={!name.trim()}>
             START
           </button>
@@ -486,7 +526,11 @@ export default function SoloAI({ initialName = "", onName, onBack }) {
           />
 
           <TimeBar timeLeft={live ? timeLeft : null} total={stage?.time ?? null} />
+        </section>
 
+        {/* คอลัมน์ขวา: เครื่องมือวาด (บน) + กล่องพิมพ์คำตอบ (ล่าง เต็มพื้นที่ที่เหลือจนถึงขอบล่างของกระดาน)
+            ใช้ flex order ให้เครื่องมืออยู่บน แม้กล่องคำตอบมาก่อนใน DOM · บนมือถือ side ลงไปอยู่ใต้กระดาน */}
+        <aside className="game__side">
           <div className="game__answers game__answers--solo">
             {phase === "watch" ? (
               <section className="panel ai-box" aria-live="polite">
@@ -549,24 +593,24 @@ export default function SoloAI({ initialName = "", onName, onBack }) {
             </section>
             )}
           </div>
-        </section>
 
-        <aside className="game__tools">
-          <Toolbar
-            tool={tool}
-            color={color}
-            size={size}
-            onTool={setToolChoice}
-            onColor={setColor}
-            onSize={setSize}
-            onClear={() => canvasRef.current?.dispatch(clearBoard())}
-            onUndo={undo}
-            onRedo={redo}
-            canUndo={hist.undo}
-            canRedo={hist.redo}
-            locked={!canDraw}
-            maxSize={SOLO_MAX_SIZE}
-          />
+          <div className="game__tools">
+            <Toolbar
+              tool={tool}
+              color={color}
+              size={size}
+              onTool={setToolChoice}
+              onColor={setColor}
+              onSize={setSize}
+              onClear={() => canvasRef.current?.dispatch(clearBoard())}
+              onUndo={undo}
+              onRedo={redo}
+              canUndo={hist.undo}
+              canRedo={hist.redo}
+              locked={!canDraw}
+              maxSize={SOLO_MAX_SIZE}
+            />
+          </div>
         </aside>
       </main>
 

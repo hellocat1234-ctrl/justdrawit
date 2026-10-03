@@ -105,12 +105,14 @@ input {
 .logo {
   margin: 0;
   display: grid;
-  gap: 4px;
+  gap: 10px; /* Press Start 2P ตัวสูง เพิ่มช่องว่างระหว่างสองบรรทัดไม่ให้ขอบเงาชนกัน */
   justify-items: center;
-  font-family: var(--font-pixel);
-  font-size: clamp(40px, 9vw, 76px);
-  line-height: 1;
-  letter-spacing: 2px;
+  /* หัวข้อ "JUST DRAW IT" ใช้ฟอนต์พิกเซล Press Start 2P (เฉพาะโลโก้ ที่อื่นใช้ฟอนต์เดิม)
+     ฟอนต์นี้ตัวกว้างมาก จึงลดขนาดและช่องไฟลง ไม่ให้ "DRAW IT" (7 ตัว) ล้นจอมือถือ */
+  font-family: "Press Start 2P", var(--font-pixel);
+  font-size: clamp(18px, 6.2vw, 46px);
+  line-height: 1.1;
+  letter-spacing: 0;
 }
 
 .logo span {
@@ -4136,4 +4138,469 @@ select[class] {
   letter-spacing: 2px;
   position: relative;
   top: 3px; /* ขยับลงเล็กน้อย: เส้นกลางของกล่องอยู่เหนือกลางตัวพยัญชนะ เพราะวรรณยุกต์/สระบนซ้อนสูงกว่าหางด้านล่าง */
+}
+
+/* ==========================================================================
+   ชุดแก้ไข "รีเฟรชได้ · ตัวเลือกห้อง · สองกระดาน · แชททางขวา"
+   ชื่อคลาสใหม่ทั้งหมดตรวจแล้วว่าไม่ชนของเดิม (grep ก่อนเพิ่ม — บทเรียน CSS ชนกันข้ามหน้า)
+   ========================================================================== */
+
+/* ---- หน้าเกมจอคอม: กล่อง "คำตอบ" ย้ายไปคอลัมน์ขวา ใต้เครื่องมือวาด ----
+   .game__answers ถูกถอดกล่อง (display: contents) ลูกสองตัวจึงวางลงตารางของ .game ได้เอง
+   - คำตอบ (.panel--answers): คอลัมน์ 3 แถว 3–4 = ใต้เครื่องมือ สูงเท่าแถบเวลา + กล่อง "ในห้อง"
+   - ในห้อง (.panel--room): คอลัมน์กลาง แถว 4 ใต้กระดานเหมือนเดิม แต่ได้ความกว้างเต็มกระดาน
+   กระดานไม่เปลี่ยนขนาด เพราะความสูงของแถวใต้กระดานยังเป็น 176px เท่าเดิม (งบ 402px ของ --board-w ไม่ต้องแก้)
+   contain: size = ข้อความในแชทเยอะแค่ไหนก็ไม่ดันแถวให้สูงขึ้น (เลื่อนในกล่องแทน) เหมือนแถบผู้เล่น
+   จอ ≤ 1000px ไม่แตะ: ยังเรียง กระดาน → เครื่องมือ → คำตอบ/ในห้อง → รายชื่อ (แชทอยู่ใต้กระดาน) */
+@media (min-width: 1001px) {
+  .game:not(.game--solo) .game__answers {
+    display: contents;
+  }
+
+  .game:not(.game--solo) .game__answers .panel--answers {
+    grid-column: 3;
+    grid-row: 3 / 5;
+    height: auto;
+    align-self: stretch;
+    contain: size;
+  }
+
+  .game:not(.game--solo) .game__answers .panel--room {
+    grid-column: 2;
+    grid-row: 4;
+  }
+
+  /* ช่องพิมพ์ในคอลัมน์แคบ: ปุ่มส่งไม่บีบช่องพิมพ์จนพิมพ์ไม่เห็น */
+  .game:not(.game--solo) .game__answers .panel--answers .chat__input {
+    min-width: 0;
+  }
+}
+
+/* ---- ผู้เล่นที่หลุดอยู่ (server รอให้กลับมา 30 วิ) ---- */
+.score-row--away,
+.player-card--away {
+  opacity: 0.5;
+}
+
+.score-row__away,
+.player-card__away {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--red);
+}
+
+.reconnect-note {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  z-index: 50;
+  padding: 8px 16px;
+  border: var(--border);
+  box-shadow: var(--shadow-sm);
+  background: var(--red);
+  color: var(--white);
+  font-weight: 600;
+}
+
+/* ---- ห้องรอ: ป้ายค่าที่ตั้งไว้ของห้อง (ทุกคนเห็น) ---- */
+.room-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 14px;
+  padding: 0;
+  list-style: none;
+}
+
+.room-facts li {
+  padding: 4px 10px;
+  border: 2px solid var(--ink);
+  background: var(--white);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* ---- SET UP: ประเภทห้อง กับ Challenge อยู่แถวเดียวกัน ---- */
+.setup__pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.setup__note {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+@media (max-width: 560px) {
+  .setup__pair {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---- Leaderboard: แท็บสองกระดาน ---- */
+.board-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 12px 0 4px;
+}
+
+.board-tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 6px 10px;
+  border: var(--border);
+  background: var(--tab-idle);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.board-tab--active {
+  background: var(--yellow);
+  box-shadow: var(--shadow-xs);
+}
+
+/* ---- หน้าแรก: รายการห้อง Public (เต็มความกว้างใต้สองกล่องบน) ---- */
+.open-rooms {
+  grid-column: 1 / -1;
+  position: relative;
+  z-index: 1;
+}
+
+.open-rooms__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.open-rooms__empty {
+  margin: 0;
+  color: var(--muted);
+}
+
+.open-rooms__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.open-room {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-areas: "host count go" "meta count go";
+  align-items: center;
+  column-gap: 10px;
+  width: 100%;
+  min-height: 56px;
+  padding: 8px 12px;
+  border: var(--border);
+  box-shadow: var(--shadow-xs);
+  background: var(--white);
+  color: var(--ink);
+  font-family: var(--font-body);
+  text-align: left;
+  cursor: pointer;
+}
+
+.open-room:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.open-room__host {
+  grid-area: host;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.open-room__meta {
+  grid-area: meta;
+  font-size: 13px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.open-room__count {
+  grid-area: count;
+  font-family: var(--font-pixel);
+  font-size: 20px;
+}
+
+.open-room__go {
+  grid-area: go;
+  padding: 4px 12px;
+  border: 2px solid var(--ink);
+  background: var(--green);
+  color: var(--white);
+  font-weight: 700;
+}
+
+/* ==========================================================================
+   Leaderboard ตัวเต็มในการ์ดหน้าแรก (ใช้ LeaderboardPanel ร่วมกับหน้า /leaderboard)
+   ตารางเลื่อนภายในการ์ด ไม่ดันการ์ดสูงจนล้นจอ
+   ========================================================================== */
+.lobby__board {
+  min-height: 0; /* ให้ลูกที่เป็น flex ย่อได้ (ไม่งั้นตารางดันการ์ดสูงเกิน) */
+}
+
+/* เฉพาะในการ์ดหน้าแรก (scroll=true) — ตารางอยู่ในกรอบเลื่อนเอง */
+.lobby__board .board-panel__scroll {
+  flex: 1;
+  min-height: 120px;
+  max-height: 440px;
+  overflow-y: auto;
+  /* เส้นขอบบางคั่นให้รู้ว่าเลื่อนได้ */
+  border-top: 2px solid var(--ink);
+}
+
+/* หัวตารางลอยค้างไว้ตอนเลื่อน (อ่านง่ายว่าแต่ละคอลัมน์คืออะไร) */
+.lobby__board .board-panel__scroll .rank-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+/* ==========================================================================
+   การ์ดเปิด/ปิด Mini Challenge ในห้องรอ (4 ใบ: Standard · Colour Fix · Don't Lift Pen · Shapes Only)
+   ========================================================================== */
+.challenge-cards-wrap {
+  margin-top: 16px;
+}
+
+.challenge-cards-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.challenge-count {
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.06em;
+  padding: 2px 10px;
+  border: 2px solid var(--ink);
+  background: var(--yellow);
+  color: var(--ink);
+}
+
+.challenge-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.chal-card {
+  display: grid;
+  gap: 4px;
+  align-content: start;
+  text-align: left;
+  padding: 10px 12px;
+  min-height: 84px;
+  border: var(--border);
+  background: var(--tab-idle);
+  color: var(--ink);
+  font-family: var(--font-body);
+  opacity: 0.6; /* ปิดอยู่ = จาง */
+}
+
+.chal-card--on {
+  background: var(--white);
+  opacity: 1;
+  box-shadow: var(--shadow-xs);
+}
+
+.chal-card--host {
+  cursor: pointer;
+}
+
+.chal-card--host:disabled {
+  cursor: not-allowed;
+}
+
+.chal-card__title {
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.chal-card__desc {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.chal-card__badge {
+  justify-self: start;
+  margin-top: 2px;
+  padding: 1px 8px;
+  border: 2px solid var(--ink);
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+.chal-card__badge--on {
+  background: var(--green);
+  color: var(--white);
+}
+
+.chal-card__badge--off {
+  background: var(--tab-idle);
+  color: var(--muted);
+}
+
+@media (max-width: 480px) {
+  .challenge-cards {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---- SET UP: การ์ดโหมดที่ 3 "แข่งกับ AI" เต็มความกว้างใต้สองการ์ดบน (classic + team) ---- */
+.mode-card--ai {
+  grid-column: 1 / -1;
+}
+
+.mode-card__art--ai {
+  min-height: 110px;
+}
+
+@media (max-width: 760px) {
+  .mode-card--ai {
+    grid-column: auto;
+  }
+}
+
+/* ==========================================================================
+   ปุ่ม Ready + สถานะ READY/WAITING + ปุ่มเตะออก (ห้องรอ)
+   ========================================================================== */
+.ready-badge {
+  padding: 2px 8px;
+  border: 2px solid var(--ink);
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+}
+
+.ready-badge--on {
+  background: var(--green);
+  color: var(--white);
+}
+
+.ready-badge--off {
+  background: var(--tab-idle);
+  color: var(--muted);
+}
+
+/* ปุ่ม "พร้อม" ตอนกดแล้ว (กดอีกครั้งเพื่อยกเลิก) */
+.btn--ready-on {
+  background: var(--green);
+  color: var(--white);
+}
+
+/* ปุ่มเตะออก (กากบาทเล็กข้างชื่อ) — หัวห้องเห็นเฉพาะคนอื่น */
+.kick-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 2px solid var(--ink);
+  background: var(--red);
+  color: var(--white);
+  cursor: pointer;
+}
+
+.kick-btn:active {
+  transform: translate(1px, 1px);
+}
+
+/* ป้ายของผู้เล่นอยู่ชิดขวา เรียงเป็นแถวเดียว */
+.player-card__badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ==========================================================================
+   Solo: กล่อง "พิมพ์คำตอบ" ย้ายไปคอลัมน์ขวา ใต้กล่องเครื่องมือ (กว้างเท่าเครื่องมือ)
+   เครื่องมืออยู่บน (order 0) · กล่องคำตอบเต็มพื้นที่ที่เหลือจนถึงขอบล่างของกระดาน (order 1)
+   กระดานขนาดเท่าเดิม (คอลัมน์กลางไม่เปลี่ยน) · มือถือ side ลงไปอยู่ใต้กระดาน
+   ========================================================================== */
+.game__side {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.game__side .game__tools {
+  order: 0;
+}
+
+.game__side .game__answers--solo {
+  order: 1;
+  display: flex; /* ลูกเดียว (ai-box) ยืดเต็มกล่อง */
+  min-width: 0;
+}
+
+.game__side .game__answers--solo .panel {
+  width: 100%;
+}
+
+@media (min-width: 1001px) {
+  /* side ยืดสูงเท่ากระดาน (คอลัมน์กริดเดียวกัน) → กล่องคำตอบกินพื้นที่ที่เหลือใต้เครื่องมือ */
+  .game--solo {
+    align-items: stretch;
+  }
+  .game__side {
+    align-self: stretch;
+    min-height: 0;
+  }
+  .game__side .game__answers--solo {
+    flex: 1;
+    min-height: 0;
+  }
+  /* ทับความสูง 176px ของ .game__answers .panel สำหรับ Solo เท่านั้น ให้ยืดเต็มแทน */
+  .game__side .game__answers--solo .panel {
+    height: auto;
+    flex: 1;
+    min-height: 0;
+  }
+}
+
+@media (max-width: 1000px) {
+  /* มือถือ: กล่องคำตอบความสูงคงที่ อ่าน/เลื่อนรายการคำที่ทายผิดได้ ช่องพิมพ์อยู่ล่างสุด */
+  .game__side .game__answers--solo .panel {
+    height: 240px;
+  }
+}
+
+/* Solo มือถือ: .game__side (เครื่องมือ+คำตอบ) ต้องอยู่ "ใต้" กระดาน
+   (กฎ order ของ .game ตอนจอเล็กทำให้ board order:1 ไปอยู่หลัง side order:0 โดยไม่ตั้งใจ) */
+@media (max-width: 1000px) {
+  .game--solo .game__side {
+    order: 6;
+  }
 }

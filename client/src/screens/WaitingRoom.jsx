@@ -11,6 +11,9 @@ import TeamRules from "../components/TeamRules";
 import { markRulesSeen, rulesSeen } from "../prefs";
 import { Icon } from "../components/Icons";
 import { copyText, inviteUrl } from "../invite";
+import OptionRow from "../components/OptionRow";
+import ChallengeCards from "../components/ChallengeCards";
+import { DIFFICULTY_CHOICES, VISIBILITY_CHOICES, DEFAULT_CHALLENGES, difficultyLabel } from "../roomOptions";
 
 // ค่าที่ server ยอมรับ ตาม events.md (ค่าอื่น server จะเมิน)
 const ROUND_CHOICES = [1, 2, 3, 4, 5];
@@ -28,8 +31,13 @@ export default function WaitingRoom({ room, me, onLeave }) {
   const teamMode = room.settings.mode === "team";
   const teamSize = (t) => room.players.filter((p) => p.team === t).length;
   const teamsReady = TEAMS.every((t) => teamSize(t) >= TEAM_MIN);
-  const canStart = teamMode ? teamsReady : room.players.length >= 2;
   const myTeam = room.players.find((p) => p.id === me?.playerId)?.team ?? null;
+  const myReady = room.players.find((p) => p.id === me?.playerId)?.ready ?? false;
+  // ผู้เล่นคนอื่น (ไม่ใช่หัวห้อง) ต้องกด Ready ครบทุกคน หัวห้องจึงเริ่มได้ (หัวห้องไม่ต้องกด)
+  const others = room.players.filter((p) => p.id !== room.hostId);
+  const allReady = others.length > 0 && others.every((p) => p.ready);
+  const enoughPlayers = teamMode ? teamsReady : room.players.length >= 2;
+  const canStart = enoughPlayers && allReady;
 
   // ลิงก์เชิญ: เพื่อนเปิดแล้วหน้าแรกเติมรหัสห้องให้เอง
   async function copyLink() {
@@ -59,19 +67,38 @@ export default function WaitingRoom({ room, me, onLeave }) {
     return (
       <div
         key={player.id}
-        className={player.id === me?.playerId ? "player-card player-card--me" : "player-card"}
+        className={`player-card${player.id === me?.playerId ? " player-card--me" : ""}${player.connected === false ? " player-card--away" : ""}`}
       >
         <Avatar index={player.avatar} />
         <span className="player-card__name">
           {player.name}
+          {/* หลุดอยู่: server ยังเก็บที่ไว้ให้ 30 วิ เผื่อรีเฟรชแล้วกลับมา */}
+          {player.connected === false && <small className="player-card__away"> (หลุด กำลังรอ...)</small>}
         </span>
         {player.id === me?.playerId && <YouTag />}
         <span className="player-card__badges">
           {/* ใช้ hostId เป็นหลัก เพราะ server เป็นคนตัดสินว่าใครเป็นหัวห้อง */}
-          {player.id === room.hostId && (
+          {player.id === room.hostId ? (
             <span title="หัวห้อง" aria-label="หัวห้อง">
               <Icon name="crown" size={22} />
             </span>
+          ) : (
+            // ผู้เล่นคนอื่นโชว์สถานะ READY / WAITING
+            <span className={`ready-badge ready-badge--${player.ready ? "on" : "off"}`}>
+              {player.ready ? "READY" : "WAITING"}
+            </span>
+          )}
+          {/* หัวห้องเห็นปุ่มเตะออกข้างชื่อคนอื่น (ไม่ใช่ตัวเอง) — server ตรวจซ้ำว่าเป็นหัวห้อง */}
+          {isHost && player.id !== me?.playerId && (
+            <button
+              type="button"
+              className="kick-btn"
+              aria-label={`เตะ ${player.name} ออกจากห้อง`}
+              title="เตะออกจากห้อง"
+              onClick={() => socket.emit("kick_player", { playerId: player.id })}
+            >
+              <Icon name="x" size={16} />
+            </button>
           )}
         </span>
       </div>
@@ -148,6 +175,15 @@ export default function WaitingRoom({ room, me, onLeave }) {
         )}
 
         <div className="panel">
+          {/* ค่าที่ตั้งไว้ของห้อง — ทุกคนในห้องเห็น (มาจาก room.settings ที่ server เก็บ) */}
+          <ul className="room-facts" aria-label="ตั้งค่าของห้องนี้">
+            <li>{teamMode ? "ทีม A vs B" : "แข่งเดี่ยว"}</li>
+            <li>{room.settings.rounds} รอบ</li>
+            <li>{room.settings.drawTime} วิ/ตา</li>
+            <li>คำระดับ{difficultyLabel(room.settings.difficulty)}</li>
+            <li>{room.settings.visibility === "public" ? "Public" : "Private"}</li>
+            <li>Challenge {(room.settings.challenges ?? DEFAULT_CHALLENGES).length}/4</li>
+          </ul>
           {isHost ? (
             <div className="settings">
               <div className="settings__row">
@@ -203,22 +239,51 @@ export default function WaitingRoom({ room, me, onLeave }) {
                   ))}
                 </div>
               </div>
+
+              <div className="settings__row">
+                <span className="field__label">ความยากของคำ</span>
+                <OptionRow
+                  label="ระดับความยากของคำ"
+                  choices={DIFFICULTY_CHOICES}
+                  value={room.settings.difficulty}
+                  onChange={(difficulty) => changeSetting({ difficulty })}
+                />
+              </div>
+              <div className="settings__row">
+                <span className="field__label">ประเภทห้อง</span>
+                <OptionRow
+                  label="ประเภทห้อง"
+                  choices={VISIBILITY_CHOICES}
+                  value={room.settings.visibility}
+                  onChange={(visibility) => changeSetting({ visibility })}
+                />
+              </div>
             </div>
           ) : (
-            <p className="hint-text">
-              โหมด: {teamMode ? "ทีม A vs B" : "แข่งเดี่ยว"} · รอหัวห้องเริ่มเกม...
-            </p>
+            <p className="hint-text">รอหัวห้องเริ่มเกม...</p>
           )}
 
+          {/* การ์ด Mini Challenge — ทุกคนเห็น (หัวห้องกดสลับได้ คนอื่นดูอย่างเดียว) */}
+          <ChallengeCards enabled={room.settings.challenges ?? DEFAULT_CHALLENGES} isHost={isHost} />
+
           <div className="actions">
-            {isHost && (
+            {isHost ? (
               <button
                 type="button"
                 className="btn btn--primary"
                 disabled={!canStart}
                 onClick={() => socket.emit("start_game")}
               >
-                เริ่มเกม
+                START GAME
+              </button>
+            ) : (
+              // ผู้เล่นคนอื่นกดพร้อม/ยกเลิก (สลับได้) — รอหัวห้องเริ่มเกม
+              <button
+                type="button"
+                className={myReady ? "btn btn--ready-on" : "btn btn--primary"}
+                onClick={() => socket.emit("set_ready", { ready: !myReady })}
+              >
+                {myReady ? "ยกเลิกพร้อม" : "พร้อม (READY)"}
               </button>
             )}
             <button type="button" className="btn" onClick={onLeave}>
@@ -226,12 +291,15 @@ export default function WaitingRoom({ room, me, onLeave }) {
             </button>
           </div>
 
-          {isHost && !canStart && (
+          {isHost && !enoughPlayers && (
             <p className="form-note">
               {teamMode
                 ? `ต้องมีทีมละอย่างน้อย ${TEAM_MIN} คนจึงเริ่มได้ (ตอนนี้ทีม A ${teamSize("A")} คน · ทีม B ${teamSize("B")} คน)`
                 : "ต้องมีผู้เล่นอย่างน้อย 2 คนจึงเริ่มได้"}
             </p>
+          )}
+          {isHost && enoughPlayers && !allReady && (
+            <p className="form-note">รอผู้เล่นคนอื่นกด "พร้อม" ให้ครบทุกคนก่อนเริ่มเกม</p>
           )}
           {!isHost && teamMode && !teamsReady && (
             <p className="form-note">โหมดทีมต้องมีทีมละอย่างน้อย {TEAM_MIN} คนถึงจะเริ่มได้</p>

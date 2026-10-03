@@ -39,6 +39,8 @@ export default function Toolbar({
   hideBucket = false,
   // hideShapes: dont_lift_pen ซ่อนเครื่องมือรูปทรงด้วย (ลากแล้วปล่อยครั้งเดียว = ยกปากกา server ทิ้งทุกครั้ง)
   hideShapes = false,
+  // hidePen: shapes_only ซ่อนปากกา+ยางลบ เหลือแต่เครื่องมือรูปทรง (server ทิ้งเส้นมือเปล่าทุกครั้ง)
+  hidePen = false,
   historyLocked = false,
 }) {
   // สีที่เลือกเอง: เก็บเป็น "องศาสี + ความสว่าง" (ไม่ใช่ hex) เพราะช่องเลือกสีต้องรู้ว่าจะวางจุดจับไว้ตรงไหน
@@ -159,24 +161,29 @@ export default function Toolbar({
 
       {/* ── เครื่องมือ 4 ปุ่ม แถวเดียว อยู่ล่างสุดของแถบ · ไอคอนลอยเปล่าๆ ไม่มีกรอบ อันที่เลือกทึบเต็มมีขีดใต้ไอคอน ── */}
       <div className="toolbar__group toolbar__group--tools" role="group" aria-label="เครื่องมือ">
-        <button
-          type="button"
-          className={`tool${tool === TOOLS.PEN ? " tool--on" : ""}`}
-          aria-label="ปากกา"
-          aria-pressed={tool === TOOLS.PEN}
-          onClick={() => onTool(TOOLS.PEN)}
-        >
-          <Icon name="pen" size={30} />
-        </button>
-        <button
-          type="button"
-          className={`tool${tool === TOOLS.ERASER ? " tool--on" : ""}`}
-          aria-label="ยางลบ"
-          aria-pressed={tool === TOOLS.ERASER}
-          onClick={() => onTool(TOOLS.ERASER)}
-        >
-          <Icon name="eraser" size={30} />
-        </button>
+        {/* ปากกา+ยางลบ — shapes_only ซ่อนไปเลย เหลือแต่รูปทรง (server ทิ้งเส้นมือเปล่าทุกครั้ง) */}
+        {!hidePen && (
+          <button
+            type="button"
+            className={`tool${tool === TOOLS.PEN ? " tool--on" : ""}`}
+            aria-label="ปากกา"
+            aria-pressed={tool === TOOLS.PEN}
+            onClick={() => onTool(TOOLS.PEN)}
+          >
+            <Icon name="pen" size={30} />
+          </button>
+        )}
+        {!hidePen && (
+          <button
+            type="button"
+            className={`tool${tool === TOOLS.ERASER ? " tool--on" : ""}`}
+            aria-label="ยางลบ"
+            aria-pressed={tool === TOOLS.ERASER}
+            onClick={() => onTool(TOOLS.ERASER)}
+          >
+            <Icon name="eraser" size={30} />
+          </button>
+        )}
         {/* ถังสี — dont_lift_pen ซ่อนไปเลย เพราะกติกาคือ "ห้ามยกปากกา"
             การเทสีทั้งพื้นที่ในคลิกเดียวไม่ใช่การวาดเส้นต่อเนื่อง และ server ก็ทิ้ง fill ทุกครั้งอยู่แล้ว */}
         {!hideBucket && (

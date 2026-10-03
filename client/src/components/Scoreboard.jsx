@@ -70,6 +70,7 @@ export default function Scoreboard({
         if (isDrawer) classes.push("score-row--drawer");
         if (hasGuessed) classes.push("score-row--guessed");
         if (p.id === meId) classes.push("score-row--me");
+        if (p.connected === false) classes.push("score-row--away"); // หลุดอยู่ (server รอให้กลับมา 30 วิ)
 
         return (
           <li className={classes.join(" ")} key={p.id}>
@@ -84,6 +85,7 @@ export default function Scoreboard({
             </span>
             <span className="score-row__main">
               <span className="score-row__name">{p.name}</span>
+              {p.connected === false && <span className="score-row__away">หลุด กำลังรอ...</span>}
               <span className="score-row__tags">
                 {p.id === meId && <YouTag />}
                 {tags.map(([kind, icon, text]) => (

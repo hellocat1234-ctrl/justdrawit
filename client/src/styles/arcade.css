@@ -1,0 +1,296 @@
+/* ==========================================================================
+   ธีม "Neo-Arcade Brushwork" — Playful Neo-Brutalism + Retro Arcade
+   ไฟล์นี้เป็น "ชั้นทับ" ของ theme.css: เปลี่ยนแค่ สี ฟอนต์ มุมโค้ง เงา พื้นหลัง
+   ไม่แตะโครงหน้าจอ ขนาด ระยะ หรือ JavaScript เลย — ทุก layout ที่วัดไว้ใน theme.css ยังเหมือนเดิม
+   (ขอบยังหนา 3px/4px เท่าเดิม กระดานจึงไม่เปลี่ยนขนาด)
+
+   อยากกลับไปธีมพิกเซลเดิม: ลบบรรทัด import "./styles/arcade.css" ใน main.jsx บรรทัดเดียว
+   ต้อง import "หลัง" theme.css เสมอ เพราะอาศัยลำดับในการชนะ selector ระดับเดียวกัน
+   ========================================================================== */
+
+:root {
+  /* ---- สี (ชื่อตัวแปรเดิมของ theme.css ค่าใหม่ตามธีม) ---- */
+  --yellow: #facc15; /* Retro Warning Gold: รหัสห้อง มงกุฎ ของที่เลือกอยู่ อันดับ 1 */
+  --blue: #3b82f6; /* accent-blue: ป้ายข้อมูล แท็บที่เลือก */
+  --cream: #f8f9fc; /* surface-card: การ์ด แผง */
+  --white: #ffffff; /* กระดานวาด ช่องกรอก */
+  --ink: #1e1e2f; /* Deep Obsidian Ink: ขอบ ตัวหนังสือ */
+  --muted: #56607a; /* ตัวหนังสือรอง */
+  --green: #22c55e; /* Arcade Green: ปุ่มหลัก ทายถูก */
+  --red: #ef4444; /* timer-red: ตัวจับเวลา ปุ่มอันตราย */
+  --purple: #6b5bff; /* Digital Purple: พื้นหลังหลัก Mini Challenge โฟกัส */
+  --tab-idle: #eef1f8; /* surface-card-subtle: แท็บ/ช่องที่ยังไม่เลือก */
+  --green-soft: #dcfce7; /* พื้นของ "ทายถูกแล้ว" */
+  --green-bright: #22c55e;
+  --blue-bright: #3b82f6;
+  --pink-bright: #f43f8e;
+  --team-b: #3b82f6;
+  --shadow-ink: #18181b; /* เงาแข็งไม่เบลอ */
+  --stage: #6b5bff; /* พื้นเวทีของทั้งแอป */
+  --stage-dot: rgba(255, 255, 255, 0.28);
+
+  /* ---- ฟอนต์ ----
+     Space Grotesk (หัวข้อ ป้าย ปุ่ม ตัวเลข) กับ Rubik (เนื้อความ แชท) ไม่มีตัวอักษรไทย
+     เบราว์เซอร์จึงหยิบตัวไทยจากฟอนต์ถัดไปให้ทีละตัวอักษร: หัวข้อ = Chakra Petch · เนื้อความ = Prompt (ชุดเดิม) */
+  --font-pixel: "Space Grotesk", "Chakra Petch", sans-serif;
+  --font-head: "Space Grotesk", "Chakra Petch", sans-serif;
+  --font-body: "Rubik", "Prompt", "Chakra Petch", sans-serif;
+
+  /* ---- ขอบ เงา มุมโค้ง ---- */
+  --shadow: 6px 6px 0 var(--shadow-ink); /* Elevation 2: แผงใหญ่ หน้าต่าง */
+  --shadow-sm: 4px 4px 0 var(--shadow-ink); /* Elevation 1: ปุ่ม ชิป */
+  --shadow-xs: 2px 2px 0 var(--shadow-ink);
+  --r-card: 20px; /* การ์ดใหญ่ */
+  --r-ctl: 14px; /* ปุ่ม ช่องกรอก */
+  --r-sm: 10px;
+  --r-pill: 999px; /* ชิป ป้าย */
+}
+
+/* Space Grotesk มีหลายน้ำหนัก ให้หัวข้อหนาได้จริง (theme.css ปิดไว้เพราะฟอนต์พิกเซลมีน้ำหนักเดียว) */
+html {
+  font-synthesis: weight;
+}
+
+/* ---- พื้นเวที: ม่วง + ตารางจุด 24px (แทนลายไอคอนเหลือง/ฟ้า) ---- */
+body,
+.screen--game {
+  background-color: var(--stage);
+  background-image: radial-gradient(var(--stage-dot) 2px, transparent 2.5px);
+  background-size: 24px 24px;
+}
+
+/* ---- การ์ด / แผง (Elevation 2) ---- */
+.panel,
+.modal__panel,
+.mode-card,
+.challenge-intro__card,
+.rank-table,
+.board-empty,
+.team-col {
+  border-radius: var(--r-card);
+}
+
+.topbar,
+.wordbar,
+.game__tools,
+.game__players,
+.game__answers .panel,
+.color-pop,
+.toast,
+.reconnect-note,
+.open-room,
+.avatar-picker__arrow,
+.mascot-note__text,
+.board__notice,
+.choose-challenge,
+.team-me-banner,
+.team-winner,
+.podium__item,
+.gains__row,
+.score-team__head {
+  border-radius: var(--r-ctl);
+}
+
+/* กระดานวาด: มุมโค้งน้อยมาก (4px) ให้ภาพไม่ถูกตัดมุม */
+.board {
+  border-radius: 6px;
+}
+
+/* ตารางอันดับ: มุมโค้งต้องตัดแถวข้างในด้วย */
+.rank-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  overflow: hidden;
+}
+
+/* ---- ปุ่ม / ช่องกรอก (Elevation 1) ---- */
+.btn,
+.big-btn,
+.input,
+.seg,
+.icon-btn,
+.back-btn,
+.board-tab,
+.hint-btn,
+.period-toggle__btn,
+.score-row,
+.player-card,
+.code-badge,
+.room-code {
+  border-radius: var(--r-ctl);
+}
+
+.btn,
+.big-btn,
+.seg,
+.board-tab,
+.hint-btn,
+.back-btn {
+  font-family: var(--font-head);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+/* กดแล้วยุบลงไปทับเงา (tactile) — ใช้เฉพาะปุ่มที่ยังไม่มีอนิเมชันกดของตัวเอง */
+.btn:not(:disabled):hover,
+.board-tab:not(.board-tab--active):hover,
+.open-room:not(:disabled):hover {
+  filter: brightness(1.04);
+}
+
+/* ปุ่มหลัก: เขียว ตัวขาว */
+.btn--primary {
+  background: var(--green);
+  color: var(--white);
+}
+
+/* ช่องกรอก: โฟกัสแล้วขอบม่วง + เงาม่วง */
+.input:focus,
+.input:focus-visible {
+  outline: none;
+  border-color: var(--purple);
+  box-shadow: 3px 3px 0 var(--purple);
+}
+
+.input::placeholder {
+  color: #94a3b8;
+}
+
+/* ปุ่มเลือกค่า (segmented): ตัวที่เลือกเป็นสีทอง ตัวหนังสือเข้ม อ่านง่ายกว่าขาวบนฟ้า */
+.seg--active,
+.period-toggle__btn--active {
+  background: var(--yellow);
+  color: var(--ink);
+  box-shadow: var(--shadow-xs);
+}
+
+/* ปุ่มเวลา/รอบในหน้า SET UP เป็นตัวเลขใหญ่ — ป้ายภาษาไทย/อังกฤษยาวกว่า ย่อให้พอดีช่อง */
+.setup__opts .seg {
+  font-size: 18px;
+}
+
+/* ---- ชิป / ป้าย: ทรงเม็ดยา ---- */
+.tag,
+.you-tag,
+.room-facts li,
+.team-vs__chip,
+.team-me,
+.challenge,
+.wordbar .challenge,
+.solo-stage,
+.wordbar .solo-stage,
+.open-room__go,
+.timebar,
+.avatar-chip {
+  border-radius: var(--r-pill);
+}
+
+.timebar {
+  overflow: hidden;
+}
+
+/* ---- แท็บ Leaderboard / รายการห้อง ---- */
+.board-tab--active {
+  background: var(--yellow);
+}
+
+.open-room__count,
+.room-facts li,
+.topbar__round {
+  font-family: var(--font-head);
+  font-weight: 700;
+}
+
+/* ---- ตัวจับเวลา: เม็ดยาแดง ตัวเลขเท่ากันทุกหลัก (ไม่กระตุกตอนเลขเปลี่ยน) ---- */
+.timer {
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+
+/* ---- ป้าย/หัวข้อ: ตัวพิมพ์ใหญ่ เว้นช่องไฟแบบจออาร์เคด (ไทยไม่มีตัวพิมพ์ใหญ่ ไม่กระทบ) ---- */
+.field__label,
+.panel__title,
+.modal__title,
+.setup__head {
+  font-family: var(--font-head);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.field__label {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* ---- ริบบิ้นหัวหน้า: ฟอนต์ใหม่กว้างกว่าฟอนต์พิกเซล จึงย่อขนาดและช่องไฟไม่ให้ล้นจอเล็ก ---- */
+.ribbon__text {
+  font-weight: 700;
+  font-size: 24px;
+  letter-spacing: 0.1em;
+  text-shadow: 2px 2px 0 var(--shadow-ink);
+}
+
+/* ---- โลโก้: สีทองกับขาว เห็นชัดบนพื้นม่วง ---- */
+.logo__just {
+  color: var(--white);
+}
+
+.logo__drawit {
+  color: var(--yellow);
+}
+
+/* ---- ข้อความที่วางบนพื้นเวทีโดยตรง (ไม่ได้อยู่ในการ์ด) ต้องเป็นสีอ่อน ---- */
+.screen > .hint-text,
+.screen > .form-note {
+  color: var(--white);
+}
+
+/* ---- แถบคะแนน: แถวของเราเด่นด้วยขอบม่วง ---- */
+.score-row--guessed {
+  background: var(--green-soft);
+}
+
+/* ---- แชท: ข้อความเป็นเม็ดยา ทายถูกเขียวอ่อน ---- */
+.chat__row {
+  border-radius: var(--r-sm);
+}
+
+.chat__row--correct {
+  background: var(--green-soft);
+}
+
+/* ---- จุดสี: มุมมนเล็กน้อย (ยังเป็นตารางสี่เหลี่ยมเท่าเดิม ขนาดไม่เปลี่ยน) ---- */
+.swatch {
+  border-radius: 6px;
+}
+
+/* ริบบิ้นสีม่วงจะกลืนกับพื้นเวทีสีม่วง → เปลี่ยนเป็นชมพู */
+.ribbon--purple {
+  --ribbon-bg: var(--pink-bright);
+}
+
+/* SET UP: สองกลุ่มปุ่มเคียงกัน (ประเภทห้อง · Challenge) ช่องแคบ — ตัวหนังสือเล็กลงให้ไม่ล้นปุ่ม */
+.setup__pair .seg {
+  font-size: 14px;
+  letter-spacing: 0;
+}
+
+.setup__pair .setup__head {
+  white-space: nowrap;
+}
+
+/* ป้ายในแถบผู้เล่น: ฟอนต์ใหม่กว้างกว่าฟอนต์พิกเซล ย่อลงหนึ่งขั้นไม่ให้ถูกตัดในคอลัมน์แคบ */
+.score-row .tag {
+  font-size: 12px;
+  letter-spacing: 0;
+}
+
+/* ---- มือถือ: เงาแผงใหญ่ลดเหลือ 4px ตามสเปก ---- */
+@media (max-width: 767px) {
+  :root {
+    --shadow: 4px 4px 0 var(--shadow-ink);
+    --r-card: 16px;
+  }
+}
